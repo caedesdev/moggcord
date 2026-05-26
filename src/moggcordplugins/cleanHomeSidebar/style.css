@@ -1,0 +1,14 @@
+[class*="privateChannels_"] :is(li, [class*="channel_"]):has(a[href="/channels/@me/library"]),
+[class*="privateChannels_"] :is(li, [class*="channel_"]):has(a[href="/library"]),
+[class*="privateChannels_"] :is(li, [class*="channel_"]):has(a[href*="/library"]),
+[class*="privateChannels_"] :is(li, [class*="channel_"]):has(a[href="/channels/@me/store"]),
+[class*="privateChannels_"] :is(li, [class*="channel_"]):has(a[href="/store"]),
+[class*="privateChannels_"] :is(li, [class*="channel_"]):has(a[href*="/store"]),
+[class*="privateChannels_"] :is(li, [class*="channel_"]):has(a[href*="discord-shop"]),
+[class*="privateChannels_"] :is(li, [class*="channel_"]):has(a[href*="nitro"]),
+[class*="privateChannels_"] :is(li, [class*="channel_"]):has(a[href="/channels/@me/quests"]),
+[class*="privateChannels_"] :is(li, [class*="channel_"]):has(a[href="/quests"]),
+[class*="privateChannels_"] :is(li, [class*="channel_"]):has(a[href*="/quests"]),
+[class*="privateChannels_"] :is(li, [class*="channel_"]):has(a[href*="quest-home"]) {
+    display: none !important;
+}

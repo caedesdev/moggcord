@@ -1,0 +1,79 @@
+name: Build & Release Moggcord
+
+on:
+  push:
+    tags:
+      - "v*"          # déclenché sur : git tag v1.0.0 && git push --tags
+
+permissions:
+  contents: write    # nécessaire pour créer la GitHub Release
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Setup pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build Equicord renderer (standalone)
+        run: pnpm buildStandalone
+
+      - name: Build & Package Electron
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          node electron-builder.config.cjs || true
+          npx electron-builder --config electron-builder.config.cjs --win --publish always
+
+      - name: Package moggcord-dist.zip
+        shell: pwsh
+        run: |
+          # Gather everything the launcher needs: patcher.js, dist/, ghost-server/, modules/, binaries
+          $staging = "moggcord-dist-staging"
+          New-Item -ItemType Directory -Path $staging -Force | Out-Null
+
+          # Core JS dist output (patcher.js, renderer.js, preload.js …)
+          if (Test-Path "dist") {
+            Copy-Item "dist" "$staging\dist" -Recurse
+          }
+
+          # Ghost-server (voice/stream server)
+          if (Test-Path "ghost-server") {
+            Copy-Item "ghost-server" "$staging\ghost-server" -Recurse
+          }
+
+          # Static assets from release/moggcord-dist (ffmpeg.dll, modules, etc.)
+          if (Test-Path "release\moggcord-dist") {
+            Copy-Item "release\moggcord-dist\*" "$staging\" -Recurse -Force
+          }
+
+          # Entry-point files
+          foreach ($f in @("moggcord-index.js", "moggcord-preload.js")) {
+            if (Test-Path $f) { Copy-Item $f "$staging\" }
+          }
+
+          Compress-Archive -Path "$staging\*" -DestinationPath "moggcord-dist.zip" -Force
+          Write-Host "moggcord-dist.zip created ($($(Get-Item moggcord-dist.zip).Length / 1MB) MB)"
+
+      - name: Upload moggcord-dist.zip to Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: moggcord-dist.zip
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

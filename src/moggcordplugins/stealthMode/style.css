@@ -1,0 +1,16 @@
+/* Stealth Mode - hide Moggcord plugin UI (but NOT settings access) */
+
+/* Plugin buttons: header bar, channel toolbar, chat bar, user area */
+body.moggcord-stealth .vc-header-bar-btns,
+body.moggcord-stealth .vc-channel-toolbar-btns,
+body.moggcord-stealth .vc-chat-bar-btns,
+body.moggcord-stealth .vc-user-area-btns,
+
+/* Titlebar injected elements */
+body.moggcord-stealth #moggcord-titlebar-btn,
+body.moggcord-stealth #moggcord-titlebar-link-style,
+
+/* MoggcordAI nav button */
+body.moggcord-stealth .nai-nav-item {
+    display: none !important;
+}
