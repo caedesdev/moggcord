@@ -1,14 +1,6 @@
 name: Generate plugins.json
 
 on:
-  push:
-    branches: [master]
-    paths:
-      - "src/moggcordplugins/**"
-      - "src/plugins/**"
-      - "src/utils/constants.ts"
-      - "scripts/generatePluginList.ts"
-      - "scripts/utils.ts"
   workflow_dispatch: {}
 
 jobs:
