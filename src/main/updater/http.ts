@@ -65,7 +65,7 @@ async function getUpdates() {
     return [{
         hash:    pendingVersion ?? "new",
         author:  "Moggcord",
-        message: `Nouvelle version disponible : ${pendingVersion}`
+        message: `New version available: ${pendingVersion}`
     }];
 }
 

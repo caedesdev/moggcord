@@ -2,14 +2,10 @@
     "autoUpdate": true,
     "autoUpdateNotification": true,
     "useQuickCss": false,
-    "themeLinks": [
-        "https://raw.githubusercontent.com/caedesdev/moggcord/main/themes/MoggLiquidGlass.theme.css"
-    ],
+    "themeLinks": [],
     "eagerPatches": false,
     "enabledThemes": [],
-    "enabledThemeLinks": [
-        "https://raw.githubusercontent.com/caedesdev/moggcord/main/themes/MoggLiquidGlass.theme.css"
-    ],
+    "enabledThemeLinks": [],
     "enableOnlineThemes": true,
     "pinnedThemes": [],
     "themeNames": {},
@@ -1306,7 +1302,7 @@
             "temperature": 0.7
         },
         "MoggcordUpdater": {
-            "enabled": true
+            "enabled": false
         },
         "MultiInstance": {
             "enabled": true

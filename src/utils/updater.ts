@@ -65,6 +65,6 @@ export async function maybePromptToUpdate(confirmMessage: string, checkForDev = 
         }
     } catch (err) {
         UpdateLogger.error(err);
-        alert("La vérification des mises à jour a échoué. Vérifie ta connexion ou réinstalle Moggcord.");
+        alert("The update check failed. Check your connection or reinstall Moggcord.");
     }
 }

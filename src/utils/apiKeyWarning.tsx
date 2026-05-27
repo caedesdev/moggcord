@@ -17,12 +17,12 @@ function ApiKeyWarningModal({ pluginName, onClose }: { pluginName: string; onClo
                         <path fill="var(--status-warning)" d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2Zm1 15h-2v-2h2v2Zm0-4h-2V7h2v6Z" />
                     </svg>
                     <div style={{ fontSize: 16, fontWeight: 700, color: "#fff" }}>
-                        Clé API requise
+                        API key required
                     </div>
                     <div style={{ fontSize: 14, color: "#fff", lineHeight: 1.5 }}>
-                        <strong style={{ color: "#fff" }}>{pluginName}</strong> nécessite une clé API Groq pour fonctionner.
+                        <strong style={{ color: "#fff" }}>{pluginName}</strong> needs a Groq API key to work.
                         <br /><br />
-                        Configure-la une seule fois dans les paramètres de <strong style={{ color: "#fff" }}>MoggcordAI</strong>.
+                        Configure it once in the <strong style={{ color: "#fff" }}>MoggcordAI</strong> settings.
                     </div>
                 </div>
             </ModalContent>
@@ -44,7 +44,7 @@ function ApiKeyWarningModal({ pluginName, onClose }: { pluginName: string; onClo
                         if (plugin) openPluginModal(plugin);
                     }}
                 >
-                    Configurer MoggcordAI
+                    Configure MoggcordAI
                 </button>
                 <button
                     style={{
@@ -58,7 +58,7 @@ function ApiKeyWarningModal({ pluginName, onClose }: { pluginName: string; onClo
                     }}
                     onClick={onClose}
                 >
-                    Annuler
+                    Cancel
                 </button>
             </ModalFooter>
         </ModalRoot>

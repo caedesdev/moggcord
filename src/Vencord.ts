@@ -45,7 +45,7 @@ import { PlainSettings, Settings, SettingsStore } from "./api/Settings";
 import { getCloudSettings, putCloudSettings, shouldCloudSync } from "./api/SettingsSync/cloudSync";
 import { localStorage } from "./utils/localStorage";
 import { relaunch } from "./utils/native";
-import { checkForUpdates, changes, isOutdated as getIsOutdated, rebuild, update, UpdateLogger } from "./utils/updater";
+import { checkForUpdates, isOutdated as getIsOutdated, update, UpdateLogger } from "./utils/updater";
 import { onceReady } from "./webpack";
 import { patches } from "./webpack/patchWebpack";
 
@@ -126,145 +126,6 @@ async function syncSettings() {
 
 let notifiedForUpdatesThisSession = false;
 
-function showGreenUpdateBanner() {
-    if (document.getElementById("moggcord-core-updater-root")) return;
-
-    const banner = document.createElement("div");
-    banner.id = "moggcord-core-updater-root";
-    Object.assign(banner.style, {
-        position: "fixed",
-        top: "0", left: "0", right: "0",
-        zIndex: "999999",
-        background: "linear-gradient(90deg, #1e5c2a 0%, #3ba55c 100%)",
-        color: "#fff",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "space-between",
-        padding: "9px 16px",
-        fontSize: "13px",
-        fontFamily: "var(--font-primary, sans-serif)",
-        boxShadow: "0 2px 16px rgba(0,0,0,0.5)",
-        gap: "12px",
-    });
-
-    const leftContent = document.createElement("div");
-    Object.assign(leftContent.style, {
-        display: "flex",
-        alignItems: "center",
-        gap: "10px",
-        flex: "1",
-        minWidth: "0",
-    });
-
-    const titleSpan = document.createElement("span");
-    titleSpan.style.fontWeight = "700";
-    titleSpan.style.flexShrink = "0";
-    titleSpan.textContent = "🔔 Moggcord Update Available!";
-
-    const statusSpan = document.createElement("span");
-    statusSpan.style.opacity = "0.85";
-    statusSpan.style.fontSize = "12px";
-    statusSpan.style.overflow = "hidden";
-    statusSpan.style.textOverflow = "ellipsis";
-    statusSpan.style.whiteSpace = "nowrap";
-
-    let countdown = 10;
-    let installing = false;
-    let countdownTimer: ReturnType<typeof setInterval> | null = null;
-
-    function setStatus(text: string) { statusSpan.textContent = text; }
-    setStatus(`Installation automatique dans ${countdown}s… (ou clique pour installer maintenant)`);
-
-    async function doInstall() {
-        if (installing) return;
-        installing = true;
-        if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
-        updateBtn.style.cursor = "not-allowed";
-        updateBtn.textContent = "⏳ Installation…";
-        setStatus("⬇ Téléchargement en cours…");
-
-        try {
-            const downloaded = await update();
-            if (!downloaded) throw new Error("Téléchargement échoué");
-            setStatus("✓ Téléchargé ! Extraction en cours…");
-            await rebuild();
-            setStatus("✅ Mise à jour réussie ! Redémarrage dans 3s…");
-            setTimeout(() => relaunch(), 3_000);
-        } catch (e) {
-            UpdateLogger.error("Auto-install failed", e);
-            setStatus("❌ Erreur d'installation. Vérifie ta connexion. La mise à jour sera appliquée à la prochaine fermeture.");
-            installing = false;
-            updateBtn.style.cursor = "pointer";
-            updateBtn.textContent = "⬇ Réessayer";
-        }
-    }
-
-    // Compte à rebours — auto-install après 10s
-    countdownTimer = setInterval(() => {
-        countdown--;
-        if (countdown <= 0) {
-            clearInterval(countdownTimer!);
-            countdownTimer = null;
-            doInstall();
-        } else {
-            setStatus(`Installation automatique dans ${countdown}s… (ou clique pour installer maintenant)`);
-        }
-    }, 1_000);
-
-    leftContent.appendChild(titleSpan);
-    leftContent.appendChild(statusSpan);
-
-    const rightContent = document.createElement("div");
-    Object.assign(rightContent.style, {
-        display: "flex",
-        gap: "8px",
-        flexShrink: "0",
-    });
-
-    const updateBtn = document.createElement("button");
-    Object.assign(updateBtn.style, {
-        background: "rgba(255,255,255,0.2)",
-        border: "1px solid rgba(255,255,255,0.35)",
-        borderRadius: "6px",
-        color: "#fff",
-        padding: "4px 14px",
-        cursor: "pointer",
-        fontSize: "12px",
-        fontWeight: "700",
-        fontFamily: "inherit",
-    });
-    updateBtn.textContent = "⬇ Installer maintenant";
-    updateBtn.addEventListener("click", doInstall);
-
-    const closeBtn = document.createElement("button");
-    Object.assign(closeBtn.style, {
-        background: "transparent",
-        border: "none",
-        color: "rgba(255,255,255,0.6)",
-        cursor: "pointer",
-        fontSize: "18px",
-        padding: "0 4px",
-        fontFamily: "inherit",
-        lineHeight: "1",
-    });
-    closeBtn.textContent = "✕";
-    closeBtn.title = "Ignorer (la mise à jour sera installée à la fermeture de Discord)";
-    closeBtn.addEventListener("click", () => {
-        if (installing) return; // ne pas fermer si installation en cours
-        if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
-        banner.remove();
-        UpdateLogger.info("Update banner dismissed — will auto-apply on Discord quit.");
-    });
-
-    rightContent.appendChild(updateBtn);
-    rightContent.appendChild(closeBtn);
-
-    banner.appendChild(leftContent);
-    banner.appendChild(rightContent);
-
-    document.body.appendChild(banner);
-}
-
 async function runUpdateCheck() {
     if (IS_UPDATER_DISABLED) return;
 
@@ -276,8 +137,12 @@ async function runUpdateCheck() {
         if (notifiedForUpdatesThisSession) return;
         notifiedForUpdatesThisSession = true;
 
-        // Affiche la bannière verte avec auto-install (compte à rebours 10s)
-        setTimeout(() => showGreenUpdateBanner(), 8_000);
+        showNotification({
+            title: "Moggcord Update Available",
+            body: "Open Moggcord Settings to install the latest update.",
+            color: "var(--green-360)",
+            onClick: () => openSettingsTabModal(UpdaterTab!)
+        });
     } catch (err) {
         UpdateLogger.error("Failed to check for updates", err);
     }

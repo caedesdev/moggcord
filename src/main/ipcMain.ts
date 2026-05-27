@@ -896,7 +896,7 @@ const OFFICIAL_UPDATE_URL = "https://github.com/caedesdev/moggcord/releases/late
 
 ipcMain.handle(IpcEvents.MOGGCORD_DOWNLOAD_AND_RUN, async (_, url: string) => {
     if (url !== OFFICIAL_UPDATE_URL) {
-        throw new Error("URL de mise à jour non autorisée");
+        throw new Error("Update URL is not allowed");
     }
 
     const https = require("https");
@@ -927,11 +927,11 @@ ipcMain.handle(IpcEvents.MOGGCORD_DOWNLOAD_AND_RUN, async (_, url: string) => {
 
     const { response } = await dialog.showMessageBox({
         type: "info",
-        buttons: ["Installer la mise à jour", "Annuler"],
+        buttons: ["Install update", "Cancel"],
         defaultId: 0,
-        title: "Mise à jour Moggcord",
-        message: "Une mise à jour de Moggcord est disponible.",
-        detail: "Voulez-vous installer la mise à jour maintenant ?"
+        title: "Moggcord Update",
+        message: "A Moggcord update is available.",
+        detail: "Do you want to install it now?"
     });
     if (response === 1) return false;
 
@@ -991,13 +991,13 @@ ipcMain.handle(IpcEvents.INSTALL_VB_CABLE, async () => {
 
         const { response } = await dialog.showMessageBox({
             type: "info",
-            buttons: ["Installer VB-Cable", "Annuler"],
+            buttons: ["Install VB-Cable", "Cancel"],
             defaultId: 0,
-            title: "Installation VB-Cable",
-            message: "VB-Cable doit être installé avec les droits administrateur.",
-            detail: "Une fenêtre UAC va s'ouvrir pour confirmer l'installation."
+            title: "VB-Cable Installation",
+            message: "VB-Cable needs administrator permissions to install.",
+            detail: "A UAC window will open to confirm the installation."
         });
-        if (response === 1) return { success: false, error: "Annulé par l'utilisateur" };
+        if (response === 1) return { success: false, error: "Cancelled by user" };
 
         await new Promise<void>((resolve, reject) => {
             const child = spawn("powershell", [
