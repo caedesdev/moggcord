@@ -78,7 +78,10 @@ function GrantedByTooltip({ roleName, roleColor }: GrantedByTooltipProps) {
 function UserPermissionsComponent({ guild, guildMember, closePopout }: { guild: Guild; guildMember: GuildMember; closePopout: () => void; }) {
     const { permissionsSortOrder } = settings.use(["permissionsSortOrder"]);
 
-    const guildPermissionSpecMap = useMemo(() => getGuildPermissionSpecMap(guild), [guild.id]);
+    const guildPermissionSpecMap = useMemo(() => getGuildPermissionSpecMap(guild) ?? {}, [guild]);
+    const permissionBits = useMemo(() => (
+        Object.values(PermissionsBits).filter((bit): bit is bigint => typeof bit === "bigint")
+    ), []);
 
     const [rolePermissions, userPermissions] = useMemo(() => {
         const userPermissions: UserPermissions = [];
@@ -93,7 +96,7 @@ function UserPermissionsComponent({ guild, guildMember, closePopout }: { guild: 
         if (guild.ownerId === guildMember.userId) {
             rolePermissions.push({
                 type: PermissionOverwriteType.OWNER,
-                permissions: Object.values(PermissionsBits).reduce((prev, curr) => prev | curr, 0n)
+                permissions: permissionBits.reduce((prev, curr) => prev | curr, 0n)
             });
 
             const OWNER = getIntlMessage("GUILD_OWNER") ?? "Server Owner";
@@ -107,7 +110,7 @@ function UserPermissionsComponent({ guild, guildMember, closePopout }: { guild: 
 
         sortUserRoles(userRoles);
 
-        for (const bit of Object.values(PermissionsBits)) {
+        for (const bit of permissionBits) {
             const spec = guildPermissionSpecMap[String(bit)];
             if (!spec) continue;
 
@@ -128,7 +131,7 @@ function UserPermissionsComponent({ guild, guildMember, closePopout }: { guild: 
         userPermissions.sort((a, b) => b.rolePosition - a.rolePosition);
 
         return [rolePermissions, userPermissions];
-    }, [permissionsSortOrder]);
+    }, [guild, guildMember, guildPermissionSpecMap, permissionBits, permissionsSortOrder]);
 
     return <div>
         <div className={cl("user-header-container")}>
@@ -165,7 +168,7 @@ function UserPermissionsComponent({ guild, guildMember, closePopout }: { guild: 
                             tabIndex={0}
                             onClick={() => {
                                 closePopout();
-                                openRolesAndUsersPermissionsModal(rolePermissions, guild, guildMember.nick || UserStore.getUser(guildMember.userId).username);
+                                openRolesAndUsersPermissionsModal(rolePermissions, guild, guildMember.nick || UserStore.getUser(guildMember.userId)?.username || "User");
                             }}
                         >
                             <svg

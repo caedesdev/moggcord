@@ -23,6 +23,7 @@ import { buildExtraRoleContextMenuItems } from "@moggcordplugins/betterRoleConte
 import { cl, getGuildPermissionSpecMap, loadGetGuildPermissionSpecMap } from "@plugins/permissionsViewer/utils";
 import { copyToClipboard } from "@utils/clipboard";
 import { getIntlMessage, getUniqueUsername } from "@utils/discord";
+import { Logger } from "@utils/Logger";
 import { Guild, RenderModalProps, Role, RoleOrUserPermission, UnicodeEmoji, User } from "@vencord/discord-types";
 import { PermissionOverwriteType } from "@vencord/discord-types/enums";
 import { findByCodeLazy } from "@webpack";
@@ -33,50 +34,87 @@ import { PermissionAllowedIcon, PermissionDefaultIcon, PermissionDeniedIcon } fr
 
 type GetRoleIconData = (role: Role, size: number) => { customIconSrc?: string; unicodeEmoji?: UnicodeEmoji; };
 const getRoleIconData: GetRoleIconData = findByCodeLazy("convertSurrogateToName", "customIconSrc", "unicodeEmoji");
+const logger = new Logger("PermissionsViewer", "#5865f2");
+let didWarnRoleIconError = false;
+let didWarnPermissionSpecError = false;
 
-function getRoleIconSrc(role: Role) {
-    const icon = getRoleIconData(role, 20);
+interface RolesAndUsersPermissionsProps {
+    permissions: Array<RoleOrUserPermission>;
+    guild: Guild;
+    modalProps: RenderModalProps;
+    header: string;
+}
+
+function getRoleIconSrc(role?: Role) {
+    if (!role) return;
+
+    let icon: ReturnType<GetRoleIconData>;
+    try {
+        icon = getRoleIconData(role, 20);
+    } catch (error) {
+        if (!didWarnRoleIconError) {
+            didWarnRoleIconError = true;
+            logger.warn("Could not resolve role icon data", error);
+        }
+        return;
+    }
+
     if (!icon) return;
 
     const { customIconSrc, unicodeEmoji } = icon;
     return customIconSrc ?? unicodeEmoji?.url;
 }
 
-function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, header }: { permissions: Array<RoleOrUserPermission>; guild: Guild; modalProps: RenderModalProps; header: string; }) {
-    const guildPermissionSpecMap = useMemo(() => getGuildPermissionSpecMap(guild), [guild.id]);
+function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, header }: RolesAndUsersPermissionsProps) {
+    const guildPermissionSpecMap = useMemo(() => {
+        try {
+            return getGuildPermissionSpecMap(guild) ?? {};
+        } catch (error) {
+            if (!didWarnPermissionSpecError) {
+                didWarnPermissionSpecError = true;
+                logger.warn("Could not resolve guild permission spec map", error);
+            }
+
+            return {};
+        }
+    }, [guild]);
+
+    const sortedPermissions = useMemo(() => [...(permissions ?? [])].sort((a, b) => a.type - b.type), [permissions]);
+    const permissionBits = useMemo(() => (
+        Object.values(PermissionsBits).filter((bit): bit is bigint => typeof bit === "bigint")
+    ), []);
 
     useStateFromStores(
         [GuildMemberStore],
-        () => GuildMemberStore.getMemberIds(guild.id),
+        () => GuildMemberStore.getMemberIds(guild.id) ?? [],
         null,
-        (old, current) => old.length === current.length
+        (old, current) => (old?.length ?? 0) === (current?.length ?? 0)
     );
 
     useEffect(() => {
-        permissions.sort((a, b) => a.type - b.type);
-    }, [permissions]);
+        const usersToRequest = sortedPermissions
+            .filter(p => p.id && p.type === PermissionOverwriteType.MEMBER && !GuildMemberStore.isMember(guild.id, p.id))
+            .map(({ id }) => id!);
 
-    useEffect(() => {
-        const usersToRequest = permissions
-            .filter(p => p.type === PermissionOverwriteType.MEMBER && !GuildMemberStore.isMember(guild.id, p.id!))
-            .map(({ id }) => id);
+        if (!usersToRequest.length) return;
 
         FluxDispatcher.dispatch({
             type: "GUILD_MEMBERS_REQUEST",
             guildIds: [guild.id],
             userIds: usersToRequest
         });
-    }, []);
+    }, [guild.id, sortedPermissions]);
 
     const [selectedItemIndex, selectItem] = useState(0);
-    const selectedItem = permissions[selectedItemIndex];
+    const safeSelectedItemIndex = Math.min(selectedItemIndex, sortedPermissions.length - 1);
+    const selectedItem = sortedPermissions[safeSelectedItemIndex];
 
-    const roles = GuildRoleStore.getRolesSnapshot(guild.id);
+    const roles = GuildRoleStore.getRolesSnapshot(guild.id) ?? {};
 
     return (
         <Modal
             {...modalProps}
-            size="xl"
+            size="large"
             title={`${header} Permissions`}
         >
             {!selectedItem && (
@@ -88,10 +126,10 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
             {selectedItem && (
                 <div className={cl("modal-container")}>
                     <ScrollerThin className={cl("modal-list")} orientation="auto">
-                        {permissions.map((permission, index) => {
+                        {sortedPermissions.map((permission, index) => {
                             const user: User | undefined = UserStore.getUser(permission.id ?? "");
                             const role: Role | undefined = roles[permission.id ?? ""];
-                            const roleIconSrc = role != null ? getRoleIconSrc(role) : undefined;
+                            const roleIconSrc = getRoleIconSrc(role);
 
                             return (
                                 <div
@@ -160,7 +198,7 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
                     </ScrollerThin>
                     <div className={cl("modal-divider")} />
                     <ScrollerThin className={cl("modal-perms")} orientation="auto">
-                        {Object.values(PermissionsBits).map(bit => {
+                        {permissionBits.map(bit => {
                             const spec = guildPermissionSpecMap[String(bit)];
                             if (!spec) return null;
 
@@ -223,7 +261,9 @@ function ViewAsRoleIcon() {
 function RoleContextMenu({ guild, roleId, onClose }: { guild: Guild; roleId: string; onClose: () => void; }) {
     const popoutRef = useRef(null);
     const role = GuildRoleStore.getRole(guild.id, roleId);
-    const { before, after } = buildExtraRoleContextMenuItems(role, guild, popoutRef);
+    const { before, after } = role
+        ? buildExtraRoleContextMenuItems(role, guild, popoutRef)
+        : { before: null, after: null };
 
     return (
         <Menu.Menu
@@ -242,7 +282,7 @@ function RoleContextMenu({ guild, roleId, onClose }: { guild: Guild; roleId: str
 
             {after}
 
-            {(settings.store as any).unsafeViewAsRole && (
+            {role && (settings.store as any).unsafeViewAsRole && (
                 <Menu.MenuItem
                     id={cl("view-as-role")}
                     label={getIntlMessage("VIEW_AS_ROLE")}
@@ -284,7 +324,25 @@ function UserContextMenu({ userId }: { userId: string; }) {
     );
 }
 
-const RolesAndUsersPermissions = ErrorBoundary.wrap(RolesAndUsersPermissionsComponent);
+function PermissionsModalErrorFallback({ message, wrappedProps }: { message: string; wrappedProps: RolesAndUsersPermissionsProps; }) {
+    return (
+        <Modal
+            {...wrappedProps.modalProps}
+            size="large"
+            title={`${wrappedProps.header} Permissions`}
+        >
+            <div className={cl("modal-error")}>
+                <Text variant="heading-lg/semibold">Permissions viewer could not load.</Text>
+                <Text variant="text-sm/normal" color="text-muted">{message}</Text>
+            </div>
+        </Modal>
+    );
+}
+
+const RolesAndUsersPermissions = ErrorBoundary.wrap(RolesAndUsersPermissionsComponent, {
+    fallback: PermissionsModalErrorFallback,
+    message: "Permissions viewer failed to render."
+});
 
 export default function openRolesAndUsersPermissionsModal(permissions: Array<RoleOrUserPermission>, guild: Guild, header: string) {
     return openModalLazy(async () => {

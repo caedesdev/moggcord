@@ -48,6 +48,12 @@ const enum MenuItemParentType {
     Guild
 }
 
+function getAllPermissions() {
+    return Object.values(PermissionsBits)
+        .filter((bit): bit is bigint => typeof bit === "bigint")
+        .reduce((prev, curr) => prev | curr, 0n);
+}
+
 export const settings = definePluginSettings({
     permissionsSortOrder: {
         description: "The sort method used for defining which role grants an user a certain permission",
@@ -68,11 +74,13 @@ function MenuItem(guildId: string, id?: string, type?: MenuItemParentType) {
             label="Permissions"
             action={() => {
                 const guild = GuildStore.getGuild(guildId);
+                if (!guild) return;
 
                 const { permissions, header } = match(type)
                     .returnType<{ permissions: RoleOrUserPermission[], header: string; }>()
                     .with(MenuItemParentType.User, () => {
                         const member = GuildMemberStore.getMember(guildId, id!)!;
+                        const user = UserStore.getUser(member.userId);
 
                         const permissions: RoleOrUserPermission[] = getSortedRolesForMember(guild, member)
                             .map(role => ({
@@ -83,19 +91,20 @@ function MenuItem(guildId: string, id?: string, type?: MenuItemParentType) {
                         if (guild.ownerId === id) {
                             permissions.push({
                                 type: PermissionOverwriteType.OWNER,
-                                permissions: Object.values(PermissionsBits).reduce((prev, curr) => prev | curr, 0n)
+                                permissions: getAllPermissions()
                             });
                         }
 
                         return {
                             permissions,
-                            header: member.nick ?? UserStore.getUser(member.userId).username
+                            header: member.nick ?? user?.username ?? "User"
                         };
                     })
                     .with(MenuItemParentType.Channel, () => {
                         const channel = ChannelStore.getChannel(id!);
+                        if (!channel) return { permissions: [], header: "Channel" };
 
-                        const permissions = sortPermissionOverwrites(Object.values(channel.permissionOverwrites).map(({ id, allow, deny, type }) => ({
+                        const permissions = sortPermissionOverwrites(Object.values(channel.permissionOverwrites ?? {}).map(({ id, allow, deny, type }) => ({
                             type,
                             id,
                             overwriteAllow: allow,
@@ -104,11 +113,11 @@ function MenuItem(guildId: string, id?: string, type?: MenuItemParentType) {
 
                         return {
                             permissions,
-                            header: channel.name
+                            header: channel.name ?? "Channel"
                         };
                     })
                     .otherwise(() => {
-                        const permissions = GuildRoleStore.getSortedRoles(guild.id).map(role => ({
+                        const permissions = (GuildRoleStore.getSortedRoles(guild.id) ?? []).map(role => ({
                             type: PermissionOverwriteType.ROLE,
                             ...role
                         }));
