@@ -24,7 +24,6 @@ import { getIntlMessage } from "@utils/discord";
 import { classes } from "@utils/misc";
 import type { Guild, GuildMember, RoleOrUserPermission } from "@vencord/discord-types";
 import { PermissionOverwriteType } from "@vencord/discord-types/enums";
-import { findCssClassesLazy } from "@webpack";
 import { PermissionsBits, Tooltip, useMemo, UserStore } from "@webpack/common";
 
 import { PermissionsSortOrder, settings } from "..";
@@ -39,32 +38,25 @@ interface UserPermission {
 
 type UserPermissions = Array<UserPermission>;
 
-const RoleClasses = findCssClassesLazy("role", "roleName", "roleRemoveButton", "roleNameOverflow", "root");
-const RoleBorderClasses = findCssClassesLazy("roleCircle", "dot", "dotBorderColor");
-
 interface FakeRoleProps extends React.HTMLAttributes<HTMLDivElement> {
     text: string;
     color: string;
 }
 
-function FakeRole({ text, color, ...props }: FakeRoleProps) {
+function FakeRole({ text, color, className, ...props }: FakeRoleProps) {
     return (
-        <div {...props} className={classes(RoleClasses.role)}>
-            <div className={RoleClasses.roleRemoveButton}>
-                <span
-                    className={RoleBorderClasses.roleCircle}
-                    style={{ backgroundColor: color }}
-                />
-            </div>
-            <div className={RoleClasses.roleName}>
-                <BaseText
-                    size="xs"
-                    weight="medium"
-                    className={RoleClasses.roleNameOverflow}
-                >
-                    {text}
-                </BaseText>
-            </div>
+        <div {...props} className={classes(cl("user-permission-pill"), className)}>
+            <span
+                className={cl("user-permission-dot")}
+                style={{ backgroundColor: color }}
+            />
+            <BaseText
+                size="xs"
+                weight="medium"
+                className={cl("user-permission-label")}
+            >
+                {text}
+            </BaseText>
         </div>
     );
 }
@@ -116,10 +108,13 @@ function UserPermissionsComponent({ guild, guildMember, closePopout }: { guild: 
         sortUserRoles(userRoles);
 
         for (const bit of Object.values(PermissionsBits)) {
+            const spec = guildPermissionSpecMap[String(bit)];
+            if (!spec) continue;
+
             for (const { permissions, colorString, position, name } of userRoles) {
                 if ((permissions & bit) === bit) {
                     userPermissions.push({
-                        permission: guildPermissionSpecMap[String(bit)].title,
+                        permission: spec.title,
                         roleName: name,
                         roleColor: colorString || "var(--primary-300)",
                         rolePosition: position
@@ -186,7 +181,7 @@ function UserPermissionsComponent({ guild, guildMember, closePopout }: { guild: 
             </div>
         </div>
         {userPermissions.length > 0 && (
-            <div className={classes(RoleClasses.root)}>
+            <div className={cl("user-permissions-list")}>
                 {userPermissions.map(({ permission, roleColor, roleName }) => (
                     <Tooltip
                         key={permission}

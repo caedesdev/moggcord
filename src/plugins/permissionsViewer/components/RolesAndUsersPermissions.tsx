@@ -160,37 +160,42 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
                     </ScrollerThin>
                     <div className={cl("modal-divider")} />
                     <ScrollerThin className={cl("modal-perms")} orientation="auto">
-                        {Object.values(PermissionsBits).map(bit => (
-                            <div key={bit} className={cl("modal-perms-item")}>
-                                <div className={cl("modal-perms-item-icon")}>
-                                    {(() => {
-                                        const { permissions, overwriteAllow, overwriteDeny } = selectedItem;
+                        {Object.values(PermissionsBits).map(bit => {
+                            const spec = guildPermissionSpecMap[String(bit)];
+                            if (!spec) return null;
 
-                                        if (permissions)
-                                            return (permissions & bit) === bit
-                                                ? PermissionAllowedIcon()
-                                                : PermissionDeniedIcon();
+                            return (
+                                <div key={bit} className={cl("modal-perms-item")}>
+                                    <div className={cl("modal-perms-item-icon")}>
+                                        {(() => {
+                                            const { permissions, overwriteAllow, overwriteDeny } = selectedItem;
 
-                                        if (overwriteAllow && (overwriteAllow & bit) === bit)
-                                            return PermissionAllowedIcon();
-                                        if (overwriteDeny && (overwriteDeny & bit) === bit)
-                                            return PermissionDeniedIcon();
+                                            if (permissions)
+                                                return (permissions & bit) === bit
+                                                    ? PermissionAllowedIcon()
+                                                    : PermissionDeniedIcon();
 
-                                        return PermissionDefaultIcon();
-                                    })()}
+                                            if (overwriteAllow && (overwriteAllow & bit) === bit)
+                                                return PermissionAllowedIcon();
+                                            if (overwriteDeny && (overwriteDeny & bit) === bit)
+                                                return PermissionDeniedIcon();
+
+                                            return PermissionDefaultIcon();
+                                        })()}
+                                    </div>
+                                    <Text variant="text-md/normal">{spec.title}</Text>
+
+                                    <Tooltip text={
+                                        (() => {
+                                            const { description } = spec;
+                                            return typeof description === "function" ? i18n.intl.format(description, {}) : description;
+                                        })()
+                                    }>
+                                        {props => <InfoIcon {...props} />}
+                                    </Tooltip>
                                 </div>
-                                <Text variant="text-md/normal">{guildPermissionSpecMap[String(bit)].title}</Text>
-
-                                <Tooltip text={
-                                    (() => {
-                                        const { description } = guildPermissionSpecMap[String(bit)];
-                                        return typeof description === "function" ? i18n.intl.format(description, {}) : description;
-                                    })()
-                                }>
-                                    {props => <InfoIcon {...props} />}
-                                </Tooltip>
-                            </div>
-                        ))}
+                            );
+                        })}
                     </ScrollerThin>
                 </div>
             )}
