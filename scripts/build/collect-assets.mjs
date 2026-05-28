@@ -48,7 +48,6 @@ for (const c of ffmpegCandidates) {
     }
 }
 if (!foundFfmpeg) {
-    // Fallback : essayer ffmpeg du PATH
     try {
         const { execSync: exs } = await import('child_process');
         const ffmpegPath = exs('where ffmpeg', { encoding: 'utf8' }).trim().split('\n')[0];

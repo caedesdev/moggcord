@@ -19,11 +19,6 @@ import { fileURLToPath } from "url";
 const BASE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST_DIR = join(BASE_DIR, "dist", "desktop");
 
-// ── Locate Discord installations ─────────────────────────────────────────────
-/**
- * Returns all Discord resources directories found on this machine.
- * @returns {string[]}
- */
 function findAllDiscordResources() {
     const platform = process.platform;
     const candidates = [];
@@ -68,7 +63,6 @@ function findAllDiscordResources() {
     });
 }
 
-// ── Check dist/ exists ───────────────────────────────────────────────────────
 function checkBuild() {
     const patcherPath = join(DIST_DIR, "patcher.js");
     if (!existsSync(patcherPath)) {
@@ -78,13 +72,11 @@ function checkBuild() {
     }
 }
 
-// ── Inject ───────────────────────────────────────────────────────────────────
 function inject(resourcesDir) {
     const appAsarPath = join(resourcesDir, "app.asar");
     const backupPath = join(resourcesDir, "_app.asar");
     const appDirPath = join(resourcesDir, "app");
 
-    // Check if already injected
     if (existsSync(appDirPath) && existsSync(join(appDirPath, "package.json"))) {
         try {
             const pkg = JSON.parse(readFileSync(join(appDirPath, "package.json"), "utf-8"));
@@ -95,7 +87,6 @@ function inject(resourcesDir) {
         } catch { }
     }
 
-    // Step 1: Backup app.asar → _app.asar
     if (existsSync(appAsarPath) && !existsSync(backupPath)) {
         let isDir = false;
         try { isDir = statSync(appAsarPath).isDirectory(); } catch { }
@@ -111,7 +102,6 @@ function inject(resourcesDir) {
         return false;
     }
 
-    // Step 2: Remove old app.asar if it exists (may be a folder from a previous injection)
     if (existsSync(appAsarPath)) {
         try {
             rmSync(appAsarPath, { recursive: true, force: true });
@@ -121,7 +111,6 @@ function inject(resourcesDir) {
         }
     }
 
-    // Step 3: Create app/ folder with the loader
     mkdirSync(appDirPath, { recursive: true });
 
     writeFileSync(join(appDirPath, "package.json"), JSON.stringify({
@@ -129,7 +118,6 @@ function inject(resourcesDir) {
         main: "index.js"
     }, null, 2));
 
-    // The loader requires the Moggcord patcher from dist/
     const patcherPath = join(DIST_DIR, "patcher.js").replace(/\\/g, "\\\\");
     writeFileSync(join(appDirPath, "index.js"),
         `// Moggcord Injector — auto-generated, do not edit\n"use strict";\nrequire("${patcherPath}");\n`
@@ -141,7 +129,6 @@ function inject(resourcesDir) {
     return true;
 }
 
-// ── Main ─────────────────────────────────────────────────────────────────────
 checkBuild();
 
 const allResources = findAllDiscordResources();
@@ -152,11 +139,9 @@ if (allResources.length === 0) {
 }
 
 if (allResources.length === 1) {
-    // Single Discord found — inject directly
     console.log(`[Moggcord] Discord found: ${allResources[0]}`);
     inject(allResources[0]);
 } else {
-    // Multiple Discord installs — inject into all
     console.log(`[Moggcord] Found ${allResources.length} Discord installations:`);
     let injectedCount = 0;
     for (const res of allResources) {

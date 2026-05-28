@@ -12,83 +12,51 @@ Write-Host "  [Moggcord] Compiling installer..." -ForegroundColor Cyan
 
 New-Item -ItemType Directory -Force -Path $OutDir | Out-Null
 
-# Method 1: dotnet SDK
-$hasDotnet = $null
-try { $hasDotnet = & dotnet --version 2>$null } catch { }
+# Requires .NET 8 SDK (installer targets net8.0-windows; csc.exe cannot compile Program.cs)
+$sdkLine = $null
+try {
+    $sdkLine = & dotnet --list-sdks 2>$null | Select-String "8\." | Select-Object -First 1
+} catch { }
 
-if ($hasDotnet) {
-    Write-Host "  [1/1] dotnet build (SDK $hasDotnet)..." -ForegroundColor DarkGray
-    & dotnet publish "$SrcDir\MoggcordInstaller.csproj" `
-        -c Release `
-        -o $OutDir `
-        --nologo `
-        -v quiet `
-        -p:PublishSingleFile=true `
-        -p:SelfContained=false `
-        -r win-x64
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  [ERROR] dotnet build failed." -ForegroundColor Red
-        exit 1
-    }
-    # dotnet may place the .exe in a subdirectory
-    $built = Get-ChildItem $OutDir -Recurse -Filter "Moggcord-Installer.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
-    if ($built -and $built.FullName -ne $OutExe) {
-        Copy-Item $built.FullName $OutExe -Force
-    }
+if (-not $sdkLine) {
+    Write-Host "  [ERROR] .NET 8 SDK is required to build Moggcord-Installer.exe." -ForegroundColor Red
+    Write-Host "          (The old csc.exe fallback does not support modern C# syntax.)" -ForegroundColor DarkGray
+    Write-Host ""
+    Write-Host "  Install with winget:" -ForegroundColor Yellow
+    Write-Host "    winget install Microsoft.DotNet.SDK.8" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  Or download: https://dotnet.microsoft.com/download/dotnet/8.0" -ForegroundColor Yellow
+    Write-Host "  Then open a NEW terminal and run publish-release.bat again." -ForegroundColor Yellow
+    exit 1
 }
-# Method 2: csc.exe (.NET Framework - always present on Windows)
-else {
-    Write-Host "  dotnet SDK not found - using csc.exe (.NET Framework)..." -ForegroundColor Yellow
 
-    $fxDir = "${env:SystemRoot}\Microsoft.NET\Framework64"
-    $csc = Get-ChildItem "$fxDir\v4*\csc.exe" -ErrorAction SilentlyContinue |
-           Sort-Object FullName -Descending |
-           Select-Object -First 1 -ExpandProperty FullName
+$sdkVersion = ($sdkLine -split "\s+")[0]
+Write-Host "  [1/1] dotnet publish (SDK $sdkVersion)..." -ForegroundColor DarkGray
 
-    if (-not $csc) {
-        $fxDir32 = "${env:SystemRoot}\Microsoft.NET\Framework"
-        $csc = Get-ChildItem "$fxDir32\v4*\csc.exe" -ErrorAction SilentlyContinue |
-               Sort-Object FullName -Descending |
-               Select-Object -First 1 -ExpandProperty FullName
-    }
+# Copy dist zip into installer-src if release zip exists (embedded resource)
+$distZip = Join-Path $Root "release\installer\moggcord-dist.zip"
+$embeddedZip = Join-Path $SrcDir "moggcord-dist.zip"
+if ((Test-Path $distZip) -and -not (Test-Path $embeddedZip)) {
+    Copy-Item $distZip $embeddedZip -Force
+}
 
-    if (-not $csc) {
-        Write-Host "  [ERROR] Neither dotnet SDK nor csc.exe found." -ForegroundColor Red
-        Write-Host "  -> Install .NET SDK: https://dotnet.microsoft.com/download" -ForegroundColor Yellow
-        exit 1
-    }
+& dotnet publish "$SrcDir\MoggcordInstaller.csproj" `
+    -c Release `
+    -o $OutDir `
+    --nologo `
+    -v quiet `
+    -p:PublishSingleFile=true `
+    -p:SelfContained=false `
+    -r win-x64
 
-    Write-Host "  [1/1] Compiling with $csc..." -ForegroundColor DarkGray
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "  [ERROR] dotnet publish failed." -ForegroundColor Red
+    exit 1
+}
 
-    $ico    = Join-Path $Root "moggcord.ico"
-    $icoArg = if (Test-Path $ico) { "/win32icon:`"$ico`"" } else { "" }
-
-    $refs = @(
-        "System.Net.Http.dll",
-        "System.IO.Compression.dll",
-        "System.IO.Compression.FileSystem.dll",
-        "System.Windows.Forms.dll",
-        "System.Drawing.dll",
-        "System.dll"
-    ) | ForEach-Object { "/r:$_" }
-
-    $args = @(
-        "/target:winexe",
-        "/platform:anycpu",
-        "/optimize+",
-        "/nologo",
-        "/out:`"$OutExe`"",
-        "/utf8output"
-    ) + $refs
-
-    if ($icoArg) { $args += $icoArg }
-    $args += "`"$SrcDir\Program.cs`""
-
-    & $csc @args
-    if ($LASTEXITCODE -ne 0) {
-        Write-Host "  [ERROR] Compilation failed." -ForegroundColor Red
-        exit 1
-    }
+$built = Get-ChildItem $OutDir -Recurse -Filter "Moggcord-Installer.exe" -ErrorAction SilentlyContinue | Select-Object -First 1
+if ($built -and $built.FullName -ne $OutExe) {
+    Copy-Item $built.FullName $OutExe -Force
 }
 
 # Result

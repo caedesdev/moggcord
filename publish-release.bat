@@ -94,6 +94,8 @@ if not exist "%OUT_DIR%" mkdir "%OUT_DIR%"
 powershell -NoProfile -ExecutionPolicy Bypass -File "build-installer.ps1"
 if errorlevel 1 (
     echo  [ERREUR] Compilation de l'installeur echouee.
+    echo  [INFO]  Installez le .NET 8 SDK: winget install Microsoft.DotNet.SDK.8
+    echo         Puis relancez ce script dans un NOUVEAU terminal.
     pause
     exit /b 1
 )

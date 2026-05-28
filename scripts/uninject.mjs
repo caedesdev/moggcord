@@ -14,7 +14,6 @@ import "./checkNodeVersion.js";
 import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from "fs";
 import { join } from "path";
 
-// ── Locate Discord installations (same logic as inject.mjs) ─────────────────
 function findAllDiscordResources() {
     const platform = process.platform;
     const candidates = [];
@@ -50,20 +49,17 @@ function findAllDiscordResources() {
         );
     }
 
-    // Only paths with a Moggcord injection present
     return candidates.filter(p => {
         if (!existsSync(p)) return false;
         return existsSync(join(p, "app")) || existsSync(join(p, "_app.asar"));
     });
 }
 
-// ── Uninject ─────────────────────────────────────────────────────────────────
 function uninject(resourcesDir) {
     const appDirPath = join(resourcesDir, "app");
     const backupPath = join(resourcesDir, "_app.asar");
     const appAsarPath = join(resourcesDir, "app.asar");
 
-    // Verify app/ was created by Moggcord
     if (existsSync(appDirPath)) {
         try {
             const pkg = JSON.parse(readFileSync(join(appDirPath, "package.json"), "utf-8"));
@@ -80,7 +76,6 @@ function uninject(resourcesDir) {
         console.log("\x1b[33m[Moggcord] No injected app/ folder found.\x1b[0m");
     }
 
-    // Restore backup
     if (existsSync(backupPath) && !existsSync(appAsarPath)) {
         console.log("[Moggcord] Restoring _app.asar → app.asar...");
         renameSync(backupPath, appAsarPath);
@@ -94,7 +89,6 @@ function uninject(resourcesDir) {
     return true;
 }
 
-// ── Main ─────────────────────────────────────────────────────────────────────
 const allResources = findAllDiscordResources();
 
 if (allResources.length === 0) {

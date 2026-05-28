@@ -519,48 +519,35 @@ namespace MoggcordInstaller
             KillDiscord(resPath);
 
             SetProgress(91, "Removing previous mod injection (Vencord / Equicord / OpenAsar)...");
-            // ── NETTOYAGE COMPLET DE TOUTE INJECTION PRÉCÉDENTE ──────────────────────
-            // 1. Supprimer le dossier app/ quel que soit le mod qui l'a créé
             if (Directory.Exists(appDir))
             {
-                // Déjà Moggcord → on réinjecte proprement sans bail-out partiel
                 try { Directory.Delete(appDir, true); } catch { }
             }
 
-            // 2. Supprimer tout app.asar faux (< 2 MB) créé par Vencord/OpenAsar/Equicord
-            //    Le vrai app.asar Discord fait entre 40 MB et 80 MB.
             if (File.Exists(appAsar) && new FileInfo(appAsar).Length < 2_000_000)
             {
                 File.Delete(appAsar);
             }
 
-            // 3. Chercher un backup fait par un mod tiers (Vencord utilise _app.asar,
-            //    Equicord aussi, OpenAsar utilise original_app.asar)
             string[] thirdPartyBackups = { "_app.asar", "original_app.asar", "app.asar.bak" };
             foreach (var bkName in thirdPartyBackups)
             {
                 var bkPath = Path.Combine(resPath, bkName);
-                // C'est un vrai backup si sa taille est > 2 MB
                 if (File.Exists(bkPath) && new FileInfo(bkPath).Length > 2_000_000)
                 {
-                    // Si app.asar est absent ou corrompu, restaurer ce backup en tant que app.asar
                     if (!File.Exists(appAsar) || new FileInfo(appAsar).Length < 2_000_000)
                     {
                         if (File.Exists(appAsar)) File.Delete(appAsar);
-                        // Copier (pas déplacer) pour ne pas perdre le backup si une erreur survient
                         File.Copy(bkPath, appAsar);
                     }
                     break;
                 }
             }
 
-            // 4. Nettoyer les patches dans discord_desktop_core que Vencord/Equicord injectent
-            //    dans splashScreen.js et app_bootstrap (cause les settings parasites)
             CleanModulePatches(resPath);
 
             SetProgress(92, "Configuring Moggcord loader...");
 
-            // Vérification finale : on doit avoir un vrai app.asar ou un backup avant de continuer
             if (!File.Exists(appAsar) && !File.Exists(backup))
             {
                 throw new Exception(
@@ -569,7 +556,6 @@ namespace MoggcordInstaller
                 );
             }
 
-            // Créer le backup Moggcord si app.asar existe et qu'on n'a pas encore de backup
             if (File.Exists(appAsar))
             {
                 if (File.Exists(backup)) File.Delete(backup);
@@ -581,24 +567,20 @@ namespace MoggcordInstaller
             WriteLoader(appDir);
             CopyAssetsToDiscord(resPath);
             InstallDefaultSettings();
+            MarkPostInstallRelaunch();
             SetProgress(99, "Starting Discord...");
+            Thread.Sleep(1500);
             StartDiscord(resPath);
         }
 
-        /// <summary>
-        /// Nettoie les patches laissés par Vencord/Equicord dans les modules natifs Discord.
-        /// Ces patches (dans discord_desktop_core, etc.) font que les settings Discord affichent
-        /// encore l'interface Vencord/Equicord même après suppression de leur dossier app/.
-        /// </summary>
+        /// <summary>Removes Vencord/Equicord patches from Discord native modules.</summary>
         private void CleanModulePatches(string resPath)
         {
             try
             {
-                // Chemins où Vencord/Equicord injectent leurs hooks
                 var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
                 var appBase = Path.GetDirectoryName(resPath);
 
-                // Chercher le dossier modules (dans app-X.X.XXXX/modules/)
                 string[] modulesSearchPaths = {
                     Path.Combine(appBase, "modules"),
                     Path.Combine(resPath, "modules")
@@ -608,13 +590,11 @@ namespace MoggcordInstaller
                 {
                     if (!Directory.Exists(modulesDir)) continue;
 
-                    // Chercher discord_desktop_core-*/discord_desktop_core/
                     foreach (var coreParent in Directory.GetDirectories(modulesDir, "discord_desktop_core*"))
                     {
                         var corePath = Path.Combine(coreParent, "discord_desktop_core");
                         if (!Directory.Exists(corePath)) continue;
 
-                        // Fichiers patchés par Vencord/Equicord dans discord_desktop_core
                         string[] patchedFiles = {
                             Path.Combine(corePath, "index.js"),
                             Path.Combine(corePath, "app", "app_bootstrap", "splashScreen.js"),
@@ -626,7 +606,6 @@ namespace MoggcordInstaller
                             if (!File.Exists(pf)) continue;
                             var content = File.ReadAllText(pf);
 
-                            // Détecter la présence d'une injection Vencord/Equicord dans ce fichier
                             bool isPatched = content.Contains("vencord", StringComparison.OrdinalIgnoreCase)
                                          || content.Contains("equicord", StringComparison.OrdinalIgnoreCase)
                                          || content.Contains("require(\"vencord")
@@ -636,7 +615,6 @@ namespace MoggcordInstaller
 
                             if (!isPatched) continue;
 
-                            // Chercher un backup .orig ou .bak laissé par le mod
                             string[] backupExts = { ".orig", ".bak", ".vanilla" };
                             bool restored = false;
                             foreach (var ext in backupExts)
@@ -653,13 +631,10 @@ namespace MoggcordInstaller
 
                             if (!restored)
                             {
-                                // Pas de backup → supprimer le fichier patché.
-                                // Discord le recrée au prochain démarrage depuis app.asar.
                                 try { File.Delete(pf); } catch { }
                             }
                         }
 
-                        // Supprimer le dossier app/ à l'intérieur de discord_desktop_core si injecté
                         var innerAppDir = Path.Combine(corePath, "app");
                         if (Directory.Exists(innerAppDir))
                         {
@@ -681,7 +656,6 @@ namespace MoggcordInstaller
             }
             catch (Exception ex)
             {
-                // Non-fatal : on log et on continue
                 Console.WriteLine($"[Moggcord] CleanModulePatches warning: {ex.Message}");
             }
         }
@@ -906,17 +880,37 @@ namespace MoggcordInstaller
                 CopyDirectory(directory, Path.Combine(destinationDir, Path.GetFileName(directory)));
         }
 
+        private void MarkPostInstallRelaunch()
+        {
+            try
+            {
+                var dir = Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Moggcord");
+                Directory.CreateDirectory(dir);
+                File.WriteAllText(
+                    Path.Combine(dir, ".pending-relaunch"),
+                    DateTimeOffset.UtcNow.ToUnixTimeMilliseconds().ToString());
+            }
+            catch { }
+        }
+
         private void KillDiscord(string resPath)
         {
             SetStatus("loading", "Closing Discord...");
             var procName = resPath.Contains("DiscordPTB") ? "DiscordPTB" :
                            resPath.Contains("DiscordCanary") ? "DiscordCanary" :
                            resPath.Contains("DiscordDevelopment") ? "DiscordDevelopment" : "Discord";
-            foreach (var process in Process.GetProcessesByName(procName))
+
+            foreach (var name in new[] { procName, "DiscordSystemHelper" })
             {
-                try { process.Kill(); process.WaitForExit(3000); } catch { }
+                foreach (var process in Process.GetProcessesByName(name))
+                {
+                    try { process.Kill(); process.WaitForExit(5000); } catch { }
+                }
             }
-            System.Threading.Thread.Sleep(1000);
+
+            System.Threading.Thread.Sleep(2500);
         }
 
         private void StartDiscord(string resPath)

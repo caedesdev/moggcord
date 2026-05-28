@@ -77,7 +77,6 @@ export const enum IpcEvents {
 
     GET_PLATFORM_SPOOF_INFO = "VCD_GET_PLATFORM_SPOOF_INFO",
 
-    // Relaunch depuis VencordNative.moggcord.relaunch() (boutons Restart plugins)
     RELAUNCH_APP = "MoggcordRelaunchApp"
 }
 

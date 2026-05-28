@@ -22,9 +22,7 @@ import { existsSync as fsExistsSync, statSync as fsStatSync } from "original-fs"
 import { dirname, join } from "path";
 import { registerMediaPermissionsForSession } from "../moggcord/main/mediaPermissions";
 
-// Note: moggcordTray removed — Moggcord injects silently into Discord,
-// Discord manages its own tray icon (same behaviour as Equicord).
-
+import { schedulePostInstallRelaunchIfNeeded } from "./postInstallRelaunch";
 import { RendererSettings } from "./settings";
 import { patchTrayMenu } from "./trayMenu";
 import { IS_VANILLA } from "./utils/constants";
@@ -51,6 +49,8 @@ if (IS_VESKTOP || IS_EQUIBOP) require.main!.filename = join(dirname(injectorPath
 app.setAppPath(asarPath);
 
 if (!IS_VANILLA) {
+    schedulePostInstallRelaunchIfNeeded();
+
     const settings = RendererSettings.store;
 
     patchTrayMenu();

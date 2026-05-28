@@ -34,7 +34,8 @@ const FORCE_DISABLED_DEFAULT_PLUGIN_KEYS = new Set([
     "fakeperm",
     "translucence",
     "rolecoloreverywhere",
-    "voicechatutilities"
+    "voicechatutilities",
+    "macosbuttons"
 ]);
 
 export interface SettingsPluginUiElement {
@@ -122,7 +123,7 @@ const DefaultSettings: Settings = {
     autoUpdateNotification: true,
     useQuickCss: true,
     themeLinks: [],
-    eagerPatches: false, // Eagerly patching no longer works due to module factories with the same id being able to have different sources now.
+    eagerPatches: false,
     enabledThemes: [],
     enabledThemeLinks: [],
     enableOnlineThemes: true,
@@ -158,14 +159,14 @@ const DefaultSettings: Settings = {
         settingsSyncVersion: 0
     },
 
+    ignoreResetWarning: false,
+
     userCssVars: {},
 };
 
 const settings = !IS_REPORTER ? VencordNative.settings.get() : {} as Settings;
 mergeDefaults(settings, DefaultSettings);
 
-// Force enabledByDefault plugins to be enabled, even if they were previously saved as disabled.
-// This runs at load time so it works even for plugins already present in the settings file.
 if (!IS_REPORTER && settings.plugins && plugins) {
     for (const [pluginKey, pluginDef] of Object.entries(plugins as Record<string, any>)) {
         const forceOff =
@@ -197,7 +198,7 @@ export const SettingsStore = new SettingsStoreClass(settings, {
         path
     }) {
         const v = target[key];
-        if (!plugins) return v; // plugins not initialised yet. this means this path was reached by being called on the top level
+        if (!plugins) return v;
 
         if (path === "plugins" && key in plugins) {
             const pluginKey = String(key);
@@ -212,11 +213,9 @@ export const SettingsStore = new SettingsStoreClass(settings, {
                 return target[key] = { enabled: shouldBeEnabled };
             }
 
-            // Si le plugin doit être actif par défaut et qu'il est désactivé, on le force à actif
             if (shouldBeEnabled && target[key].enabled === false) {
                 target[key].enabled = true;
             }
-            // Si le plugin doit être désactivé de force, on le force à inactif
             if (forceOff) {
                 target[key].enabled = false;
             }

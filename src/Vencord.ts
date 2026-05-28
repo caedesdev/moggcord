@@ -137,8 +137,6 @@ async function runUpdateCheck() {
         if (notifiedForUpdatesThisSession) return;
         notifiedForUpdatesThisSession = true;
 
-        // Green update banner is handled by the MoggcordUpdater plugin.
-        // Fall back to a notification if the plugin is disabled.
         if (!isPluginEnabled("MoggcordUpdater")) {
             showNotification({
                 title: "Moggcord Update Available",

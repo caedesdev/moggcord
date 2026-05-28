@@ -126,8 +126,8 @@ try {
 
 # ── [3/3] Injection via EquilotlCli ───────────────────────────────────────────
 Write-Step 3 3 "Fermeture de Discord..."
-Get-Process -Name "Discord", "DiscordSystemHelper" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
-Start-Sleep -Seconds 2
+Get-Process -Name "Discord", "DiscordPTB", "DiscordCanary", "DiscordDevelopment", "DiscordSystemHelper" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 3
 
 Write-Host "          Lancement de l'interface d'injection..." -ForegroundColor DarkGray
 Write-Host ""
@@ -153,7 +153,12 @@ try {
 
 # ── Succès ────────────────────────────────────────────────────────────────────
 Write-Host ""
+$MarkerDir = Join-Path $env:LOCALAPPDATA "Moggcord"
+New-Item -ItemType Directory -Force -Path $MarkerDir | Out-Null
+Set-Content -Path (Join-Path $MarkerDir ".pending-relaunch") -Value ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())
+
 Write-Host "  Redémarrage de Discord..." -ForegroundColor DarkGray
+Write-Host "  (Discord startet einmal kurz neu, damit alles anklickbar ist.)" -ForegroundColor DarkGray
 $DiscordRoot = Join-Path $env:LOCALAPPDATA "Discord"
 $UpdateExe   = Join-Path $DiscordRoot "Update.exe"
 if (Test-Path $UpdateExe) {
@@ -169,7 +174,7 @@ if (Test-Path $UpdateExe) {
 Write-Host ""
 Write-Host "  ╔══════════════════════════════════════════════════════╗" -ForegroundColor Green
 Write-Host "  ║  Moggcord installé avec succès !                    ║" -ForegroundColor Green
-Write-Host "  ║  Discord a été relancé automatiquement.             ║" -ForegroundColor Green
+Write-Host "  ║  Discord startet — danach ein kurzer Auto-Neustart.  ║" -ForegroundColor Green
 Write-Host "  ╚══════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Pour désinstaller : exécutez moggcord-uninstall.bat" -ForegroundColor DarkGray

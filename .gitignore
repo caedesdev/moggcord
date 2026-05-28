@@ -1,62 +1,76 @@
-dist
-node_modules
-.codex-temp/
-.VSCodeCounter
+# Dependencies
+node_modules/
+**/node_modules/
+.pnpm-store/
 
+# Build outputs
+dist/
+build/
+!scripts/build/
+release/
+*.tsbuildinfo
+
+# Installers & binaries
 *.exe
 *.zip
 *.asar
 *.pdb
-vencord_installer
-equicord_installer
+vencord_installer/
+equicord_installer/
+dist/Installer/
+Equilotl.app/
+installer-src/bin/
+installer-src/obj/
+installer-src/moggcord-dist.zip
 
-.idea
+# .NET / Visual Studio
+.vs/
+*.user
+*.suo
+
+# IDE & OS
+.idea/
+.vscode/
+.cursor/
+.VSCodeCounter/
+.codex-temp/
 .DS_Store
+Desktop.ini
+Thumbs.db
 
+# Lockfiles (project uses pnpm)
 yarn.lock
 bun.lock
 package-lock.json
 
+# Logs
 *.log
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 .pnpm-debug.log*
-*.tsbuildinfo
 
+# Moggcord / Vencord caches
 .modules/
-src/userplugins
-
 ExtensionCache/
 /settings
+src/userplugins
 
-# vencord companion module cache
-.modules
+# Local dev secrets (Equicord tooling)
+.vars
+.secrets
+.input
 
-# wakatime related stuff
-.wakatime-project
-
-# build outputs & binaries
-release/
-build/
-dist/
-installer-src/bin/
-installer-src/obj/
-installer-src/moggcord-dist.zip
-# Exception : scripts/build/ contient les scripts de compilation et doit être versionné
-!scripts/build/
-
-# IDE settings
-.vscode/
-
-# backup & temp files
-*.patch.txt
-
-# Test and local dev directories
+# Test & temp
 test-dist/
 test-userdata/
 test-app/
+*.patch.txt
+*.tmp
+*.temp
+*.bak
+.wakatime-project
 
 # Environment & credentials
 .env
@@ -65,7 +79,3 @@ test-app/
 *.pem
 *.key
 certs/
-
-# System files
-Thumbs.db
-Desktop.ini

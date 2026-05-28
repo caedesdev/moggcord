@@ -1,6 +1,5 @@
 /*
- * Moggcord — Auto-updater (HTTP / GitHub Releases via ASAR)
- * Vérifie les releases sur GitHub, télécharge le desktop.asar et remplace l'ancien.
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import { fetchBuffer, fetchJson } from "@main/utils/http";
@@ -11,6 +10,7 @@ import { writeFileSync, rmSync, existsSync } from "original-fs";
 import { join } from "path";
 import { exec } from "child_process";
 
+import { markPendingRelaunch } from "../postInstallRelaunch";
 import { serializeErrors } from "./common";
 
 const RELEASES_REPO = "caedesdev/moggcord";
@@ -123,9 +123,9 @@ async function applyUpdates(): Promise<boolean> {
         pendingVersion = null;
         pendingZipPath = null;
         try { rmSync(zipPath, { force: true }); } catch {}
+        markPendingRelaunch();
         return true;
     } catch (err) {
-        // Files are often locked while Discord is running — keep the zip for apply on quit
         console.warn("[Moggcord] Live apply failed (will retry on quit):", err);
         return false;
     } finally {
@@ -134,17 +134,12 @@ async function applyUpdates(): Promise<boolean> {
     }
 }
 
-/** Download the update package (used by UPDATE IPC). */
 async function prepareUpdate(): Promise<boolean> {
     const hasUpdate = await fetchUpdates();
     if (!hasUpdate) return false;
     return downloadUpdate();
 }
 
-/**
- * Try to apply now; if files are locked, return true anyway when the package is downloaded
- * so the before-quit handler can finish the install.
- */
 async function buildOrDefer(): Promise<boolean> {
     if (!pendingZipPath) {
         const ok = await downloadUpdate();
@@ -154,11 +149,9 @@ async function buildOrDefer(): Promise<boolean> {
     const applied = await applyUpdates();
     if (applied) return true;
 
-    // Package is on disk — install will run when Discord closes
     return pendingZipPath !== null && existsSync(pendingZipPath);
 }
 
-// ─── Auto-update on quit ─────────────────────────────────────────────────────
 app.on("before-quit", (event) => {
     const hasPending = pendingZipPath && existsSync(pendingZipPath);
     if (!hasPending && !pendingDownloadUrl) return;
@@ -181,8 +174,10 @@ app.on("before-quit", (event) => {
                 await downloadUpdate();
             }
             const ok = await applyUpdates();
-            if (ok) console.log("[Moggcord] Update applied successfully on quit.");
-            else console.warn("[Moggcord] Update on quit returned false.");
+            if (ok) {
+                markPendingRelaunch();
+                console.log("[Moggcord] Update applied successfully on quit.");
+            } else console.warn("[Moggcord] Update on quit returned false.");
         } catch (err) {
             console.error("[Moggcord] Update on quit failed:", err);
             pendingDownloadUrl = null;

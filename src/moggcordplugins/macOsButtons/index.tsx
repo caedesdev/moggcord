@@ -75,7 +75,7 @@ const CSS = `
     margin-right: 4px;
 }
 
-/* Cache les boutons Windows natifs */
+/* Hide native Windows title bar buttons */
 [class*="winButtons"],
 [class*="winButton"] {
     display: none !important;
@@ -100,24 +100,21 @@ function injectMacOsButtons() {
     const sep = document.createElement("div");
     sep.className = "macos-sep";
 
-    // Rouge — Close
     const btnClose = document.createElement("button");
     btnClose.className = "macos-btn macos-btn-close";
     btnClose.title = "Close";
     btnClose.innerHTML = `<span class="macos-btn-icon"><svg width="6" height="6" viewBox="0 0 6 6" fill="none"><path d="M1 1L5 5M5 1L1 5" stroke="#4d0000" stroke-width="1.3" stroke-linecap="round"/></svg></span>`;
     btnClose.addEventListener("click", (e) => { e.stopPropagation(); Native.closeWindow(); });
 
-    // Jaune — Minimiser
     const btnMin = document.createElement("button");
     btnMin.className = "macos-btn macos-btn-min";
-    btnMin.title = "Minimiser";
+    btnMin.title = "Minimize";
     btnMin.innerHTML = `<span class="macos-btn-icon"><svg width="7" height="2" viewBox="0 0 7 2" fill="none"><path d="M0.5 1H6.5" stroke="#6d4c00" stroke-width="1.3" stroke-linecap="round"/></svg></span>`;
     btnMin.addEventListener("click", (e) => { e.stopPropagation(); Native.minimizeWindow(); });
 
-    // Vert — Maximiser
     const btnMax = document.createElement("button");
     btnMax.className = "macos-btn macos-btn-max";
-    btnMax.title = "Maximiser / Restaurer";
+    btnMax.title = "Maximize / Restore";
     btnMax.innerHTML = `<span class="macos-btn-icon"><svg width="7" height="7" viewBox="0 0 7 7" fill="none"><path d="M1 6L6 1M1 3.5V1H3.5M3.5 6H6V3.5" stroke="#0a3a00" stroke-width="1.2" stroke-linecap="round" stroke-linejoin="round"/></svg></span>`;
     btnMax.addEventListener("click", (e) => { e.stopPropagation(); Native.maximizeWindow(); });
 
@@ -125,28 +122,20 @@ function injectMacOsButtons() {
     container.appendChild(btnMin);
     container.appendChild(btnMax);
 
-    // Pousser les icônes Discord à gauche pour ne pas se chevaucher
-    // On cherche le vrai trailing container et on lui ajoute du padding-right
     pushToolbarLeft();
 
-    // Focus / unfocus
     window.addEventListener("focus", () => container.classList.remove("macos-unfocused"));
     window.addEventListener("blur", () => container.classList.add("macos-unfocused"));
     if (!document.hasFocus()) container.classList.add("macos-unfocused");
 }
 
 function pushToolbarLeft() {
-    // Largeur occupée par nos boutons : sep(1) + gap(8) + 3×btn(13) + gaps(16) + padding(24) ≈ 90px
     const W = 90;
-    // Cherche tous les containers de la titlebar qui sont en haut à droite
-    // et leur ajoute du padding-right pour ne pas se chevaucher avec nos boutons
     const styleId = "macos-toolbar-push";
     if (document.getElementById(styleId)) return;
 
     const style = document.createElement("style");
     style.id = styleId;
-    // On injecte une règle CSS qui pousse le trailing via padding
-    // Le trailing dans Discord a toujours un aria ou un class "trailing"
     style.textContent = `
         [class*="trailing"] {
             padding-right: ${W}px !important;
@@ -177,7 +166,6 @@ export default definePlugin({
             if (!controls) {
                 injectMacOsButtons();
             } else if (controls.parentElement !== document.body) {
-                // S'il a été déplacé par un changement de layer, on le remet en haut
                 document.body.appendChild(controls);
             }
         });

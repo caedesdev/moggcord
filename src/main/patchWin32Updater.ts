@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { markPendingRelaunch } from "./postInstallRelaunch";
 import { app } from "electron";
 import { existsSync, mkdirSync, readdirSync, renameSync, statSync, writeFileSync } from "original-fs";
 import { basename, dirname, join } from "path";
@@ -57,7 +58,6 @@ function patchLatest() {
             name: "moggcord",
             main: "index.js"
         }));
-        // Chemin relatif pour la portabilité (fonctionne sur n'importe quelle machine)
         writeFileSync(join(app, "index.js"), `// Moggcord repatch
 "use strict";
 const fs = require("fs");
@@ -75,11 +75,10 @@ const patcherPath = candidates.find(fs.existsSync);
 if (!patcherPath) throw new Error("[Moggcord] patcher.js not found. Checked: " + candidates.join(", "));
 require(patcherPath);
 `);
+        markPendingRelaunch();
     } catch (err) {
         console.error("[Moggcord] Failed to repatch latest host update", err);
     }
 }
 
-// Try to patch latest on before-quit
-// Discord's Win32 updater will call app.quit() on restart and open new version on will-quit
 app.on("before-quit", patchLatest);

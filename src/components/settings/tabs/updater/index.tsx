@@ -1,6 +1,5 @@
 /*
- * Moggcord — Onglet Updater dans les Settings
- * Affiche la version actuelle, vérifie GitHub et permet de mettre à jour.
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import { Divider } from "@components/Divider";
@@ -20,7 +19,6 @@ import { Toasts, Alerts } from "@webpack/common";
 
 import { relaunch } from "@utils/native";
 
-// Version locale depuis package.json (injectée au build)
 declare const VERSION: string;
 
 const REPO_URL = "https://github.com/caedesdev/moggcord";
@@ -69,7 +67,6 @@ function UpdaterTab() {
         setDownloading(true);
         setError(null);
         try {
-            // Update & build triggers our new ASAR overwrite
             await update();
             const installed = await rebuild();
 
@@ -104,7 +101,6 @@ function UpdaterTab() {
                 Check for new versions of Moggcord. Updates can be installed automatically.
             </Paragraph>
 
-            {/* Version actuelle */}
             <Card style={{ padding: "12px 16px", marginBottom: 12 }}>
                 <Flex style={{ alignItems: "center", justifyContent: "space-between" }}>
                     <div>
@@ -126,14 +122,12 @@ function UpdaterTab() {
                 </Flex>
             </Card>
 
-            {/* Error */}
             {error && (
                 <Card style={{ padding: "10px 16px", marginBottom: 12, borderLeft: "3px solid var(--status-danger)" }}>
                     <Span size="sm" color="text-danger">{error}</Span>
                 </Card>
             )}
 
-            {/* Résultat vérification */}
             {checked && !error && (
                 outdated ? (
                     <Card style={{ padding: "10px 16px", marginBottom: 12, borderLeft: "3px solid var(--status-warning)" }}>
@@ -148,7 +142,6 @@ function UpdaterTab() {
                 )
             )}
 
-            {/* Boutons */}
             <Flex gap="8px" className={Margins.top8}>
                 <Button
                     size="small"

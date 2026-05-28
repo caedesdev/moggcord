@@ -23,7 +23,6 @@ import { Readable } from "stream";
 import { finished } from "stream/promises";
 import { fileURLToPath } from "url";
 
-// EquilotlCli is Equicord's graphical installer — reused for Moggcord
 const BASE_URL = "https://github.com/Equicord/Equilotl/releases/latest/download/";
 const INSTALLER_PATH_DARWIN = "Equilotl.app/Contents/MacOS/Equilotl";
 const INSTALLER_APP_DARWIN = "Equilotl.app";
@@ -58,7 +57,6 @@ async function ensureBinary() {
         ? join(FILE_DIR, INSTALLER_APP_DARWIN)
         : null;
 
-    // If the binary already exists, use it without checking for updates
     if (existsSync(outputFile)) {
         console.log("[Moggcord] Installer already present, using local copy.");
         return outputFile;
@@ -99,7 +97,6 @@ async function ensureBinary() {
         })));
     }
 
-    // Ensure the binary is executable (Linux/macOS)
     if (process.platform !== "win32") {
         try { chmodSync(outputFile, 0o755); } catch { }
     }
@@ -108,7 +105,12 @@ async function ensureBinary() {
     return outputFile;
 }
 
-// ── Discord process control (Windows) ───────────────────────────────────────
+function markPostInstallRelaunch() {
+    const dir = join(process.env.LOCALAPPDATA || "", "Moggcord");
+    mkdirSync(dir, { recursive: true });
+    writeFileSync(join(dir, ".pending-relaunch"), String(Date.now()));
+}
+
 function stopDiscord() {
     if (process.platform !== "win32") return;
     for (const img of ["Discord.exe", "DiscordSystemHelper.exe"]) {
@@ -116,6 +118,7 @@ function stopDiscord() {
             execSync(`taskkill /F /IM ${img} /T`, { stdio: "ignore" });
         } catch { }
     }
+    try { execSync("timeout /t 2 /nobreak >nul", { stdio: "ignore", shell: true }); } catch { }
 }
 
 function startDiscord() {
@@ -164,7 +167,6 @@ function warnIfCorruptAppAsar(resourcesDir) {
     } catch { }
 }
 
-// ── Verify build exists ────────────────────────────────────────────────────
 function checkBuild() {
     const patcherPath = join(BASE_DIR, "dist", "desktop", "patcher.js");
     if (!existsSync(patcherPath)) {
@@ -174,7 +176,6 @@ function checkBuild() {
     }
 }
 
-// ── Clean up old installations automatically ─────────────────────────────────
 function cleanOldMoggcord() {
     console.log("[Moggcord] Scanning and cleaning up old installations...");
     const platform = process.platform;
@@ -220,7 +221,6 @@ function cleanOldMoggcord() {
         const appAsarPath = join(resourcesDir, "app.asar");
 
         try {
-            // 1. Remove app/ folder if it was created by old Moggcord
             if (existsSync(appDirPath)) {
                 let shouldDelete = false;
                 try {
@@ -231,7 +231,6 @@ function cleanOldMoggcord() {
                             shouldDelete = true;
                         }
                     } else {
-                        // app/ without package.json but _app.asar exists — likely leftover from old injector
                         if (existsSync(backupPath)) shouldDelete = true;
                     }
                 } catch {
@@ -245,7 +244,6 @@ function cleanOldMoggcord() {
                 }
             }
 
-            // 2. If _app.asar exists, restore the original backup to app.asar
             if (existsSync(backupPath)) {
                 let isAsarDir = false;
                 if (existsSync(appAsarPath)) {
@@ -264,7 +262,6 @@ function cleanOldMoggcord() {
                     renameSync(backupPath, appAsarPath);
                     cleanedAny = true;
                 } else {
-                    // Original app.asar already present as a file — remove obsolete backup
                     console.log(`[Moggcord] Removing obsolete _app.asar backup in: ${resourcesDir}`);
                     rmSync(backupPath, { force: true });
                     cleanedAny = true;
@@ -282,11 +279,8 @@ function cleanOldMoggcord() {
     }
 }
 
-// ── Main ─────────────────────────────────────────────────────────────────────
-// Clean old Moggcord traces first to avoid conflicts or file locks
 cleanOldMoggcord();
 
-// Only verify build for install/repair (not uninject)
 const argStart = process.argv.indexOf("--");
 const args = argStart === -1 ? [] : process.argv.slice(argStart + 1);
 
@@ -315,9 +309,6 @@ if (isInstall) {
             uninstallArgs.push("-location", args[locationIdx + 1]);
         }
 
-        // Try silent uninstall
-        // Note: EquilotlCli may prompt for selection if multiple Discords are found,
-        // but this is still the safest way to restore the original index.js.
         execFileSync(installerBin, uninstallArgs, {
             stdio: "inherit",
             env: {
@@ -363,9 +354,11 @@ if (isInstall) {
         } catch { }
     }
 
+    markPostInstallRelaunch();
     console.log("[Moggcord] Restarting Discord...");
+    console.log("\x1b[33m[Moggcord] Discord will restart once more automatically so the UI works correctly.\x1b[0m");
     if (startDiscord()) {
-        console.log("\x1b[32m[Moggcord] Discord restarted with Moggcord loaded.\x1b[0m");
+        console.log("\x1b[32m[Moggcord] Discord started — finishing setup on first launch.\x1b[0m");
     } else {
         console.log("\x1b[33m[Moggcord] Could not auto-start Discord — open it manually once.\x1b[0m");
     }

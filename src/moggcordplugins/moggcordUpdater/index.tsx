@@ -1,6 +1,5 @@
 /*
- * Moggcord — Auto-updater banner
- * Checks GitHub on startup and shows a green banner when a newer version exists.
+ * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import definePlugin from "@utils/types";
@@ -204,10 +203,6 @@ export default definePlugin({
     authors: [{ name: "Moggcord", id: 0n }],
 
     start() {
-        const mountWhenReady = () => setTimeout(mountBanner, 1500);
-        if (document.readyState === "complete") mountWhenReady();
-        else window.addEventListener("load", mountWhenReady, { once: true });
-
         setTimeout(() => checkAndShowBanner(), 5000);
     },
 
