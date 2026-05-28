@@ -1240,7 +1240,7 @@
             "enabled": false
         },
         "MacOsButtons": {
-            "enabled": true
+            "enabled": false
         },
         "MassDM": {
             "enabled": false
@@ -1302,7 +1302,7 @@
             "temperature": 0.7
         },
         "MoggcordUpdater": {
-            "enabled": false
+            "enabled": true
         },
         "MultiInstance": {
             "enabled": true

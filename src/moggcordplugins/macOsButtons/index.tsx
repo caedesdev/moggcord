@@ -164,8 +164,8 @@ function removeMacOsButtons() {
 
 export default definePlugin({
     name: "MacOsButtons",
-    enabledByDefault: true,
-    description: "Replaces Windows buttons with macOS-style buttons — red, yellow, green.",
+    enabledByDefault: false,
+    description: "Replaces Windows title bar buttons with macOS-style red/yellow/green circles. Off by default — Discord uses its normal window controls.",
     authors: [{ name: "Moggcord", id: 0n }],
     required: false,
     patches: [],

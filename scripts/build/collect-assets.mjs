@@ -60,7 +60,7 @@ if (!foundFfmpeg) {
         }
     } catch { }
 }
-if (!foundFfmpeg) console.warn("[collect] ⚠️ ffmpeg.exe NOT FOUND — le ghost account ne pourra pas streamer l'audio");
+if (!foundFfmpeg) console.warn("[collect] ⚠️ ffmpeg.exe NOT FOUND — ghost account will not be able to stream audio");
 
 // ── ffmpeg.dll ──
 for (const c of ffmpegCandidates) {
@@ -178,9 +178,9 @@ if (fs.existsSync(ghostServerSrc)) {
             const ffmpegInGhost = path.join(ghostServerDst, "ffmpeg.exe");
             try {
                 fs.copyFileSync(ffmpegSrcPath, ffmpegInGhost);
-                console.log("[collect] ffmpeg.exe copié aussi dans ghost-server/ (fallback local)");
+                console.log("[collect] ffmpeg.exe also copied to ghost-server/ (local fallback)");
             } catch (e) {
-                console.warn("[collect] ⚠️ Impossible de copier ffmpeg dans ghost-server:", e.message);
+                console.warn("[collect] ⚠️ Could not copy ffmpeg to ghost-server:", e.message);
             }
         }
     }
@@ -195,9 +195,9 @@ if (copyIfExists(path.join(rootDir, "mac"), path.join(distDir, "mac"))) {
     console.warn("[collect] ⚠️ mac folder NOT FOUND");
 }
 
-// ── Résumé de vérification ──
+// ── Verification summary ──
 console.log("\n[collect] ══════════════════════════════════════════");
-console.log("[collect] Résumé des assets critiques pour le Ghost Account:");
+console.log("[collect] Critical assets summary for Ghost Account:");
 const criticalFiles = [
     { file: path.join(distDir, "ffmpeg.exe"),      name: "ffmpeg.exe (dist/desktop/)" },
     { file: path.join(distDir, "node.exe"),         name: "node.exe (dist/desktop/)" },

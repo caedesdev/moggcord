@@ -71,18 +71,25 @@ function UpdaterTab() {
         try {
             // Update & build triggers our new ASAR overwrite
             await update();
-            await rebuild();
-            
-            Toasts.show({
-                message: "Update successful! Restarting...",
-                id: Toasts.genId(),
-                type: Toasts.Type.SUCCESS,
-                options: { position: Toasts.Position.BOTTOM }
-            });
+            const installed = await rebuild();
 
-            setTimeout(() => {
-                relaunch();
-            }, 1500);
+            if (installed) {
+                Toasts.show({
+                    message: "Update successful! Restarting...",
+                    id: Toasts.genId(),
+                    type: Toasts.Type.SUCCESS,
+                    options: { position: Toasts.Position.BOTTOM }
+                });
+                setTimeout(() => relaunch(), 1500);
+            } else {
+                Toasts.show({
+                    message: "Update downloaded. Close Discord completely to finish installing, then reopen.",
+                    id: Toasts.genId(),
+                    type: Toasts.Type.MESSAGE,
+                    options: { position: Toasts.Position.BOTTOM }
+                });
+                setDownloading(false);
+            }
         } catch (e: any) {
             UpdateLogger.error(e);
             setError("Update failed: " + e.message);

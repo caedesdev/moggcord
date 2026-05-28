@@ -34,6 +34,13 @@ const DEV_TEAM = [
         role: "Owner / Main Developer",
         pfp: "https://cdn.discordapp.com/avatars/285824493748748299/001c9ae53b052ca9e0799da328127d40.webp?size=1024",
         description: "Founder and Owner of Moggcord."
+    },
+    {
+        id: "ninifxe",
+        name: "Ninifxe",
+        role: "Co-Owner / Developer",
+        pfp: "https://cdn.discordapp.com/avatars/726084725441036310/a_e64d5b4721d7b450a77179412f1f6a20.gif?size=1024&animated=true",
+        description: "Founder and Developer of Moggcord."
     }
 ];
 

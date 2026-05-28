@@ -40,7 +40,7 @@ import { SettingsRouter } from "@webpack/common";
 import { get as dsGet } from "./api/DataStore";
 import { popNotice, showNotice } from "./api/Notices";
 import { showNotification } from "./api/Notifications";
-import { initPluginManager, PMLogger, startAllPlugins } from "./api/PluginManager";
+import { initPluginManager, isPluginEnabled, PMLogger, startAllPlugins } from "./api/PluginManager";
 import { PlainSettings, Settings, SettingsStore } from "./api/Settings";
 import { getCloudSettings, putCloudSettings, shouldCloudSync } from "./api/SettingsSync/cloudSync";
 import { localStorage } from "./utils/localStorage";
@@ -137,12 +137,16 @@ async function runUpdateCheck() {
         if (notifiedForUpdatesThisSession) return;
         notifiedForUpdatesThisSession = true;
 
-        showNotification({
-            title: "Moggcord Update Available",
-            body: "Open Moggcord Settings to install the latest update.",
-            color: "var(--green-360)",
-            onClick: () => openSettingsTabModal(UpdaterTab!)
-        });
+        // Green update banner is handled by the MoggcordUpdater plugin.
+        // Fall back to a notification if the plugin is disabled.
+        if (!isPluginEnabled("MoggcordUpdater")) {
+            showNotification({
+                title: "Moggcord Update Available",
+                body: "Open Moggcord Settings to install the latest update.",
+                color: "var(--green-360)",
+                onClick: () => openSettingsTabModal(UpdaterTab!)
+            });
+        }
     } catch (err) {
         UpdateLogger.error("Failed to check for updates", err);
     }

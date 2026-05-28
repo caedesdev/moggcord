@@ -1,14 +1,14 @@
 /*
- * Nightcord — Installer via EquilotlCli
- * Télécharge EquilotlCli.exe depuis les releases Equicord et le lance
- * avec les variables d'environnement pointant vers les fichiers Nightcord.
+ * Moggcord — Installer via EquilotlCli
+ * Downloads EquilotlCli.exe from Equicord releases and runs it
+ * with environment variables pointing at Moggcord files.
  *
- * L'exe affiche une interface graphique permettant de choisir le Discord cible.
+ * The executable shows a GUI to pick the target Discord install.
  *
  * Usage:
- *   pnpm inject    → installe Nightcord dans le Discord choisi
- *   pnpm uninject  → désinstalle Nightcord du Discord choisi
- *   pnpm repair    → répare l'installation
+ *   pnpm inject    → install Moggcord into the chosen Discord
+ *   pnpm uninject  → uninstall Moggcord from Discord
+ *   pnpm repair    → repair the installation
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -23,7 +23,7 @@ import { Readable } from "stream";
 import { finished } from "stream/promises";
 import { fileURLToPath } from "url";
 
-// EquilotlCli est l'installeur graphique d'Equicord — on le réutilise pour Moggcord
+// EquilotlCli is Equicord's graphical installer — reused for Moggcord
 const BASE_URL = "https://github.com/Equicord/Equilotl/releases/latest/download/";
 const INSTALLER_PATH_DARWIN = "Equilotl.app/Contents/MacOS/Equilotl";
 const INSTALLER_APP_DARWIN = "Equilotl.app";
@@ -41,7 +41,7 @@ function getFilename() {
         case "linux":
             return "EquilotlCli-linux";
         default:
-            throw new Error("Plateforme non supportée : " + process.platform);
+            throw new Error("Unsupported platform: " + process.platform);
     }
 }
 
@@ -58,13 +58,13 @@ async function ensureBinary() {
         ? join(FILE_DIR, INSTALLER_APP_DARWIN)
         : null;
 
-    // Si le binaire existe déjà, on l'utilise directement sans vérifier les mises à jour
+    // If the binary already exists, use it without checking for updates
     if (existsSync(outputFile)) {
-        console.log("[Moggcord] Installeur déjà présent, utilisation locale.");
+        console.log("[Moggcord] Installer already present, using local copy.");
         return outputFile;
     }
 
-    console.log("[Moggcord] Téléchargement de l'installeur (" + filename + ")...");
+    console.log("[Moggcord] Downloading installer (" + filename + ")...");
 
     const res = await fetch(BASE_URL + filename, {
         headers: {
@@ -73,21 +73,21 @@ async function ensureBinary() {
     });
 
     if (!res.ok)
-        throw new Error(`Échec du téléchargement de l'installeur : ${res.status} ${res.statusText}`);
+        throw new Error(`Failed to download installer: ${res.status} ${res.statusText}`);
 
     writeFileSync(ETAG_FILE, res.headers.get("etag") ?? "");
 
     if (process.platform === "darwin") {
-        console.log("[Moggcord] Sauvegarde du zip...");
+        console.log("[Moggcord] Saving zip...");
         const zip = new Uint8Array(await res.arrayBuffer());
         writeFileSync(downloadName, zip);
 
-        console.log("[Moggcord] Extraction du bundle...");
+        console.log("[Moggcord] Extracting bundle...");
         execSync(`ditto -x -k '${downloadName}' '${FILE_DIR}'`);
 
-        console.log("[Moggcord] Suppression de la quarantaine macOS...");
+        console.log("[Moggcord] Removing macOS quarantine...");
         const logAndRun = cmd => {
-            console.log("  Exécution :", cmd);
+            console.log("  Running:", cmd);
             try { execSync(cmd); } catch { }
         };
         logAndRun(`sudo xattr -dr com.apple.quarantine '${outputApp}'`);
@@ -99,28 +99,84 @@ async function ensureBinary() {
         })));
     }
 
-    // S'assurer que le binaire est exécutable (Linux/macOS)
+    // Ensure the binary is executable (Linux/macOS)
     if (process.platform !== "win32") {
         try { chmodSync(outputFile, 0o755); } catch { }
     }
 
-    console.log("[Moggcord] Installeur téléchargé avec succès !");
+    console.log("[Moggcord] Installer downloaded successfully!");
     return outputFile;
 }
 
-// ── Vérifier que le build existe ─────────────────────────────────────────────
+// ── Discord process control (Windows) ───────────────────────────────────────
+function stopDiscord() {
+    if (process.platform !== "win32") return;
+    for (const img of ["Discord.exe", "DiscordSystemHelper.exe"]) {
+        try {
+            execSync(`taskkill /F /IM ${img} /T`, { stdio: "ignore" });
+        } catch { }
+    }
+}
+
+function startDiscord() {
+    if (process.platform !== "win32") return false;
+
+    const discordRoot = join(process.env.LOCALAPPDATA || "", "Discord");
+    const updateExe = join(discordRoot, "Update.exe");
+
+    if (existsSync(updateExe)) {
+        try {
+            execFileSync(updateExe, ["--processStart", "Discord.exe"], {
+                stdio: "ignore",
+                windowsHide: true
+            });
+            return true;
+        } catch { }
+    }
+
+    try {
+        const versions = readdirSync(discordRoot)
+            .filter(d => /^app-\d+\.\d+\.\d+$/.test(d))
+            .sort()
+            .reverse();
+        for (const ver of versions) {
+            const discordExe = join(discordRoot, ver, "Discord.exe");
+            if (!existsSync(discordExe)) continue;
+            execFileSync(discordExe, [], { stdio: "ignore", detached: true, windowsHide: true });
+            return true;
+        }
+    } catch { }
+
+    return false;
+}
+
+function warnIfCorruptAppAsar(resourcesDir) {
+    const appAsar = join(resourcesDir, "app.asar");
+    const backup = join(resourcesDir, "_app.asar");
+    try {
+        if (existsSync(appAsar) && statSync(appAsar).size < 10_000) {
+            console.warn(`\x1b[33m[Moggcord] Warning: app.asar in ${resourcesDir} looks too small (${statSync(appAsar).size} bytes).\x1b[0m`);
+            console.warn("\x1b[33m           Reinstall Discord if the client does not start.\x1b[0m");
+        }
+        if (existsSync(backup) && statSync(backup).size < 10_000) {
+            console.warn(`\x1b[33m[Moggcord] Warning: _app.asar backup is also tiny — original Discord app may be lost.\x1b[0m`);
+        }
+    } catch { }
+}
+
+// ── Verify build exists ────────────────────────────────────────────────────
 function checkBuild() {
     const patcherPath = join(BASE_DIR, "dist", "desktop", "patcher.js");
     if (!existsSync(patcherPath)) {
-        console.error("\x1b[31m[Moggcord] dist/desktop/patcher.js introuvable !\x1b[0m");
-        console.error("\x1b[33m           Lancez 'pnpm build' d'abord, puis réessayez.\x1b[0m");
+        console.error("\x1b[31m[Moggcord] dist/desktop/patcher.js not found!\x1b[0m");
+        console.error("\x1b[33m           Run 'pnpm build' first, then try again.\x1b[0m");
         process.exit(1);
     }
 }
 
-// ── Nettoyage automatique des anciennes installations ──────────────────────
+// ── Clean up old installations automatically ─────────────────────────────────
 function cleanOldMoggcord() {
-    console.log("[Moggcord] Recherche et nettoyage automatique des anciennes installations...");
+    console.log("[Moggcord] Scanning and cleaning up old installations...");
     const platform = process.platform;
     const candidates = [];
 
@@ -164,10 +220,7 @@ function cleanOldMoggcord() {
         const appAsarPath = join(resourcesDir, "app.asar");
 
         try {
-            let isAppDirCleaned = false;
-            let isBackupRestored = false;
-
-            // 1. Supprimer le dossier app/ s'il a été créé par l'ancien Moggcord
+            // 1. Remove app/ folder if it was created by old Moggcord
             if (existsSync(appDirPath)) {
                 let shouldDelete = false;
                 try {
@@ -178,7 +231,7 @@ function cleanOldMoggcord() {
                             shouldDelete = true;
                         }
                     } else {
-                        // Dossier app sans package.json mais _app.asar existe, probablement un résidu de l'ancien injecteur
+                        // app/ without package.json but _app.asar exists — likely leftover from old injector
                         if (existsSync(backupPath)) shouldDelete = true;
                     }
                 } catch {
@@ -186,14 +239,13 @@ function cleanOldMoggcord() {
                 }
 
                 if (shouldDelete) {
-                    console.log(`[Moggcord] Suppression de l'ancien dossier app/ dans : ${resourcesDir}`);
+                    console.log(`[Moggcord] Removing old app/ folder in: ${resourcesDir}`);
                     rmSync(appDirPath, { recursive: true, force: true });
-                    isAppDirCleaned = true;
                     cleanedAny = true;
                 }
             }
 
-            // 2. Si _app.asar existe, restaurer le backup original vers app.asar
+            // 2. If _app.asar exists, restore the original backup to app.asar
             if (existsSync(backupPath)) {
                 let isAsarDir = false;
                 if (existsSync(appAsarPath)) {
@@ -203,39 +255,38 @@ function cleanOldMoggcord() {
                 }
 
                 if (isAsarDir) {
-                    console.log(`[Moggcord] Suppression du dossier app.asar temporaire dans : ${resourcesDir}`);
+                    console.log(`[Moggcord] Removing temporary app.asar folder in: ${resourcesDir}`);
                     rmSync(appAsarPath, { recursive: true, force: true });
                 }
 
                 if (!existsSync(appAsarPath) || isAsarDir) {
-                    console.log(`[Moggcord] Restauration _app.asar -> app.asar dans : ${resourcesDir}`);
+                    console.log(`[Moggcord] Restoring _app.asar -> app.asar in: ${resourcesDir}`);
                     renameSync(backupPath, appAsarPath);
-                    isBackupRestored = true;
                     cleanedAny = true;
                 } else {
-                    // Si app.asar original est déjà présent en tant que fichier, nettoyer le backup obsolète
-                    console.log(`[Moggcord] Nettoyage du backup _app.asar obsolète dans : ${resourcesDir}`);
+                    // Original app.asar already present as a file — remove obsolete backup
+                    console.log(`[Moggcord] Removing obsolete _app.asar backup in: ${resourcesDir}`);
                     rmSync(backupPath, { force: true });
                     cleanedAny = true;
                 }
             }
         } catch (e) {
-            console.error(`[Moggcord] Erreur lors du nettoyage de ${resourcesDir} :`, e.message);
+            console.error(`[Moggcord] Error while cleaning ${resourcesDir}:`, e.message);
         }
     }
 
     if (cleanedAny) {
-        console.log("[Moggcord] Nettoyage des anciennes installations terminé avec succès !");
+        console.log("[Moggcord] Old installations cleaned up successfully!");
     } else {
-        console.log("[Moggcord] Aucune ancienne installation à nettoyer.");
+        console.log("[Moggcord] No old installations to clean up.");
     }
 }
 
 // ── Main ─────────────────────────────────────────────────────────────────────
-// On nettoie d'abord les anciennes traces de Moggcord pour éviter tout conflit ou blocage
+// Clean old Moggcord traces first to avoid conflicts or file locks
 cleanOldMoggcord();
 
-// On vérifie le build uniquement pour install/repair (pas pour uninject)
+// Only verify build for install/repair (not uninject)
 const argStart = process.argv.indexOf("--");
 const args = argStart === -1 ? [] : process.argv.slice(argStart + 1);
 
@@ -249,7 +300,10 @@ const installerBin = await ensureBinary();
 const isInstall = args.includes("--install");
 
 if (isInstall) {
-    console.log("[Moggcord] Nettoyage des installations précédentes (Vencord/Equicord/Moggcord)...");
+    console.log("[Moggcord] Closing Discord before injection...");
+    stopDiscord();
+
+    console.log("[Moggcord] Cleaning up previous installations (Vencord/Equicord/Moggcord)...");
     try {
         const uninstallArgs = ["--uninstall"];
         const branchIdx = args.findIndex(a => a === "-branch" || a === "--branch");
@@ -261,9 +315,9 @@ if (isInstall) {
             uninstallArgs.push("-location", args[locationIdx + 1]);
         }
 
-        // Tente de désinstaller silencieusement
-        // Note: EquilotlCli peut demander une sélection si plusieurs Discords sont trouvés, 
-        // mais cela reste la méthode la plus sûre pour "clean" le index.js original.
+        // Try silent uninstall
+        // Note: EquilotlCli may prompt for selection if multiple Discords are found,
+        // but this is still the safest way to restore the original index.js.
         execFileSync(installerBin, uninstallArgs, {
             stdio: "inherit",
             env: {
@@ -273,13 +327,13 @@ if (isInstall) {
                 EQUICORD_DEV_INSTALL: "1"
             }
         });
-        console.log("[Moggcord] Nettoyage terminé.");
+        console.log("[Moggcord] Cleanup finished.");
     } catch {
-        console.log("[Moggcord] Aucun mod précédent à nettoyer ou échec du nettoyage.");
+        console.log("[Moggcord] No previous mod to remove or cleanup failed.");
     }
 }
 
-console.log("[Moggcord] Lancement de l'injection...");
+console.log("[Moggcord] Starting injection...");
 
 try {
     execFileSync(installerBin, args, {
@@ -293,7 +347,26 @@ try {
         }
     });
 } catch {
-    console.error("[Moggcord] Erreur lors de l'injection.");
+    console.error("[Moggcord] Injection failed.");
     process.exit(1);
 }
 
+if (isInstall) {
+    const localAppData = process.env.LOCALAPPDATA || "";
+    for (const channel of ["Discord", "DiscordPTB", "DiscordCanary", "DiscordDevelopment"]) {
+        const base = join(localAppData, channel);
+        if (!existsSync(base)) continue;
+        try {
+            for (const ver of readdirSync(base).filter(d => /^app-\d+\.\d+\.\d+$/.test(d))) {
+                warnIfCorruptAppAsar(join(base, ver, "resources"));
+            }
+        } catch { }
+    }
+
+    console.log("[Moggcord] Restarting Discord...");
+    if (startDiscord()) {
+        console.log("\x1b[32m[Moggcord] Discord restarted with Moggcord loaded.\x1b[0m");
+    } else {
+        console.log("\x1b[33m[Moggcord] Could not auto-start Discord — open it manually once.\x1b[0m");
+    }
+}

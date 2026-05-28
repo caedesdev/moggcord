@@ -7,7 +7,7 @@ import { fetchBuffer, fetchJson } from "@main/utils/http";
 import { IpcEvents } from "@shared/IpcEvents";
 import { VENCORD_USER_AGENT } from "@shared/vencordUserAgent";
 import { ipcMain, app } from "electron";
-import { writeFileSync, rmSync } from "original-fs";
+import { writeFileSync, rmSync, existsSync } from "original-fs";
 import { join } from "path";
 import { exec } from "child_process";
 
@@ -22,6 +22,7 @@ const ZIP_FILE = "moggcord-dist.zip";
 
 let pendingDownloadUrl: string | null  = null;
 let pendingVersion:     string | null  = null;
+let pendingZipPath:     string | null  = null;
 let isApplying                         = false;
 
 async function githubGet<T = any>(endpoint: string): Promise<T> {
@@ -43,6 +44,20 @@ function isNewer(a: string, b: string): boolean {
     return false;
 }
 
+/** Escape single quotes for PowerShell single-quoted strings */
+function psQuote(p: string): string {
+    return p.replace(/'/g, "''");
+}
+
+function runPowerShell(command: string): Promise<void> {
+    return new Promise((resolve, reject) => {
+        exec(`powershell -NoProfile -NonInteractive -Command "${command}"`, err => {
+            if (err) reject(err);
+            else resolve();
+        });
+    });
+}
+
 async function fetchUpdates(): Promise<boolean> {
     const data = await githubGet("/releases/latest");
     const latestTag: string = data.tag_name ?? "";
@@ -59,6 +74,18 @@ async function fetchUpdates(): Promise<boolean> {
     return true;
 }
 
+async function downloadUpdate(): Promise<boolean> {
+    if (!pendingDownloadUrl) {
+        const hasUpdate = await fetchUpdates();
+        if (!hasUpdate) return false;
+    }
+
+    const data = await fetchBuffer(pendingDownloadUrl!);
+    pendingZipPath = join(app.getPath("temp"), `moggcord-update-${pendingVersion ?? Date.now()}.zip`);
+    writeFileSync(pendingZipPath, data, { flush: true });
+    return true;
+}
+
 async function getUpdates() {
     const outdated = await fetchUpdates();
     if (!outdated) return [];
@@ -70,93 +97,105 @@ async function getUpdates() {
 }
 
 async function applyUpdates(): Promise<boolean> {
-    if (!pendingDownloadUrl) return false;
     if (isApplying) return false;
+
+    if (!pendingZipPath) {
+        if (!pendingDownloadUrl) return false;
+        await downloadUpdate();
+    }
+
+    if (!pendingZipPath || !existsSync(pendingZipPath)) return false;
+
     isApplying = true;
 
+    const zipPath = pendingZipPath;
+    const destPath = __dirname;
+    const tmpExtract = join(app.getPath("temp"), `moggcord-extract-${Date.now()}`);
+
     try {
-        const data = await fetchBuffer(pendingDownloadUrl);
+        const psExtract = `Expand-Archive -LiteralPath '${psQuote(zipPath)}' -DestinationPath '${psQuote(tmpExtract)}' -Force`;
+        await runPowerShell(psExtract);
 
-        // Save zip to temp
-        const zipPath = join(app.getPath("temp"), `moggcord-update-${Date.now()}.zip`);
-        writeFileSync(zipPath, data, { flush: true });
+        const psMove = `Copy-Item -Path '${psQuote(join(tmpExtract, "*"))}' -Destination '${psQuote(destPath)}' -Recurse -Force`;
+        await runPowerShell(psMove);
 
-        // The zip was created from dist/desktop/ with includeBaseDirectory=false,
-        // so its contents are exactly what belongs in dist/desktop/ = __dirname.
-        // Using __dirname directly avoids the off-by-one-level bug.
-        const destPath = __dirname;
-
-        // Extract using PowerShell Expand-Archive (reliable ZIP support on all Windows 10/11)
-        // We extract to a temp folder first, then move files over to avoid half-extracted state
-        const tmpExtract = join(app.getPath("temp"), `moggcord-extract-${Date.now()}`);
-
-        return await new Promise<boolean>((resolve, reject) => {
-            // Step 1 — extract zip to temp folder
-            const psExtract = `Expand-Archive -LiteralPath '${zipPath}' -DestinationPath '${tmpExtract}' -Force`;
-            exec(`powershell -NoProfile -NonInteractive -Command "${psExtract}"`, (err) => {
-                if (err) {
-                    try { rmSync(zipPath, { force: true }); } catch {}
-                    return reject(new Error("ZIP extraction failed: " + err.message));
-                }
-
-                // Step 2 — copy extracted files into dist/desktop/ (= __dirname), overwriting existing ones
-                const psMove = `Copy-Item -Path '${tmpExtract}\\*' -Destination '${destPath}' -Recurse -Force`;
-                exec(`powershell -NoProfile -NonInteractive -Command "${psMove}"`, (err2) => {
-                    // Cleanup temp files regardless of outcome
-                    try { rmSync(zipPath,    { force: true }); } catch {}
-                    try { rmSync(tmpExtract, { recursive: true, force: true }); } catch {}
-
-                    if (err2) {
-                        return reject(new Error("File copy failed: " + err2.message));
-                    }
-
-                    pendingDownloadUrl = null;
-                    pendingVersion = null;
-                    resolve(true);
-                });
-            });
-        });
+        pendingDownloadUrl = null;
+        pendingVersion = null;
+        pendingZipPath = null;
+        try { rmSync(zipPath, { force: true }); } catch {}
+        return true;
+    } catch (err) {
+        // Files are often locked while Discord is running — keep the zip for apply on quit
+        console.warn("[Moggcord] Live apply failed (will retry on quit):", err);
+        return false;
     } finally {
+        try { rmSync(tmpExtract, { recursive: true, force: true }); } catch {}
         isApplying = false;
     }
 }
 
+/** Download the update package (used by UPDATE IPC). */
+async function prepareUpdate(): Promise<boolean> {
+    const hasUpdate = await fetchUpdates();
+    if (!hasUpdate) return false;
+    return downloadUpdate();
+}
+
+/**
+ * Try to apply now; if files are locked, return true anyway when the package is downloaded
+ * so the before-quit handler can finish the install.
+ */
+async function buildOrDefer(): Promise<boolean> {
+    if (!pendingZipPath) {
+        const ok = await downloadUpdate();
+        if (!ok) return false;
+    }
+
+    const applied = await applyUpdates();
+    if (applied) return true;
+
+    // Package is on disk — install will run when Discord closes
+    return pendingZipPath !== null && existsSync(pendingZipPath);
+}
+
 // ─── Auto-update on quit ─────────────────────────────────────────────────────
-// Si une mise à jour est en attente quand Discord se ferme, on l'installe
-// silencieusement avant de quitter (timeout de sécurité 45s).
 app.on("before-quit", (event) => {
-    // Ne tenter l'update que si une URL est en attente ET qu'on n'est pas déjà en train
-    if (!pendingDownloadUrl || isApplying) return;
+    const hasPending = pendingZipPath && existsSync(pendingZipPath);
+    if (!hasPending && !pendingDownloadUrl) return;
+    if (isApplying) return;
 
     event.preventDefault();
     console.log("[Moggcord] Applying pending update before quit...");
 
     const safetyTimeout = setTimeout(() => {
         console.error("[Moggcord] Update on quit timed out — forcing exit.");
-        // Nettoyer pour éviter la boucle infinie au prochain démarrage
         pendingDownloadUrl = null;
         pendingVersion = null;
+        pendingZipPath = null;
         app.exit(0);
     }, 45_000);
 
-    applyUpdates()
-        .then(ok => {
+    (async () => {
+        try {
+            if (!pendingZipPath && pendingDownloadUrl) {
+                await downloadUpdate();
+            }
+            const ok = await applyUpdates();
             if (ok) console.log("[Moggcord] Update applied successfully on quit.");
-            else    console.warn("[Moggcord] Update on quit returned false.");
-        })
-        .catch(err => {
+            else console.warn("[Moggcord] Update on quit returned false.");
+        } catch (err) {
             console.error("[Moggcord] Update on quit failed:", err);
-            // En cas d'échec, nettoyer pour éviter la boucle infinie
             pendingDownloadUrl = null;
             pendingVersion = null;
-        })
-        .finally(() => {
+            pendingZipPath = null;
+        } finally {
             clearTimeout(safetyTimeout);
             app.exit(0);
-        });
+        }
+    })();
 });
 
 ipcMain.handle(IpcEvents.GET_REPO,    serializeErrors(() => REPO_URL));
 ipcMain.handle(IpcEvents.GET_UPDATES, serializeErrors(getUpdates));
-ipcMain.handle(IpcEvents.UPDATE,      serializeErrors(fetchUpdates));
-ipcMain.handle(IpcEvents.BUILD,       serializeErrors(applyUpdates));
+ipcMain.handle(IpcEvents.UPDATE,      serializeErrors(prepareUpdate));
+ipcMain.handle(IpcEvents.BUILD,       serializeErrors(buildOrDefer));

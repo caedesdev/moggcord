@@ -1,10 +1,10 @@
 /*
- * Nightcord — Local un-injector for Discord Desktop
- * Annule l'injection en :
- * 1. Supprimant le dossier app/ créé par inject.mjs
- * 2. Restaurant _app.asar → app.asar
+ * Moggcord — Local un-injector for Discord Desktop
+ * Reverts injection by:
+ * 1. Removing the app/ folder created by inject.mjs
+ * 2. Restoring _app.asar → app.asar
  *
- * Usage: pnpm uninject   (ou: node scripts/uninject.mjs)
+ * Usage: pnpm uninject   (or: node scripts/uninject.mjs)
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -14,7 +14,7 @@ import "./checkNodeVersion.js";
 import { existsSync, readdirSync, readFileSync, renameSync, rmSync } from "fs";
 import { join } from "path";
 
-// ── Locate Discord installations (même logique que inject.mjs) ───────────────
+// ── Locate Discord installations (same logic as inject.mjs) ─────────────────
 function findAllDiscordResources() {
     const platform = process.platform;
     const candidates = [];
@@ -50,7 +50,7 @@ function findAllDiscordResources() {
         );
     }
 
-    // Filtrer uniquement les paths avec une injection Moggcord présente
+    // Only paths with a Moggcord injection present
     return candidates.filter(p => {
         if (!existsSync(p)) return false;
         return existsSync(join(p, "app")) || existsSync(join(p, "_app.asar"));
@@ -63,34 +63,34 @@ function uninject(resourcesDir) {
     const backupPath = join(resourcesDir, "_app.asar");
     const appAsarPath = join(resourcesDir, "app.asar");
 
-    // Vérifier que le dossier app/ a bien été créé par Moggcord
+    // Verify app/ was created by Moggcord
     if (existsSync(appDirPath)) {
         try {
             const pkg = JSON.parse(readFileSync(join(appDirPath, "package.json"), "utf-8"));
             if (pkg.name !== "moggcord") {
-                console.warn(`\x1b[33m[Moggcord] Le dossier app/ existe mais n'a pas été créé par Moggcord (name: "${pkg.name}").\x1b[0m`);
-                console.warn("\x1b[33m            Abandon pour éviter de casser un autre mod.\x1b[0m");
+                console.warn(`\x1b[33m[Moggcord] app/ exists but was not created by Moggcord (name: "${pkg.name}").\x1b[0m`);
+                console.warn("\x1b[33m            Aborting to avoid breaking another mod.\x1b[0m");
                 return false;
             }
         } catch { }
 
-        console.log("[Moggcord] Suppression du dossier app/ injecté...");
+        console.log("[Moggcord] Removing injected app/ folder...");
         rmSync(appDirPath, { recursive: true, force: true });
     } else {
-        console.log("\x1b[33m[Moggcord] Aucun dossier app/ injecté trouvé.\x1b[0m");
+        console.log("\x1b[33m[Moggcord] No injected app/ folder found.\x1b[0m");
     }
 
-    // Restaurer le backup
+    // Restore backup
     if (existsSync(backupPath) && !existsSync(appAsarPath)) {
-        console.log("[Moggcord] Restauration _app.asar → app.asar...");
+        console.log("[Moggcord] Restoring _app.asar → app.asar...");
         renameSync(backupPath, appAsarPath);
     } else if (existsSync(backupPath) && existsSync(appAsarPath)) {
-        console.log("[Moggcord] app.asar déjà présent, nettoyage du backup...");
+        console.log("[Moggcord] app.asar already present, removing backup...");
         rmSync(backupPath, { force: true });
     }
 
-    console.log(`\x1b[32m[Moggcord] Désinjection réussie depuis : ${resourcesDir}\x1b[0m`);
-    console.log("\x1b[36m[Moggcord] Redémarrez Discord pour appliquer les changements.\x1b[0m");
+    console.log(`\x1b[32m[Moggcord] Successfully uninjected from: ${resourcesDir}\x1b[0m`);
+    console.log("\x1b[36m[Moggcord] Restart Discord to apply changes.\x1b[0m");
     return true;
 }
 
@@ -98,20 +98,20 @@ function uninject(resourcesDir) {
 const allResources = findAllDiscordResources();
 
 if (allResources.length === 0) {
-    console.error("\x1b[31m[Moggcord] Aucune installation Discord avec Moggcord injecté trouvée.\x1b[0m");
-    console.error("\x1b[33m           Assurez-vous que Moggcord a bien été injecté via 'pnpm inject'.\x1b[0m");
+    console.error("\x1b[31m[Moggcord] No Discord installation with Moggcord injected was found.\x1b[0m");
+    console.error("\x1b[33m           Make sure Moggcord was injected via 'pnpm inject'.\x1b[0m");
     process.exit(1);
 }
 
 let uninjectCount = 0;
 for (const res of allResources) {
-    console.log(`\n[Moggcord] Trouvé : ${res}`);
+    console.log(`\n[Moggcord] Found: ${res}`);
     if (uninject(res)) uninjectCount++;
 }
 
 if (uninjectCount === 0) {
-    console.error("\x1b[31m[Moggcord] Aucune désinjection réussie.\x1b[0m");
+    console.error("\x1b[31m[Moggcord] No uninstall succeeded.\x1b[0m");
     process.exit(1);
 }
 
-console.log(`\n\x1b[32m[Moggcord] ${uninjectCount}/${allResources.length} désinjection(s) réussie(s).\x1b[0m`);
+console.log(`\n\x1b[32m[Moggcord] ${uninjectCount}/${allResources.length} uninstall(s) succeeded.\x1b[0m`);

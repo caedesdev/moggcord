@@ -29,22 +29,21 @@ export async function checkForUpdates(): Promise<boolean> {
 }
 
 /**
- * Télécharge le Setup.exe (étape 1).
- * Retourne true si le téléchargement a réussi.
+ * Downloads the update package from GitHub (step 1).
  */
 export async function update(): Promise<boolean> {
     if (!isOutdated) return true;
     const ok = await Unwrap(VencordNative.updater.update());
-    if (ok) isOutdated = false;
     return ok;
 }
 
 /**
- * Lance l'installeur téléchargé (étape 2).
- * L'app va se fermer et se relancer automatiquement après installation.
+ * Tries to install the downloaded package, or defers to install on Discord quit (step 2).
  */
 export async function rebuild(): Promise<boolean> {
-    return Unwrap(VencordNative.updater.rebuild());
+    const ok = await Unwrap(VencordNative.updater.rebuild());
+    if (ok) isOutdated = false;
+    return ok;
 }
 
 export const getRepo = () => Unwrap(VencordNative.updater.getRepo());

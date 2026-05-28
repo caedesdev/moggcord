@@ -125,7 +125,11 @@ try {
 }
 
 # ── [3/3] Injection via EquilotlCli ───────────────────────────────────────────
-Write-Step 3 3 "Lancement de l'interface d'injection..."
+Write-Step 3 3 "Fermeture de Discord..."
+Get-Process -Name "Discord", "DiscordSystemHelper" -ErrorAction SilentlyContinue | Stop-Process -Force -ErrorAction SilentlyContinue
+Start-Sleep -Seconds 2
+
+Write-Host "          Lancement de l'interface d'injection..." -ForegroundColor DarkGray
 Write-Host ""
 Write-Host "          ┌─────────────────────────────────────────────────┐" -ForegroundColor DarkCyan
 Write-Host "          │  Une fenêtre va s'ouvrir.                       │" -ForegroundColor DarkCyan
@@ -149,10 +153,23 @@ try {
 
 # ── Succès ────────────────────────────────────────────────────────────────────
 Write-Host ""
+Write-Host "  Redémarrage de Discord..." -ForegroundColor DarkGray
+$DiscordRoot = Join-Path $env:LOCALAPPDATA "Discord"
+$UpdateExe   = Join-Path $DiscordRoot "Update.exe"
+if (Test-Path $UpdateExe) {
+    Start-Process -FilePath $UpdateExe -ArgumentList "--processStart", "Discord.exe" -ErrorAction SilentlyContinue
+} else {
+    $LatestApp = Get-ChildItem $DiscordRoot -Filter "app-*" -ErrorAction SilentlyContinue | Sort-Object Name -Descending | Select-Object -First 1
+    if ($LatestApp) {
+        $DiscordExe = Join-Path $LatestApp.FullName "Discord.exe"
+        if (Test-Path $DiscordExe) { Start-Process -FilePath $DiscordExe -ErrorAction SilentlyContinue }
+    }
+}
+
+Write-Host ""
 Write-Host "  ╔══════════════════════════════════════════════════════╗" -ForegroundColor Green
 Write-Host "  ║  Moggcord installé avec succès !                    ║" -ForegroundColor Green
-Write-Host "  ║                                                      ║" -ForegroundColor Green
-Write-Host "  ║  → Redémarrez Discord pour appliquer Moggcord.      ║" -ForegroundColor Green
+Write-Host "  ║  Discord a été relancé automatiquement.             ║" -ForegroundColor Green
 Write-Host "  ╚══════════════════════════════════════════════════════╝" -ForegroundColor Green
 Write-Host ""
 Write-Host "  Pour désinstaller : exécutez moggcord-uninstall.bat" -ForegroundColor DarkGray
