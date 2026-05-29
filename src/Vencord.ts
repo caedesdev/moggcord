@@ -155,7 +155,7 @@ function initTrayIpc() {
 
     VencordNative.tray.onCheckUpdates(async () => {
         try {
-            const isOutdated = await checkForUpdates();
+            const isOutdated = await checkForUpdates(true);
             VencordNative.tray.setUpdateState(isOutdated);
 
             if (isOutdated) {
@@ -190,8 +190,10 @@ async function init() {
     initTrayIpc();
 
     if (!IS_WEB && !IS_UPDATER_DISABLED) {
-        runUpdateCheck();
-        setInterval(runUpdateCheck, 1000 * 60 * 30); // 30 minutes
+        if (!isPluginEnabled("MoggcordUpdater")) {
+            runUpdateCheck();
+        }
+        setInterval(runUpdateCheck, 1000 * 60 * 30);
     }
 
     if (IS_DEV) {

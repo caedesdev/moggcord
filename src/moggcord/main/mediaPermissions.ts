@@ -6,7 +6,12 @@
 
 import { session, systemPreferences, Session } from "electron";
 
+const registeredSessions = new WeakSet<Session>();
+
 export function registerMediaPermissionsForSession(ses: Session) {
+    if (registeredSessions.has(ses)) return;
+    registeredSessions.add(ses);
+
     ses.setPermissionCheckHandler((_webContents, permission, _requestingOrigin, details) => {
         if (permission === "media") {
             return true;

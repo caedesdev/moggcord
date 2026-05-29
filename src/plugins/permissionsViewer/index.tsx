@@ -29,11 +29,11 @@ import definePlugin, { OptionType } from "@utils/types";
 import type { Guild, RoleOrUserPermission } from "@vencord/discord-types";
 import { PermissionOverwriteType } from "@vencord/discord-types/enums";
 import { findCssClassesLazy } from "@webpack";
-import { Button, ChannelStore, Dialog, GuildMemberStore, GuildRoleStore, GuildStore, match, Menu, PermissionsBits, Popout, useEffect, useRef, UserStore } from "@webpack/common";
+import { Button, ChannelStore, Dialog, GuildMemberStore, GuildRoleStore, GuildStore, match, Menu, Popout, useEffect, useRef, UserStore } from "@webpack/common";
 
 import openRolesAndUsersPermissionsModal from "./components/RolesAndUsersPermissions";
 import UserPermissions from "./components/UserPermissions";
-import { getSortedRolesForMember, loadGetGuildPermissionSpecMap, sortPermissionOverwrites } from "./utils";
+import { getPermissionBits, getSortedRolesForMember, loadGetGuildPermissionSpecMap, sortPermissionOverwrites } from "./utils";
 
 const PopoutClasses = findCssClassesLazy("container", "popoutRoleDot");
 
@@ -49,9 +49,7 @@ const enum MenuItemParentType {
 }
 
 function getAllPermissions() {
-    return Object.values(PermissionsBits)
-        .filter((bit): bit is bigint => typeof bit === "bigint")
-        .reduce((prev, curr) => prev | curr, 0n);
+    return getPermissionBits().reduce((prev, curr) => prev | curr, 0n);
 }
 
 export const settings = definePluginSettings({

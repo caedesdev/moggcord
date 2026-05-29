@@ -4,6 +4,8 @@
 
 import { shell, type WebContents } from "electron";
 
+const guardedWebContents = new WeakSet<WebContents>();
+
 const DISCORD_HOSTNAMES = ["discord.com", "canary.discord.com", "ptb.discord.com"];
 
 const OVERLAY_FRAME_NAMES = new Set([
@@ -94,6 +96,9 @@ const defaultWindowOpenHandler: WindowOpenHandler = ({ url, frameName }) => {
 };
 
 export function installPopoutGuard(webContents: WebContents) {
+    if (guardedWebContents.has(webContents)) return;
+    guardedWebContents.add(webContents);
+
     const originalSet = webContents.setWindowOpenHandler.bind(webContents);
 
     webContents.setWindowOpenHandler = handler => {

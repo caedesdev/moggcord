@@ -58,20 +58,46 @@ function runPowerShell(command: string): Promise<void> {
     });
 }
 
-async function fetchUpdates(): Promise<boolean> {
-    const data = await githubGet("/releases/latest");
-    const latestTag: string = data.tag_name ?? "";
+const UPDATE_CACHE_TTL_MS = 15 * 60 * 1000;
 
-    if (!latestTag || !isNewer(CURRENT_VERSION, latestTag)) return false;
+let cachedUpdateCheck: { at: number; hasUpdate: boolean } | null = null;
+let fetchInFlight: Promise<boolean> | null = null;
 
-    const asset = (data.assets as any[])?.find(
-        (a: any) => a.name === ZIP_FILE
-    );
-    if (!asset) return false;
+async function fetchUpdates(force = false): Promise<boolean> {
+    const now = Date.now();
+    if (!force && cachedUpdateCheck && now - cachedUpdateCheck.at < UPDATE_CACHE_TTL_MS) {
+        return cachedUpdateCheck.hasUpdate;
+    }
+    if (fetchInFlight && !force) return fetchInFlight;
 
-    pendingDownloadUrl = asset.browser_download_url;
-    pendingVersion     = latestTag;
-    return true;
+    fetchInFlight = (async () => {
+        try {
+            const data = await githubGet("/releases/latest");
+            const latestTag: string = data.tag_name ?? "";
+
+            if (!latestTag || !isNewer(CURRENT_VERSION, latestTag)) {
+                cachedUpdateCheck = { at: Date.now(), hasUpdate: false };
+                return false;
+            }
+
+            const asset = (data.assets as any[])?.find(
+                (a: any) => a.name === ZIP_FILE
+            );
+            if (!asset) {
+                cachedUpdateCheck = { at: Date.now(), hasUpdate: false };
+                return false;
+            }
+
+            pendingDownloadUrl = asset.browser_download_url;
+            pendingVersion = latestTag;
+            cachedUpdateCheck = { at: Date.now(), hasUpdate: true };
+            return true;
+        } finally {
+            fetchInFlight = null;
+        }
+    })();
+
+    return fetchInFlight;
 }
 
 async function downloadUpdate(): Promise<boolean> {

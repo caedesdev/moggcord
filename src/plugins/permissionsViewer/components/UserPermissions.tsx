@@ -19,12 +19,12 @@
 import { BaseText } from "@components/BaseText";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { HeadingTertiary } from "@components/Heading";
-import { cl, getGuildPermissionSpecMap, getSortedRolesForMember, sortUserRoles } from "@plugins/permissionsViewer/utils";
+import { cl, getPermissionBits, getSortedRolesForMember, resolveGuildPermissionSpecMap, sortUserRoles } from "@plugins/permissionsViewer/utils";
 import { getIntlMessage } from "@utils/discord";
 import { classes } from "@utils/misc";
 import type { Guild, GuildMember, RoleOrUserPermission } from "@vencord/discord-types";
 import { PermissionOverwriteType } from "@vencord/discord-types/enums";
-import { PermissionsBits, Tooltip, useMemo, UserStore } from "@webpack/common";
+import { Tooltip, useMemo, UserStore } from "@webpack/common";
 
 import { PermissionsSortOrder, settings } from "..";
 import openRolesAndUsersPermissionsModal from "./RolesAndUsersPermissions";
@@ -78,10 +78,8 @@ function GrantedByTooltip({ roleName, roleColor }: GrantedByTooltipProps) {
 function UserPermissionsComponent({ guild, guildMember, closePopout }: { guild: Guild; guildMember: GuildMember; closePopout: () => void; }) {
     const { permissionsSortOrder } = settings.use(["permissionsSortOrder"]);
 
-    const guildPermissionSpecMap = useMemo(() => getGuildPermissionSpecMap(guild) ?? {}, [guild]);
-    const permissionBits = useMemo(() => (
-        Object.values(PermissionsBits).filter((bit): bit is bigint => typeof bit === "bigint")
-    ), []);
+    const guildPermissionSpecMap = useMemo(() => resolveGuildPermissionSpecMap(guild), [guild]);
+    const permissionBits = useMemo(() => getPermissionBits(), []);
 
     const [rolePermissions, userPermissions] = useMemo(() => {
         const userPermissions: UserPermissions = [];

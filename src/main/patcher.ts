@@ -17,12 +17,16 @@
 */
 
 import { onceDefined } from "@shared/onceDefined";
-import electron, { app, BrowserWindowConstructorOptions, Menu, session } from "electron";
+import electron, { app, BrowserWindowConstructorOptions, Menu, nativeImage, session } from "electron";
 import { existsSync as fsExistsSync, statSync as fsStatSync } from "original-fs";
 import { dirname, join } from "path";
 import { registerMediaPermissionsForSession } from "../moggcord/main/mediaPermissions";
 
+import { installMoggcordHomeIcon } from "./homeButtonIcon";
+import { installMoggcordLoadingScreen } from "./loadingScreen";
 import { schedulePostInstallRelaunchIfNeeded } from "./postInstallRelaunch";
+import { MOGGCORD_AVATAR_DATA_URL } from "./splashAssets";
+import { installMoggcordSplashOverlay } from "./splashOverlay";
 import { installPopoutGuard } from "./utils/popoutGuard";
 import { RendererSettings } from "./settings";
 import { patchTrayMenu } from "./trayMenu";
@@ -140,6 +144,19 @@ if (!IS_VANILLA) {
                 installPopoutGuard(this.webContents);
 
                 if (isMainWindow) {
+                    installMoggcordLoadingScreen(this);
+                    installMoggcordHomeIcon(this);
+
+                    try {
+                        const icon = nativeImage.createFromDataURL(MOGGCORD_AVATAR_DATA_URL);
+                        if (!icon.isEmpty()) {
+                            this.setIcon(icon);
+                            this.on("ready-to-show", () => {
+                                if (!this.isDestroyed()) this.setIcon(icon);
+                            });
+                        }
+                    } catch { /* icon override is best-effort */ }
+
                     this.webContents.on("before-input-event", (event, input) => {
                         if (input.type !== "keyDown") return;
                         if (!input.control || input.alt || input.meta) return;
@@ -150,70 +167,75 @@ if (!IS_VANILLA) {
                 }
 
                 const isTransparent = !!options.transparent;
-                let isFakeFullScreen = false;
-                let originalBounds: electron.Rectangle | null = null;
-                let isMaximizedBefore = false;
-                let transitioning = false;
+                const needsFullscreenPatch = isMainWindow && (
+                    isTransparent ||
+                    (process.platform === "win32" && winMaterial && winMaterial !== "none")
+                );
 
-                const superSetFullScreen = this.setFullScreen.bind(this);
-                const superIsFullScreen = this.isFullScreen.bind(this);
+                if (needsFullscreenPatch) {
+                    let isFakeFullScreen = false;
+                    let originalBounds: electron.Rectangle | null = null;
+                    let isMaximizedBefore = false;
+                    let transitioning = false;
 
-                this.setFullScreen = (flag: boolean) => {
-                    if (transitioning) return;
-                    transitioning = true;
-                    try {
-                        if (isTransparent) {
-                            if (flag) {
-                                if (isFakeFullScreen) return;
-                                isFakeFullScreen = true;
-                                originalBounds = this.getBounds();
-                                isMaximizedBefore = this.isMaximized();
-                                
-                                const display = electron.screen.getDisplayMatching(originalBounds).bounds;
-                                
-                                this.setResizable(false);
-                                this.setBounds(display);
-                                this.setAlwaysOnTop(true, "screen-saver");
-                                this.emit("enter-full-screen");
-                            } else {
-                                if (!isFakeFullScreen) return;
-                                isFakeFullScreen = false;
-                                this.setAlwaysOnTop(false);
-                                this.setResizable(true);
-                                if (isMaximizedBefore) {
-                                    this.maximize();
-                                } else if (originalBounds) {
-                                    this.setBounds(originalBounds);
+                    const superSetFullScreen = this.setFullScreen.bind(this);
+                    const superIsFullScreen = this.isFullScreen.bind(this);
+
+                    this.setFullScreen = (flag: boolean) => {
+                        if (transitioning) return;
+                        transitioning = true;
+                        try {
+                            if (isTransparent) {
+                                if (flag) {
+                                    if (isFakeFullScreen) return;
+                                    isFakeFullScreen = true;
+                                    originalBounds = this.getBounds();
+                                    isMaximizedBefore = this.isMaximized();
+
+                                    const display = electron.screen.getDisplayMatching(originalBounds).bounds;
+
+                                    this.setResizable(false);
+                                    this.setBounds(display);
+                                    this.setAlwaysOnTop(true, "screen-saver");
+                                    this.emit("enter-full-screen");
+                                } else {
+                                    if (!isFakeFullScreen) return;
+                                    isFakeFullScreen = false;
+                                    this.setAlwaysOnTop(false);
+                                    this.setResizable(true);
+                                    if (isMaximizedBefore) {
+                                        this.maximize();
+                                    } else if (originalBounds) {
+                                        this.setBounds(originalBounds);
+                                    }
+                                    this.emit("leave-full-screen");
                                 }
-                                this.emit("leave-full-screen");
+                            } else {
+                                superSetFullScreen(flag);
                             }
-                        } else {
-                            superSetFullScreen(flag);
+                        } finally {
+                            transitioning = false;
                         }
-                    } finally {
-                        transitioning = false;
-                    }
-                };
+                    };
 
-                this.isFullScreen = () => {
+                    this.isFullScreen = () => {
+                        if (isTransparent) {
+                            return isFakeFullScreen;
+                        }
+                        return superIsFullScreen();
+                    };
+
                     if (isTransparent) {
-                        return isFakeFullScreen;
+                        this.on("enter-html-full-screen", () => {
+                            if (!isFakeFullScreen) this.setFullScreen(true);
+                        });
+                        this.on("leave-html-full-screen", () => {
+                            if (isFakeFullScreen) this.setFullScreen(false);
+                        });
                     }
-                    return superIsFullScreen();
-                };
-
-                if (isTransparent) {
-                    this.on("enter-html-full-screen", () => {
-                        if (!isFakeFullScreen) this.setFullScreen(true);
-                    });
-                    this.on("leave-html-full-screen", () => {
-                        if (isFakeFullScreen) this.setFullScreen(false);
-                    });
                 }
 
-                // Apply Windows background material after window creation.
-                // Win11 uses setBackgroundMaterial; Win10 falls back to vibrancy.
-                if (process.platform === "win32" && winMaterial && winMaterial !== "none") {
+                if (isMainWindow && process.platform === "win32" && winMaterial && winMaterial !== "none") {
                     try {
                         let applied = false;
                         // @ts-ignore
@@ -234,10 +256,22 @@ if (!IS_VANILLA) {
                     }
                 }
 
-                if (settings.disableMinSize) {
+                if (isMainWindow && settings.disableMinSize) {
                     this.setMinimumSize = (_width: number, _height: number) => { };
                 }
             } else super(options);
+
+            // Paint Moggcord branding over Discord's native splash window.
+            try {
+                const wc = this.webContents;
+                const checkSplash = () => {
+                    try {
+                        if (/splash/i.test(wc.getURL())) installMoggcordSplashOverlay(this);
+                    } catch { /* window may be gone */ }
+                };
+                wc.once("dom-ready", checkSplash);
+                wc.once("did-finish-load", checkSplash);
+            } catch { /* ignore */ }
         }
     }
     Object.assign(BrowserWindow, electron.BrowserWindow);
@@ -253,7 +287,7 @@ if (!IS_VANILLA) {
         BrowserWindow
     };
 
-    // Activer DevTools uniquement en mode développement
+    // Enable DevTools only in development mode
     if (IS_DEV) {
         onceDefined(global, "appSettings", s => {
             s.set("DANGEROUS_ENABLE_DEVTOOLS_ONLY_ENABLE_IF_YOU_KNOW_WHAT_YOURE_DOING", true);

@@ -20,14 +20,14 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
 import { InfoIcon, OwnerCrownIcon } from "@components/Icons";
 import { buildExtraRoleContextMenuItems } from "@moggcordplugins/betterRoleContext";
-import { cl, getGuildPermissionSpecMap, loadGetGuildPermissionSpecMap } from "@plugins/permissionsViewer/utils";
+import { cl, getPermissionBits, loadGetGuildPermissionSpecMap, resolveGuildPermissionSpecMap } from "@plugins/permissionsViewer/utils";
 import { copyToClipboard } from "@utils/clipboard";
 import { getIntlMessage, getUniqueUsername } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import { Guild, RenderModalProps, Role, RoleOrUserPermission, UnicodeEmoji, User } from "@vencord/discord-types";
 import { PermissionOverwriteType } from "@vencord/discord-types/enums";
 import { findByCodeLazy } from "@webpack";
-import { ContextMenuApi, FluxDispatcher, GuildMemberStore, GuildRoleStore, i18n, Menu, Modal, openModalLazy, PermissionsBits, ScrollerThin, Text, Tooltip, useEffect, useMemo, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
+import { ContextMenuApi, FluxDispatcher, GuildMemberStore, GuildRoleStore, i18n, Menu, Modal, openModalLazy, ScrollerThin, Text, Tooltip, useEffect, useMemo, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
 
 import { settings } from "..";
 import { PermissionAllowedIcon, PermissionDefaultIcon, PermissionDeniedIcon } from "./icons";
@@ -37,6 +37,7 @@ const getRoleIconData: GetRoleIconData = findByCodeLazy("convertSurrogateToName"
 const logger = new Logger("PermissionsViewer", "#5865f2");
 let didWarnRoleIconError = false;
 let didWarnPermissionSpecError = false;
+let didLogDiagnostics = false;
 
 interface RolesAndUsersPermissionsProps {
     permissions: Array<RoleOrUserPermission>;
@@ -68,7 +69,7 @@ function getRoleIconSrc(role?: Role) {
 function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, header }: RolesAndUsersPermissionsProps) {
     const guildPermissionSpecMap = useMemo(() => {
         try {
-            return getGuildPermissionSpecMap(guild) ?? {};
+            return resolveGuildPermissionSpecMap(guild);
         } catch (error) {
             if (!didWarnPermissionSpecError) {
                 didWarnPermissionSpecError = true;
@@ -80,9 +81,7 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
     }, [guild]);
 
     const sortedPermissions = useMemo(() => [...(permissions ?? [])].sort((a, b) => a.type - b.type), [permissions]);
-    const permissionBits = useMemo(() => (
-        Object.values(PermissionsBits).filter((bit): bit is bigint => typeof bit === "bigint")
-    ), []);
+    const permissionBits = useMemo(() => getPermissionBits(), []);
 
     useStateFromStores(
         [GuildMemberStore],
@@ -110,6 +109,15 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
     const selectedItem = sortedPermissions[safeSelectedItemIndex];
 
     const roles = GuildRoleStore.getRolesSnapshot(guild.id) ?? {};
+
+    if (!didLogDiagnostics) {
+        didLogDiagnostics = true;
+        logger.info("render counts:", {
+            permissions: sortedPermissions.length,
+            bits: permissionBits.length,
+            specMapKeys: Object.keys(guildPermissionSpecMap).length
+        });
+    }
 
     return (
         <Modal
@@ -346,7 +354,11 @@ const RolesAndUsersPermissions = ErrorBoundary.wrap(RolesAndUsersPermissionsComp
 
 export default function openRolesAndUsersPermissionsModal(permissions: Array<RoleOrUserPermission>, guild: Guild, header: string) {
     return openModalLazy(async () => {
-        await loadGetGuildPermissionSpecMap();
+        try {
+            await loadGetGuildPermissionSpecMap();
+        } catch {
+            // chunk load failed; resolveGuildPermissionSpecMap falls back locally
+        }
 
         return modalProps => (
             <RolesAndUsersPermissions

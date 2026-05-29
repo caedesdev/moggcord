@@ -146,23 +146,34 @@ function applyCaretPosition() {
 }
 
 let observer: MutationObserver | null = null;
+let observerRaf = 0;
+
+function scheduleCaretUpdate() {
+    if (observerRaf) return;
+    observerRaf = requestAnimationFrame(() => {
+        observerRaf = 0;
+        applyCaretPosition();
+    });
+}
 
 function startObserver() {
-    observer = new MutationObserver(() => applyCaretPosition());
+    observer = new MutationObserver(() => scheduleCaretUpdate());
     observer.observe(document.body, { childList: true, subtree: true });
 }
 
 function stopObserver() {
     observer?.disconnect();
     observer = null;
+    if (observerRaf) cancelAnimationFrame(observerRaf);
+    observerRaf = 0;
 }
 
 const handlers = {
-    sel:   () => applyCaretPosition(),
-    focus: () => applyCaretPosition(),
+    sel:   () => scheduleCaretUpdate(),
+    focus: () => scheduleCaretUpdate(),
     blur:  () => { getCaret().style.display = "none"; },
-    key:   () => applyCaretPosition(),
-    click: () => applyCaretPosition(),
+    key:   () => scheduleCaretUpdate(),
+    click: () => scheduleCaretUpdate(),
 };
 
 function startListeners() {

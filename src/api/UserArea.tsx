@@ -47,7 +47,33 @@ interface ButtonEntry {
     priority: number;
 }
 
-export const UserAreaButton = PanelButton;
+// Fallback used when Discord's native panel button cannot be resolved on the
+// current client version. Without this, rendering an unresolved PanelButton
+// throws React error #130 inside the sidebar module and breaks interactivity.
+function FallbackUserAreaButton(props: UserAreaButtonProps) {
+    const { icon, tooltipText, onClick, onContextMenu, className, role, disabled } = props;
+    return (
+        <div
+            className={className}
+            role={role ?? "button"}
+            tabIndex={0}
+            aria-label={props["aria-label"] ?? (typeof tooltipText === "string" ? tooltipText : undefined)}
+            aria-checked={props["aria-checked"]}
+            title={typeof tooltipText === "string" ? tooltipText : undefined}
+            onClick={disabled ? undefined : onClick}
+            onContextMenu={onContextMenu}
+            style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 32, height: 32, cursor: disabled ? "default" : "pointer", opacity: disabled ? 0.5 : 1 }}
+        >
+            {icon}
+        </div>
+    );
+}
+
+// Wrap the native button so a resolution failure renders the fallback instead
+// of throwing and taking down the surrounding sidebar subtree.
+export const UserAreaButton = ErrorBoundary.wrap((props: UserAreaButtonProps) => <PanelButton {...props} />, {
+    fallback: ({ wrappedProps }) => <FallbackUserAreaButton {...(wrappedProps as UserAreaButtonProps)} />
+}) as ComponentType<UserAreaButtonProps>;
 
 const logger = new Logger("UserArea");
 

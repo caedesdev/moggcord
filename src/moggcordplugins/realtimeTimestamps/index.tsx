@@ -8,6 +8,8 @@ import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType } from "@utils/types";
 import { moment, useEffect, useReducer } from "@webpack/common";
 
+import { subscribeSecondTick } from "@shared/secondTick";
+
 // ─── Settings ────────────────────────────────────────────────────────────────
 
 const settings = definePluginSettings({
@@ -36,10 +38,7 @@ const settings = definePluginSettings({
 
 function useSecondTick() {
     const [, tick] = useReducer((n: number) => n + 1, 0);
-    useEffect(() => {
-        const id = setInterval(tick, 1000);
-        return () => clearInterval(id);
-    }, []);
+    useEffect(() => subscribeSecondTick(tick), [tick]);
 }
 
 // ─── Renderers called by the patches ─────────────────────────────────────────

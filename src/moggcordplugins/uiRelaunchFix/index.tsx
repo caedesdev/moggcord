@@ -3,63 +3,93 @@
  */
 
 import definePlugin from "@utils/types";
-import { relaunch } from "@utils/native";
 
-const CHECK_DELAY_MS = 12_000;
-const SESSION_KEY = "moggcord-ui-relaunch-checked";
+// On a slow cold start Discord can leave `-webkit-app-region: drag` on <body>,
+// turning the entire window into a title-bar drag zone. The sidebar (servers/DMs)
+// then stops reacting to clicks and double-clicking maximizes/restores the window,
+// while the Friends list above it still works. A renderer reload clears it.
+//
+// We enforce `no-drag` on the structural roots so the UI is always interactive.
+// Discord's real title bar keeps its own (deeper) drag region, so window dragging
+// still works. This is non-destructive: it matches the healthy post-reload DOM.
 
-function isSidebarBlocked(): boolean {
-    const guildNav =
-        document.querySelector("nav[aria-label*='Servers']") ??
-        document.querySelector("[class*='guilds']") ??
-        document.querySelector("[data-list-id='guildsnav']");
+const STYLE_ID = "moggcord-nodrag-guard";
 
-    if (!guildNav) return false;
-
-    const rect = guildNav.getBoundingClientRect();
-    if (rect.width < 8 || rect.height < 8) return false;
-
-    const x = Math.min(rect.right - 8, rect.left + Math.max(16, rect.width / 2));
-    const y = Math.min(rect.bottom - 8, rect.top + 40);
-    const hit = document.elementFromPoint(x, y);
-
-    if (!hit) return true;
-    if (hit === document.body || hit === document.documentElement) return true;
-
-    if (hit.closest("#macos-window-controls")) return true;
-    if (hit.closest("#moggcord-updater-root")) return true;
-    if (!guildNav.contains(hit) && !hit.closest("nav")) return true;
-
-    return false;
+const GUARD_CSS = `
+html, body, #app-mount {
+    -webkit-app-region: no-drag !important;
 }
+`;
+
+function injectStyle() {
+    if (document.getElementById(STYLE_ID)) return;
+    const style = document.createElement("style");
+    style.id = STYLE_ID;
+    style.textContent = GUARD_CSS;
+    (document.head ?? document.documentElement).appendChild(style);
+}
+
+function bodyIsDraggable(): boolean {
+    const b = document.body;
+    if (!b) return false;
+    const region = getComputedStyle(b).webkitAppRegion || (getComputedStyle(b) as any).appRegion;
+    return region === "drag";
+}
+
+// Inline !important beats any stylesheet rule that set body to drag.
+function enforceNoDrag() {
+    const b = document.body;
+    if (!b) return;
+    if (bodyIsDraggable()) {
+        b.style.setProperty("-webkit-app-region", "no-drag", "important");
+        console.warn("[Moggcord] Cleared stuck title-bar drag region on <body> (sidebar was unclickable).");
+    }
+}
+
+let observer: MutationObserver | null = null;
+let pollTimer: ReturnType<typeof setInterval> | null = null;
 
 export default definePlugin({
     name: "UiRelaunchFix",
     enabledByDefault: true,
-    description: "Automatically restarts Discord once if the UI is stuck after launch (servers/DMs not clickable).",
+    required: true,
+    description: "Keeps the UI clickable after launch by clearing a stuck title-bar drag region on <body> (servers/DMs not clickable, double-click maximizes).",
     authors: [{ name: "Moggcord", id: 0n }],
 
     start() {
         if (typeof window === "undefined") return;
-        if (sessionStorage.getItem(SESSION_KEY)) return;
 
-        const runCheck = () => {
-            sessionStorage.setItem(SESSION_KEY, "1");
+        injectStyle();
+        enforceNoDrag();
 
-            if (!isSidebarBlocked()) return;
-
-            console.warn("[Moggcord] UI appears stuck — restarting Discord once...");
-            try {
-                relaunch();
-            } catch (e) {
-                console.error("[Moggcord] UiRelaunchFix failed to relaunch", e);
-            }
-        };
-
-        if (document.readyState === "complete") {
-            setTimeout(runCheck, CHECK_DELAY_MS);
+        // Re-assert if Discord clears our inline override (e.g. on theme/layout changes).
+        observer = new MutationObserver(() => enforceNoDrag());
+        if (document.body) {
+            observer.observe(document.body, { attributes: true, attributeFilter: ["style", "class"] });
         } else {
-            window.addEventListener("load", () => setTimeout(runCheck, CHECK_DELAY_MS), { once: true });
+            window.addEventListener("DOMContentLoaded", () => {
+                injectStyle();
+                enforceNoDrag();
+                if (document.body) observer?.observe(document.body, { attributes: true, attributeFilter: ["style", "class"] });
+            }, { once: true });
         }
+
+        // The drag region can appear late during a slow first load; poll briefly to catch it.
+        let ticks = 0;
+        pollTimer = setInterval(() => {
+            enforceNoDrag();
+            if (++ticks >= 30) {
+                if (pollTimer) clearInterval(pollTimer);
+                pollTimer = null;
+            }
+        }, 1_000);
+    },
+
+    stop() {
+        observer?.disconnect();
+        observer = null;
+        if (pollTimer) clearInterval(pollTimer);
+        pollTimer = null;
+        document.getElementById(STYLE_ID)?.remove();
     }
 });

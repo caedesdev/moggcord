@@ -11,6 +11,10 @@ export let isNewer     = false;
 export let updateError: any;
 export let changes: Record<"hash" | "author" | "message", string>[] = [];
 
+const CHECK_COOLDOWN_MS = 5 * 60 * 1000;
+let lastCheckAt = 0;
+let checkInFlight: Promise<boolean> | null = null;
+
 async function Unwrap<T>(p: Promise<IpcRes<T>>): Promise<T> {
     const res = await p;
     if (res.ok) return res.value as T;
@@ -18,9 +22,25 @@ async function Unwrap<T>(p: Promise<IpcRes<T>>): Promise<T> {
     throw res.error;
 }
 
-export async function checkForUpdates(): Promise<boolean> {
-    changes = await Unwrap(VencordNative.updater.getUpdates());
-    return (isOutdated = changes.length > 0);
+export async function checkForUpdates(force = false): Promise<boolean> {
+    const now = Date.now();
+    if (!force && !checkInFlight && now - lastCheckAt < CHECK_COOLDOWN_MS) {
+        return isOutdated;
+    }
+    if (checkInFlight && !force) return checkInFlight;
+
+    checkInFlight = (async () => {
+        try {
+            changes = await Unwrap(VencordNative.updater.getUpdates());
+            isOutdated = changes.length > 0;
+            lastCheckAt = Date.now();
+            return isOutdated;
+        } finally {
+            checkInFlight = null;
+        }
+    })();
+
+    return checkInFlight;
 }
 
 export async function update(): Promise<boolean> {

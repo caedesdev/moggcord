@@ -185,13 +185,16 @@ function unmountBanner() {
 async function checkAndShowBanner() {
     if (IS_UPDATER_DISABLED) return;
 
-    try {
-        const outdated = await checkForUpdates();
-        if (outdated) {
-            mountBanner();
-            setBannerVisible(true);
-        }
-    } catch (e) {
+        try {
+            const outdated = await checkForUpdates();
+            if (outdated) {
+                if (IS_DISCORD_DESKTOP) VencordNative.tray.setUpdateState(true);
+                mountBanner();
+                setBannerVisible(true);
+            } else if (IS_DISCORD_DESKTOP) {
+                VencordNative.tray.setUpdateState(false);
+            }
+        } catch (e) {
         UpdateLogger.error("Update check failed", e);
     }
 }

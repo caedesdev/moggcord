@@ -805,7 +805,7 @@ export default definePlugin({
     ],
 
     start() {
-        // Migration automatique : copier la clé Settings → DataStore la première fois
+        // Copy the legacy Settings API key into the shared DataStore once.
         const keyFromSettings = settings.store.apiKey?.trim();
         if (keyFromSettings) {
             getGroqKey().then(stored => {
@@ -815,82 +815,14 @@ export default definePlugin({
                 }
             });
         }
-
-        // Système de secours DOM si le patch Webpack échoue sur cette version de Discord
-        const findShopNavItem = (): HTMLElement | null => {
-            const shop: HTMLElement | null =
-                document.querySelector('[data-list-item-id="private-channels___discord-shop"]') ??
-                document.querySelector('[data-list-item-id$="___shop"]') ??
-                document.querySelector('a[href="/shop"]');
-            if (!shop) return null;
-            return shop.closest<HTMLElement>('[role="listitem"]') ?? shop.parentElement;
-        };
-
-        const inject = () => {
-            const navItem = findShopNavItem();
-            if (!navItem || !navItem.parentElement) return;
-
-            const existing = document.getElementById("nai-nav-injected");
-            if (existing) {
-                if (existing.nextSibling === navItem) {
-                    if (navItem.style.display !== "none") navItem.style.display = "none";
-                    return;
-                }
-                try { existing.remove(); } catch (_) { }
-                try { if (this._reactRoot) { this._reactRoot.unmount(); this._reactRoot = null; } } catch (_) { }
-            }
-
-            navItem.style.display = "none";
-            const container = document.createElement("div");
-            container.id = "nai-nav-injected";
-            navItem.parentElement.insertBefore(container, navItem);
-
-            const EC = (window as any).Vencord ?? (window as any).Equicord;
-            const ReactDOM = EC?.Webpack?.Common?.ReactDOM ?? (window as any).ReactDOM;
-            const createRoot = ReactDOM?.createRoot;
-
-            if (createRoot) {
-                this._reactRoot = createRoot(container);
-                this._reactRoot.render(<MoggcordAINavButton />);
-            } else {
-                container.innerHTML = `<div class="nai-nav-item" role="button" tabindex="0" id="nai-nav-btn-raw">
-                    <div class="nai-nav-icon-wrap">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
-                            <path d="M7.89 13.46a1 1 0 0 1-1.78-.9L7 13l-.9-.45.01-.01.01-.02a2.24 2.24 0 0 1 .14-.23c.1-.14.23-.31.4-.5.37-.36.98-.79 1.84-.79.86 0 1.47.43 1.83.8a3.28 3.28 0 0 1 .55.72v.02h.01v.01L10 13l.9-.45a1 1 0 0 1-1.79.9 1.28 1.28 0 0 0-.19-.25c-.14-.13-.28-.2-.42-.2-.14 0-.28.07-.42.2a1.28 1.28 0 0 0-.19.25Z"/>
-                            <path fill-rule="evenodd" d="M12 21c5.52 0 10-1.86 10-6 0-5.59-2.8-10.07-4.26-11.67a1 1 0 1 0-1.48 1.34 14.8 14.8 0 0 1 2.35 3.86A10.23 10.23 0 0 0 12 6C9.47 6 7.15 7.02 5.4 8.53a14.8 14.8 0 0 1 2.34-3.86 1 1 0 1 0-1.48-1.34A18.65 18.65 0 0 0 2 15c0 4.14 4.48 6 10 6Zm0-12c3.87 0 7 2 7 4.2S15.87 17 12 17s-7-1.6-7-3.8C5 11 8.13 9 12 9Z" clip-rule="evenodd"/>
-                        </svg>
-                    </div>
-                    <span class="nai-nav-label">Moggcord AI</span>
-                    <span class="nai-nav-pill">AI</span>
-                </div>`;
-                document.getElementById("nai-nav-btn-raw")?.addEventListener("click", () => {
-                    openModal(p => <MoggcordAIChat rootProps={p} />);
-                });
-            }
-        };
-
-        let debounceTimer: any = null;
-        this._observer = new MutationObserver(() => {
-            if (debounceTimer) clearTimeout(debounceTimer);
-            debounceTimer = setTimeout(() => inject(), 80);
-        });
-        this._observer.observe(document.body, { childList: true, subtree: true });
-        inject();
+        // The nav button is injected via the React-safe webpack patch (renderNavButton).
+        // No manual DOM surgery: moving/hiding React-owned sidebar nodes breaks the
+        // sidebar's interactivity (servers/DMs become unclickable).
     },
 
     stop() {
-        this._observer?.disconnect();
-        this._observer = null;
-        try { this._reactRoot?.unmount(); } catch (_) { }
-        this._reactRoot = null;
-        const injected = document.getElementById("nai-nav-injected");
-        if (injected) injected.remove();
-        const shop: HTMLElement | null =
-            document.querySelector('[data-list-item-id="private-channels___discord-shop"]') ??
-            document.querySelector('[data-list-item-id$="___shop"]') ??
-            document.querySelector('a[href="/shop"]');
-        const navItem = shop?.closest<HTMLElement>('[role="listitem"]') ?? shop?.parentElement;
-        if (navItem) navItem.style.display = "";
+        const legacy = document.getElementById("nai-nav-injected");
+        if (legacy) legacy.remove();
     },
 
     renderNavButton(selected?: boolean) {

@@ -37,6 +37,31 @@ function getUserIdFromOutgoingRelationships(): string | null {
 }
 
 let observer: MutationObserver | null = null;
+let scanQueued = false;
+
+function queueScan(root?: HTMLElement) {
+    if (root instanceof HTMLElement) {
+        scan(root);
+        return;
+    }
+    if (scanQueued) return;
+    scanQueued = true;
+    requestAnimationFrame(() => {
+        scanQueued = false;
+        scan(document);
+    });
+}
+
+function scanAddedNode(node: Node) {
+    if (!(node instanceof HTMLElement)) return;
+    if (node.matches?.('button[aria-label="Outgoing Friend Request"], button[disabled][class*="secondary"]')) {
+        scan(node);
+        return;
+    }
+    if (node.querySelector?.('button[aria-label="Outgoing Friend Request"], button[disabled][class*="secondary"]')) {
+        scan(node);
+    }
+}
 
 function patchBtn(btn: HTMLElement, userId: string) {
     if (btn.dataset.cfp) return;
@@ -111,13 +136,11 @@ export default definePlugin({
     start() {
         observer = new MutationObserver(mutations => {
             for (const m of mutations) {
-                for (const node of m.addedNodes) {
-                    if (node instanceof HTMLElement) scan(node);
-                }
+                for (const node of m.addedNodes) scanAddedNode(node);
             }
         });
         observer.observe(document.body, { childList: true, subtree: true });
-        scan(document);
+        queueScan();
         console.log("[CancelFriendRequest] Started ✓");
     },
 

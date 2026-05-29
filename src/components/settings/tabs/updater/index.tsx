@@ -36,7 +36,7 @@ function UpdaterTab() {
         setChecking(true);
         setError(null);
         try {
-            const hasUpdate = await checkForUpdates();
+            const hasUpdate = await checkForUpdates(true);
             setOutdated(hasUpdate);
             setUpdateList(changes ?? []);
             setChecked(true);

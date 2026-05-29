@@ -550,7 +550,14 @@ function processDomBatch() {
 
 function startDomObserver() {
     stopDomObserver(); if (!isEnabled) return;
-    scanNode(document.body);
+    const runInitialScan = () => {
+        if (typeof requestIdleCallback === "function") {
+            requestIdleCallback(() => scanNode(document.body), { timeout: 3000 });
+        } else {
+            setTimeout(() => scanNode(document.body), 0);
+        }
+    };
+    runInitialScan();
     domObserver = new MutationObserver(mutations => {
         if (!isEnabled || !mutations.length) return;
         _domMutations.push(...mutations);
