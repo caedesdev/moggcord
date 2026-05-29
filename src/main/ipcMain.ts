@@ -13,6 +13,7 @@ import { join, normalize } from "path";
 import { registerCspIpcHandlers } from "./csp/manager";
 import { ALLOWED_PROTOCOLS, DATA_DIR, QUICK_CSS_PATH, SETTINGS_DIR, THEMES_DIR } from "./utils/constants";
 import { makeLinksOpenExternally } from "./utils/externalLinks";
+import { shouldBlockExternalOpen } from "./utils/popoutGuard";
 
 const RENDERER_CSS_PATH = join(__dirname, "renderer.css");
 const USERPLUGINS_DIR = join(DATA_DIR, "userplugins");
@@ -651,6 +652,8 @@ body { margin: 0; padding: 16px; background: transparent; overflow: hidden; font
 ipcMain.handle(IpcEvents.OPEN_QUICKCSS, () => shell.openPath(QUICK_CSS_PATH));
 
 ipcMain.handle(IpcEvents.OPEN_EXTERNAL, (_, url) => {
+    if (shouldBlockExternalOpen(url)) return;
+
     try {
         var { protocol } = new URL(url);
     } catch {

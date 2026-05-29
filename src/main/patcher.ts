@@ -23,6 +23,7 @@ import { dirname, join } from "path";
 import { registerMediaPermissionsForSession } from "../moggcord/main/mediaPermissions";
 
 import { schedulePostInstallRelaunchIfNeeded } from "./postInstallRelaunch";
+import { installPopoutGuard } from "./utils/popoutGuard";
 import { RendererSettings } from "./settings";
 import { patchTrayMenu } from "./trayMenu";
 import { IS_VANILLA } from "./utils/constants";
@@ -135,6 +136,8 @@ if (!IS_VANILLA) {
                 process.env.DISCORD_PRELOAD = original;
 
                 super(options);
+
+                installPopoutGuard(this.webContents);
 
                 if (isMainWindow) {
                     this.webContents.on("before-input-event", (event, input) => {
