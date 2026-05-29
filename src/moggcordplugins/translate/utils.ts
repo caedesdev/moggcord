@@ -19,10 +19,12 @@
 import { classNameFactory } from "@utils/css";
 import { onlyOnce } from "@utils/onlyOnce";
 import { PluginNative } from "@utils/types";
-import { showToast, Toasts } from "@webpack/common";
+import { LocaleStore, showToast, Toasts } from "@webpack/common";
 
 import { DeeplLanguages, deeplLanguageToGoogleLanguage, GoogleLanguages } from "./languages";
 import { resetLanguageDefaults, settings } from "./settings";
+
+export const USER_LANGUAGE = "user";
 
 export const cl = classNameFactory("vc-trans-");
 
@@ -49,6 +51,60 @@ export const getLanguages = () => IS_WEB || settings.store.service === "google"
     ? GoogleLanguages
     : DeeplLanguages;
 
+export function getDiscordLocale(): string {
+    try {
+        return LocaleStore?.locale
+            ?? (typeof LocaleStore?.getLocale === "function" ? LocaleStore.getLocale() : null)
+            ?? navigator.language
+            ?? "en-US";
+    } catch {
+        return navigator.language ?? "en-US";
+    }
+}
+
+function discordLocaleToGoogle(locale: string): string {
+    const l = locale.replace("_", "-").toLowerCase();
+
+    if (l.startsWith("zh-hant") || l === "zh-tw") return "zh-TW";
+    if (l.startsWith("zh")) return "zh-CN";
+    if (l.startsWith("pt")) return "pt";
+    if (l.startsWith("en")) return "en";
+    if (l.startsWith("iw") || l.startsWith("he")) return "iw";
+
+    const primary = l.split("-")[0];
+    if (primary in GoogleLanguages) return primary;
+
+    return "en";
+}
+
+function discordLocaleToDeepl(locale: string): string {
+    const l = locale.replace("_", "-").toLowerCase();
+
+    if (l.startsWith("en-gb")) return "en-gb";
+    if (l.startsWith("en")) return "en-us";
+    if (l.startsWith("pt-br")) return "pt-br";
+    if (l.startsWith("pt")) return "pt-pt";
+    if (l.startsWith("zh-hant") || l === "zh-tw") return "zh-hant";
+    if (l.startsWith("zh")) return "zh-hans";
+    if (l.startsWith("he") || l.startsWith("iw")) return "he";
+
+    const primary = l.split("-")[0];
+    if (primary in DeeplLanguages) return primary;
+
+    return "en-us";
+}
+
+function resolveOutputLanguage(kind: "received" | "sent", configured: string): string {
+    const useUserLanguage = configured === USER_LANGUAGE
+        || (kind === "received" && configured === "fr"); // legacy default before user-locale support
+
+    if (!useUserLanguage) return configured;
+
+    return IS_WEB || settings.store.service === "google"
+        ? discordLocaleToGoogle(getDiscordLocale())
+        : discordLocaleToDeepl(getDiscordLocale());
+}
+
 export async function translate(kind: "received" | "sent", text: string): Promise<TranslationValue> {
     const translate = IS_WEB || settings.store.service === "google"
         ? googleTranslate
@@ -58,7 +114,7 @@ export async function translate(kind: "received" | "sent", text: string): Promis
         return await translate(
             text,
             settings.store[`${kind}Input`],
-            settings.store[`${kind}Output`]
+            resolveOutputLanguage(kind, settings.store[`${kind}Output`])
         );
     } catch (e) {
         const userMessage = typeof e === "string"

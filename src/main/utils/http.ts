@@ -16,15 +16,21 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { net } from "electron";
 import { createWriteStream } from "original-fs";
 import { Readable } from "stream";
 import { finished } from "stream/promises";
 
 type Url = string | URL;
 
+function trustedFetch(url: Url, options?: RequestInit): Promise<Response> {
+    const target = typeof url === "string" ? url : url.toString();
+    return net.fetch(target, options);
+}
+
 export async function checkedFetch(url: Url, options?: RequestInit) {
     try {
-        var res = await fetch(url, options);
+        var res = await trustedFetch(url, options);
     } catch (err) {
         if (err instanceof Error && err.cause) {
             err = err.cause;

@@ -29,7 +29,7 @@ export const settings = definePluginSettings({
     receivedOutput: {
         type: OptionType.STRING,
         description: "Language that received messages should be translated to",
-        default: "fr",
+        default: "user",
         hidden: true
     },
     sentInput: {
@@ -81,12 +81,12 @@ export const settings = definePluginSettings({
 export function resetLanguageDefaults() {
     if (IS_WEB || settings.store.service === "google") {
         settings.store.receivedInput = "auto";
-        settings.store.receivedOutput = "fr";
+        settings.store.receivedOutput = "user";
         settings.store.sentInput = "auto";
         settings.store.sentOutput = "en";
     } else {
         settings.store.receivedInput = "";
-        settings.store.receivedOutput = "fr";
+        settings.store.receivedOutput = "user";
         settings.store.sentInput = "";
         settings.store.sentOutput = "en-us";
     }

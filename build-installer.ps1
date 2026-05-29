@@ -33,11 +33,31 @@ if (-not $sdkLine) {
 $sdkVersion = ($sdkLine -split "\s+")[0]
 Write-Host "  [1/1] dotnet publish (SDK $sdkVersion)..." -ForegroundColor DarkGray
 
-# Copy dist zip into installer-src if release zip exists (embedded resource)
+# Always embed the freshest dist zip so offline installs still work as a fallback.
 $distZip = Join-Path $Root "release\installer\moggcord-dist.zip"
 $embeddedZip = Join-Path $SrcDir "moggcord-dist.zip"
-if ((Test-Path $distZip) -and -not (Test-Path $embeddedZip)) {
+$distDesktop = Join-Path $Root "dist\desktop"
+
+if (-not (Test-Path $distZip) -and (Test-Path (Join-Path $distDesktop "patcher.js"))) {
+    Write-Host "  [info] Building moggcord-dist.zip from dist\desktop..." -ForegroundColor DarkGray
+    if (Test-Path $distZip) { Remove-Item $distZip -Force }
+    Add-Type -Assembly System.IO.Compression.FileSystem
+    [System.IO.Compression.ZipFile]::CreateFromDirectory(
+        (Resolve-Path $distDesktop).Path,
+        (Join-Path (Resolve-Path (Split-Path $distZip -Parent)).Path "moggcord-dist.zip"),
+        [System.IO.Compression.CompressionLevel]::Optimal,
+        $false
+    )
+}
+
+if (Test-Path $distZip) {
     Copy-Item $distZip $embeddedZip -Force
+    Write-Host "  [info] Embedded dist zip refreshed for offline fallback." -ForegroundColor DarkGray
+} elseif (Test-Path $embeddedZip) {
+    Write-Host "  [warn] No fresh dist zip found; keeping existing embedded zip." -ForegroundColor Yellow
+} else {
+    Write-Host "  [ERROR] No moggcord-dist.zip to embed. Run pnpm build first." -ForegroundColor Red
+    exit 1
 }
 
 & dotnet publish "$SrcDir\MoggcordInstaller.csproj" `

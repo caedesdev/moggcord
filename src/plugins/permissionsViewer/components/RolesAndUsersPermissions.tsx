@@ -20,14 +20,14 @@ import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
 import { InfoIcon, OwnerCrownIcon } from "@components/Icons";
 import { buildExtraRoleContextMenuItems } from "@moggcordplugins/betterRoleContext";
-import { cl, getPermissionBits, loadGetGuildPermissionSpecMap, resolveGuildPermissionSpecMap } from "@plugins/permissionsViewer/utils";
+import { cl, getPermissionBits, getPermissionSpecDescription, getPermissionSpecTitle, hasPermissionBit, loadGetGuildPermissionSpecMap, resolveGuildPermissionSpecMap } from "@plugins/permissionsViewer/utils";
 import { copyToClipboard } from "@utils/clipboard";
 import { getIntlMessage, getUniqueUsername } from "@utils/discord";
 import { Logger } from "@utils/Logger";
 import { Guild, RenderModalProps, Role, RoleOrUserPermission, UnicodeEmoji, User } from "@vencord/discord-types";
 import { PermissionOverwriteType } from "@vencord/discord-types/enums";
 import { findByCodeLazy } from "@webpack";
-import { ContextMenuApi, FluxDispatcher, GuildMemberStore, GuildRoleStore, i18n, Menu, Modal, openModalLazy, ScrollerThin, Text, Tooltip, useEffect, useMemo, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
+import { ContextMenuApi, FluxDispatcher, GuildMemberStore, GuildRoleStore, Menu, Modal, openModalLazy, ScrollerThin, Text, Tooltip, useEffect, useMemo, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
 
 import { settings } from "..";
 import { PermissionAllowedIcon, PermissionDefaultIcon, PermissionDeniedIcon } from "./icons";
@@ -36,8 +36,6 @@ type GetRoleIconData = (role: Role, size: number) => { customIconSrc?: string; u
 const getRoleIconData: GetRoleIconData = findByCodeLazy("convertSurrogateToName", "customIconSrc", "unicodeEmoji");
 const logger = new Logger("PermissionsViewer", "#5865f2");
 let didWarnRoleIconError = false;
-let didWarnPermissionSpecError = false;
-let didLogDiagnostics = false;
 
 interface RolesAndUsersPermissionsProps {
     permissions: Array<RoleOrUserPermission>;
@@ -67,18 +65,7 @@ function getRoleIconSrc(role?: Role) {
 }
 
 function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, header }: RolesAndUsersPermissionsProps) {
-    const guildPermissionSpecMap = useMemo(() => {
-        try {
-            return resolveGuildPermissionSpecMap(guild);
-        } catch (error) {
-            if (!didWarnPermissionSpecError) {
-                didWarnPermissionSpecError = true;
-                logger.warn("Could not resolve guild permission spec map", error);
-            }
-
-            return {};
-        }
-    }, [guild]);
+    const guildPermissionSpecMap = useMemo(() => resolveGuildPermissionSpecMap(guild), [guild]);
 
     const sortedPermissions = useMemo(() => [...(permissions ?? [])].sort((a, b) => a.type - b.type), [permissions]);
     const permissionBits = useMemo(() => getPermissionBits(), []);
@@ -110,19 +97,10 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
 
     const roles = GuildRoleStore.getRolesSnapshot(guild.id) ?? {};
 
-    if (!didLogDiagnostics) {
-        didLogDiagnostics = true;
-        logger.info("render counts:", {
-            permissions: sortedPermissions.length,
-            bits: permissionBits.length,
-            specMapKeys: Object.keys(guildPermissionSpecMap).length
-        });
-    }
-
     return (
         <Modal
             {...modalProps}
-            size="large"
+            size="lg"
             title={`${header} Permissions`}
         >
             {!selectedItem && (
@@ -211,32 +189,27 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
                             if (!spec) return null;
 
                             return (
-                                <div key={bit} className={cl("modal-perms-item")}>
+                                <div key={String(bit)} className={cl("modal-perms-item")}>
                                     <div className={cl("modal-perms-item-icon")}>
                                         {(() => {
                                             const { permissions, overwriteAllow, overwriteDeny } = selectedItem;
 
-                                            if (permissions)
-                                                return (permissions & bit) === bit
+                                            if (permissions != null)
+                                                return hasPermissionBit(permissions, bit)
                                                     ? PermissionAllowedIcon()
                                                     : PermissionDeniedIcon();
 
-                                            if (overwriteAllow && (overwriteAllow & bit) === bit)
+                                            if (overwriteAllow && hasPermissionBit(overwriteAllow, bit))
                                                 return PermissionAllowedIcon();
-                                            if (overwriteDeny && (overwriteDeny & bit) === bit)
+                                            if (overwriteDeny && hasPermissionBit(overwriteDeny, bit))
                                                 return PermissionDeniedIcon();
 
                                             return PermissionDefaultIcon();
                                         })()}
                                     </div>
-                                    <Text variant="text-md/normal">{spec.title}</Text>
+                                    <Text variant="text-md/normal">{getPermissionSpecTitle(spec, bit)}</Text>
 
-                                    <Tooltip text={
-                                        (() => {
-                                            const { description } = spec;
-                                            return typeof description === "function" ? i18n.intl.format(description, {}) : description;
-                                        })()
-                                    }>
+                                    <Tooltip text={getPermissionSpecDescription(spec, bit)}>
                                         {props => <InfoIcon {...props} />}
                                     </Tooltip>
                                 </div>

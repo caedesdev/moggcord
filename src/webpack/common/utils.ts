@@ -222,8 +222,8 @@ export const ChannelActions = findByPropsLazy("selectChannel", "preload");
 
 // ─── Re-exports for compatibility with Equicord/Vencord plugins ────────────────
 
-// Modal API (from @utils/modal)
-export { openModal, openModalLazy, closeModal, closeAllModals, ModalRoot as Modal, ModalRoot, ModalHeader, ModalContent, ModalFooter, ModalCloseButton } from "@utils/modal";
+// Legacy modal building blocks (@utils/modal). Use ./modals for Discord's Modal API.
+export { ModalRoot, ModalHeader, ModalContent, ModalFooter, ModalCloseButton } from "@utils/modal";
 
 // Actions
 export const VoiceActions = findByPropsLazy("toggleSelfMute", "setChannel");
@@ -241,5 +241,4 @@ export const fetchApplicationsRPC = findByCodeLazy("APPLICATION_RPC(");
 export const useDrag = findByCodeLazy("useDrag", "DragSourceMonitor");
 export const useDrop = findByCodeLazy("useDrop", "DropTargetMonitor");
 
-// ConfirmModal component
-export const ConfirmModal = findByCodeLazy('"confirmButtonText"', '"cancelButtonText"');
+// ConfirmModal is exported from ./modals (Discord's new Modal API)

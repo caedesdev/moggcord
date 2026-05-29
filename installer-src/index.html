@@ -1360,6 +1360,38 @@
       document.getElementById("manual-row").classList.remove("visible");
     }
 
+    function pickBestDiscord(list) {
+      const order = ["Discord", "Discord PTB", "Discord Canary", "Discord Dev"];
+      for (const name of order) {
+        const match = list.find(d => d.name === name);
+        if (match) return match;
+      }
+      return list[0] || null;
+    }
+
+    async function maybeAutoInstall() {
+      if (discords.length === 0) return;
+
+      const target = pickBestDiscord(discords);
+      if (!target) return;
+
+      const idx = discords.findIndex(d => d.path === target.path);
+      if (idx === -1) return;
+
+      let injected = false;
+      try { injected = await window.moggcord.isInjected(target.path); } catch (e) {}
+
+      selectDiscord(idx);
+
+      if (injected) {
+        setStatus("success", `${target.name} already has Moggcord installed.`);
+        return;
+      }
+
+      setStatus("loading", `Auto-installing into ${target.name}…`);
+      await handleInject();
+    }
+
     async function loadDiscords() {
       setStatus("loading", "Detecting Discord installations...");
 
@@ -1398,6 +1430,7 @@
 
       setStatus("idle", "Select an installation target.");
       updateSelected(null);
+      await maybeAutoInstall();
     }
 
     function renderCard(d, i, injected, iconCls, hasThirdParty = false) {

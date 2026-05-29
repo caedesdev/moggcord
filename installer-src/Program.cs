@@ -20,11 +20,88 @@ namespace MoggcordInstaller
     static class Program
     {
         [STAThread]
-        static void Main()
+        static void Main(string[] args)
         {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
+
+            if (HasFlag(args, "--auto") || HasFlag(args, "-auto"))
+            {
+                Environment.ExitCode = RunAutoInstall(args).GetAwaiter().GetResult();
+                return;
+            }
+
             Application.Run(new LauncherForm());
+        }
+
+        static bool HasFlag(string[] args, string flag)
+        {
+            foreach (var arg in args)
+                if (string.Equals(arg, flag, StringComparison.OrdinalIgnoreCase))
+                    return true;
+            return false;
+        }
+
+        static async Task<int> RunAutoInstall(string[] args)
+        {
+            var backend = new MoggcordBackend(null, null);
+            try
+            {
+                Console.WriteLine("[Moggcord] Detecting Discord...");
+                var json = await backend.DetectDiscord();
+                var installs = JsonSerializer.Deserialize<List<DiscordInstall>>(json) ?? new List<DiscordInstall>();
+                if (installs.Count == 0)
+                {
+                    Console.Error.WriteLine("[Moggcord] No Discord installation found.");
+                    return 1;
+                }
+
+                var target = PickPreferredInstall(installs);
+                Console.WriteLine($"[Moggcord] Target: {target.name} ({target.path})");
+
+                if (await backend.IsInjected(target.path))
+                {
+                    Console.WriteLine("[Moggcord] Already injected. Starting Discord...");
+                    backend.StartDiscordPublic(target.path);
+                    return 0;
+                }
+
+                Console.WriteLine("[Moggcord] Downloading latest Moggcord and injecting...");
+                var resultJson = await backend.Inject(target.path);
+                using var doc = JsonDocument.Parse(resultJson);
+                if (!doc.RootElement.TryGetProperty("success", out var okProp) || !okProp.GetBoolean())
+                {
+                    var err = doc.RootElement.TryGetProperty("error", out var errProp) ? errProp.GetString() : "Unknown error";
+                    Console.Error.WriteLine("[Moggcord] Injection failed: " + err);
+                    return 1;
+                }
+
+                Console.WriteLine("[Moggcord] Done. Discord will start now.");
+                backend.StartDiscordPublic(target.path);
+                return 0;
+            }
+            catch (Exception ex)
+            {
+                Console.Error.WriteLine("[Moggcord] Auto install failed: " + ex.Message);
+                return 1;
+            }
+        }
+
+        static DiscordInstall PickPreferredInstall(List<DiscordInstall> installs)
+        {
+            var order = new[] { "Discord", "Discord PTB", "Discord Canary", "Discord Dev" };
+            foreach (var name in order)
+            {
+                var match = installs.Find(i => string.Equals(i.name, name, StringComparison.OrdinalIgnoreCase));
+                if (match != null) return match;
+            }
+            return installs[0];
+        }
+
+        class DiscordInstall
+        {
+            public string name { get; set; }
+            public string path { get; set; }
         }
     }
 
@@ -184,13 +261,24 @@ namespace MoggcordInstaller
             _form = form;
             _webView = webView;
             _http = new HttpClient();
-            _http.Timeout = TimeSpan.FromSeconds(30); // Prevent infinite hang on GitHub API
+            _http.Timeout = TimeSpan.FromSeconds(30);
             _exeDir = Path.GetDirectoryName(Application.ExecutablePath);
             _distDir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Moggcord", "dist");
         }
 
-        public void MinimizeApp() { _form.Invoke(new Action(() => _form.WindowState = FormWindowState.Minimized)); }
-        public void CloseApp() { _form.Invoke(new Action(() => Application.Exit())); }
+        public void StartDiscordPublic(string resPath) => StartDiscord(resPath);
+
+        public void MinimizeApp()
+        {
+            if (_form == null) return;
+            _form.Invoke(new Action(() => _form.WindowState = FormWindowState.Minimized));
+        }
+
+        public void CloseApp()
+        {
+            if (_form == null) { Environment.Exit(0); return; }
+            _form.Invoke(new Action(() => Application.Exit()));
+        }
         public void OpenUrl(string url)
         {
             try
@@ -206,6 +294,11 @@ namespace MoggcordInstaller
 
         public void SetStatus(string type, string text)
         {
+            if (_form == null || _webView?.CoreWebView2 == null)
+            {
+                Console.WriteLine("[Moggcord] " + text);
+                return;
+            }
             _form.Invoke(new Action(() => {
                 var safeText = text.Replace("'", "\\'").Replace("\n", " ");
                 _webView.CoreWebView2.ExecuteScriptAsync($"if(typeof setStatus === 'function') setStatus('{type}', '{safeText}');");
@@ -214,6 +307,11 @@ namespace MoggcordInstaller
 
         public void SetProgress(double percent, string text, double mbDownloaded = -1, double mbTotal = -1)
         {
+            if (_form == null || _webView?.CoreWebView2 == null)
+            {
+                Console.WriteLine($"[Moggcord] {text} ({percent:F0}%)");
+                return;
+            }
             _form.Invoke(new Action(() => {
                 var safeText = text.Replace("\\", "\\\\").Replace("'", "\\'").Replace("\n", " ");
                 var percentStr = percent.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
@@ -352,16 +450,35 @@ namespace MoggcordInstaller
 
         private async Task EnsureDistAsync()
         {
+            // Optional dev override: dist/ folder next to the installer exe
             var localDist = Path.Combine(_exeDir, "dist");
             if (Directory.Exists(localDist) && File.Exists(Path.Combine(localDist, "patcher.js")))
             {
                 _distDir = localDist;
-                SetStatus("loading", "Files found locally...");
+                SetStatus("loading", "Using local development files...");
                 return;
             }
 
-            if (await TryUseBundledDistAsync()) return;
+            // Always prefer the latest GitHub release when online. The embedded zip
+            // is only a fallback for offline installs and may be older than latest.
+            try
+            {
+                if (await TryDownloadLatestDistAsync())
+                    return;
+            }
+            catch (Exception ex)
+            {
+                SetStatus("loading", $"Online download failed ({ex.Message}). Trying bundled files...");
+            }
 
+            if (await TryUseBundledDistAsync())
+                return;
+
+            throw new Exception("Could not obtain Moggcord files. Check your internet connection or download a newer installer.");
+        }
+
+        private async Task<bool> TryDownloadLatestDistAsync()
+        {
             SetProgress(2, "Fetching latest release information...");
             Directory.CreateDirectory(Path.GetDirectoryName(_distDir));
 
@@ -385,18 +502,19 @@ namespace MoggcordInstaller
             }
 
             var zipUrl = ExtractJsonValue(json, "browser_download_url", DIST_ZIP);
-            
+            var releaseTag = ExtractJsonValue(json, "tag_name");
+
             if (string.IsNullOrEmpty(zipUrl))
                 throw new Exception($"'{DIST_ZIP}' not found in the GitHub release. The release may not be published yet.");
 
-            SetProgress(5, "Starting download...");
+            SetProgress(5, $"Downloading Moggcord {releaseTag ?? "latest"}...");
             var tmpZip = Path.Combine(Path.GetTempPath(), "moggcord-dist.zip");
-            
+
             using (var response = await _http.GetAsync(zipUrl, HttpCompletionOption.ResponseHeadersRead))
             {
                 response.EnsureSuccessStatusCode();
-                var totalBytes = response.Content.Headers.ContentLength ?? (long)(348.0 * 1024 * 1024); // Fallback to 348MB if null
-                
+                var totalBytes = response.Content.Headers.ContentLength ?? (long)(348.0 * 1024 * 1024);
+
                 using (var contentStream = await response.Content.ReadAsStreamAsync())
                 using (var fs = new FileStream(tmpZip, FileMode.Create, FileAccess.Write, FileShare.None, 81920, true))
                 {
@@ -409,15 +527,14 @@ namespace MoggcordInstaller
                     {
                         await fs.WriteAsync(buffer, 0, read);
                         totalRead += read;
-                        
+
                         double percent = (double)totalRead / totalBytes * 100.0;
                         if (percent - lastReportedPercent >= 0.5 || percent >= 100.0)
                         {
                             lastReportedPercent = percent;
-                            // Map 0-100% of download to 5%-75% of overall progress
                             double overallPercent = 5.0 + (percent * 0.70);
                             double totalMB = (double)totalBytes / (1024.0 * 1024.0);
-                            double readMB  = (double)totalRead  / (1024.0 * 1024.0);
+                            double readMB = (double)totalRead / (1024.0 * 1024.0);
                             SetProgress(overallPercent, "Downloading Moggcord...", readMB, totalMB);
                         }
                     }
@@ -427,6 +544,17 @@ namespace MoggcordInstaller
             SetProgress(75, "Preparing extraction...");
             await Task.Run(() => ExtractDistZip(tmpZip));
             try { File.Delete(tmpZip); } catch { }
+
+            if (!string.IsNullOrEmpty(releaseTag))
+            {
+                try
+                {
+                    File.WriteAllText(Path.Combine(_distDir, "version.txt"), releaseTag.Trim());
+                }
+                catch { }
+            }
+
+            return File.Exists(Path.Combine(_distDir, "patcher.js"));
         }
 
         private async Task<bool> TryUseBundledDistAsync()

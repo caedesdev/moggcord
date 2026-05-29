@@ -16,14 +16,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { isPluginEnabled } from "@api/PluginManager";
 import { BaseText } from "@components/BaseText";
 import ErrorBoundary from "@components/ErrorBoundary";
+import PermissionsViewerPlugin from "@plugins/permissionsViewer";
+import openRolesAndUsersPermissionsModal from "@plugins/permissionsViewer/components/RolesAndUsersPermissions";
+import { sortPermissionOverwrites } from "@plugins/permissionsViewer/utils";
 import { classes } from "@utils/misc";
 import { formatDuration } from "@utils/text";
-import type { Channel } from "@vencord/discord-types";
-import { PermissionOverwriteType } from "@vencord/discord-types/enums";
+import type { Channel, RoleOrUserPermission } from "@vencord/discord-types";
 import { findByPropsLazy, findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
-import { EmojiStore, FluxDispatcher, GuildMemberStore, GuildRoleStore, GuildStore, Parser, PermissionsBits, PermissionStore, SnowflakeUtils, Timestamp, Tooltip, UserStore, useEffect } from "@webpack/common";
+import { EmojiStore, FluxDispatcher, GuildMemberStore, GuildStore, Parser, PermissionsBits, PermissionStore, SnowflakeUtils, Timestamp, Tooltip, useEffect, useState } from "@webpack/common";
+import type { ComponentType } from "react";
 
 import { cl, settings } from "..";
 
@@ -36,11 +40,6 @@ const enum ForumLayoutTypes {
     DEFAULT = 0,
     LIST = 1,
     GRID = 2
-}
-
-interface DefaultReaction {
-    emojiId: string | null;
-    emojiName: string | null;
 }
 
 const enum ChannelTypes {
@@ -63,6 +62,11 @@ const enum ChannelFlags {
 
 const ChatScrollClasses = findCssClassesLazy("auto", "managedReactiveScroller", "customTheme");
 const TagComponent = findComponentByCodeLazy("#{intl::FORUM_TAG_A11Y_FILTER_BY_TAG}");
+
+let ChannelBeginHeader: ComponentType<{ channel: Channel; }> = () => null;
+export const setChannelBeginHeader = (value: ComponentType<{ channel: Channel; }>) => {
+    ChannelBeginHeader = value;
+};
 
 const EmojiParser = findByPropsLazy("convertSurrogateToName");
 const EmojiUtils = findByPropsLazy("getURL", "getEmojiColors");
@@ -91,66 +95,11 @@ const VideoQualityModesToNames = {
     [VideoQualityModes.FULL]: "720p"
 };
 
-// Icon from the modal when clicking a message link you don't have access to view
 const HiddenChannelLogo = "/assets/433e3ec4319a9d11b0cbe39342614982.svg";
 
-type AccessEntry = {
-    key: string;
-    name: string;
-    type: "Owner" | "Role" | "User";
-    color?: string;
-};
-
-const hasViewChannel = (allow: bigint) => (allow & PermissionsBits.VIEW_CHANNEL) === PermissionsBits.VIEW_CHANNEL;
-
-function getAccessEntries(channel: Channel): AccessEntry[] {
-    const entries: AccessEntry[] = [];
-    const guild = GuildStore.getGuild(channel.guild_id);
-
-    if (guild?.ownerId) {
-        const owner = UserStore.getUser(guild.ownerId);
-        entries.push({
-            key: `owner-${guild.ownerId}`,
-            name: owner?.globalName ?? owner?.username ?? "Server Owner",
-            type: "Owner"
-        });
-    }
-
-    const overwrites = Object.values(channel.permissionOverwrites)
-        .filter(overwrite => hasViewChannel(overwrite.allow));
-
-    const roleOverwrites = overwrites
-        .filter(overwrite => overwrite.type === PermissionOverwriteType.ROLE)
-        .sort((a, b) => (GuildRoleStore.getRole(channel.guild_id, b.id)?.position ?? 0) - (GuildRoleStore.getRole(channel.guild_id, a.id)?.position ?? 0));
-
-    for (const overwrite of roleOverwrites) {
-        const role = GuildRoleStore.getRole(channel.guild_id, overwrite.id);
-        entries.push({
-            key: `role-${overwrite.id}`,
-            name: role?.name ?? (overwrite.id === channel.guild_id ? "@everyone" : "Unknown role"),
-            type: "Role",
-            color: role?.colorString
-        });
-    }
-
-    for (const overwrite of overwrites) {
-        if (overwrite.type !== PermissionOverwriteType.MEMBER) continue;
-
-        const member = GuildMemberStore.getMember(channel.guild_id, overwrite.id);
-        const user = UserStore.getUser(overwrite.id);
-        entries.push({
-            key: `user-${overwrite.id}`,
-            name: member?.nick ?? user?.globalName ?? user?.username ?? "Unknown user",
-            type: "User"
-        });
-    }
-
-    return entries;
-}
-
 function HiddenChannelLockScreen({ channel }: { channel: Channel; }) {
-    const { defaultAllowedUsersAndRolesDropdownState } = settings.use();
-    const accessEntries = getAccessEntries(channel);
+    const { defaultAllowedUsersAndRolesDropdownState } = settings.use(["defaultAllowedUsersAndRolesDropdownState"]);
+    const [permissions, setPermissions] = useState<RoleOrUserPermission[]>([]);
 
     const {
         type,
@@ -173,33 +122,47 @@ function HiddenChannelLockScreen({ channel }: { channel: Channel; }) {
     } = channel;
 
     useEffect(() => {
-        const membersToFetch = new Set<string>();
+        const membersToFetch: string[] = [];
 
         const guildOwnerId = GuildStore.getGuild(guild_id)?.ownerId;
-        if (guildOwnerId && !GuildMemberStore.getMember(guild_id, guildOwnerId)) membersToFetch.add(guildOwnerId);
+        if (guildOwnerId && !GuildMemberStore.getMember(guild_id, guildOwnerId)) membersToFetch.push(guildOwnerId);
 
-        Object.values(permissionOverwrites).forEach(({ type, id: userId }) => {
-            if (type === PermissionOverwriteType.MEMBER && !GuildMemberStore.getMember(guild_id, userId)) {
-                membersToFetch.add(userId);
+        Object.values(permissionOverwrites).forEach(({ type: overwriteType, id: userId }) => {
+            if (overwriteType === 1 && !GuildMemberStore.getMember(guild_id, userId)) {
+                membersToFetch.push(userId);
             }
         });
 
-        if (membersToFetch.size > 0) {
+        if (membersToFetch.length > 0) {
             FluxDispatcher.dispatch({
                 type: "GUILD_MEMBERS_REQUEST",
                 guildIds: [guild_id],
-                userIds: Array.from(membersToFetch)
+                userIds: membersToFetch
             });
         }
+
+        if (isPluginEnabled(PermissionsViewerPlugin.name)) {
+            setPermissions(sortPermissionOverwrites(Object.values(permissionOverwrites).map(overwrite => ({
+                type: overwrite.type,
+                id: overwrite.id,
+                overwriteAllow: overwrite.allow,
+                overwriteDeny: overwrite.deny
+            })), guild_id));
+        }
     }, [channelId, guild_id, permissionOverwrites]);
+
+    const isTextLike = !channel.isGuildVoice() && !channel.isGuildStageVoice();
+    const hasTopic = topic != null && topic.length > 0;
 
     return (
         <div className={classes(ChatScrollClasses.auto, ChatScrollClasses.customTheme, ChatScrollClasses.managedReactiveScroller)}>
             <div className={cl("container")}>
-                <img className={cl("logo")} src={HiddenChannelLogo} />
+                <img className={cl("logo")} src={HiddenChannelLogo} alt="" />
 
                 <div className={cl("heading-container")}>
-                    <BaseText size="xxl" weight="bold">This {ChannelTypesToChannelNames[type]} channel is {!PermissionStore.can(PermissionsBits.VIEW_CHANNEL, channel) ? "hidden" : "locked"}</BaseText>
+                    <BaseText size="xxl" weight="bold">
+                        This is a {!PermissionStore.can(PermissionsBits.VIEW_CHANNEL, channel) ? "hidden" : "locked"} {ChannelTypesToChannelNames[type]} channel
+                    </BaseText>
                     {channel.isNSFW() &&
                         <Tooltip text="NSFW">
                             {({ onMouseLeave, onMouseEnter }) => (
@@ -219,6 +182,7 @@ function HiddenChannelLockScreen({ channel }: { channel: Channel; }) {
                         </Tooltip>
                     }
                 </div>
+
                 <div className={cl("locked-summary")}>
                     <svg className={cl("locked-summary-icon")} width="28" height="28" viewBox="0 0 24 24" aria-hidden={true} role="img">
                         <path fill="currentColor" d="M17 9V7A5 5 0 0 0 7 7v2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-8a2 2 0 0 0-2-2h-1ZM9 7a3 3 0 0 1 6 0v2H9V7Zm4 8.73V18h-2v-2.27a2 2 0 1 1 2 0Z" />
@@ -228,15 +192,16 @@ function HiddenChannelLockScreen({ channel }: { channel: Channel; }) {
                     </BaseText>
                 </div>
 
-                {(!channel.isGuildVoice() && !channel.isGuildStageVoice()) && (
+                {isTextLike && (
                     <BaseText size="lg">
                         You can not see the {channel.isForumChannel() ? "posts" : "messages"} of this channel.
-                        {channel.isForumChannel() && topic && topic.length > 0 && " However you may see its guidelines:"}
+                        {channel.isForumChannel() && hasTopic && " However you may see its guidelines:"}
                     </BaseText>
                 )}
 
-                {channel.isForumChannel() && topic && topic.length > 0 && (
+                {isTextLike && hasTopic && (
                     <div className={cl("topic-container")}>
+                        {!channel.isForumChannel() && <BaseText size="md" weight="semibold">Channel topic:</BaseText>}
                         {Parser.parseTopic(topic, false, { channelId })}
                     </div>
                 )}
@@ -244,6 +209,7 @@ function HiddenChannelLockScreen({ channel }: { channel: Channel; }) {
                 {lastMessageId &&
                     <BaseText size="md">
                         Last {channel.isForumChannel() ? "post" : "message"} created:
+                        {" "}
                         <Timestamp timestamp={new Date(SnowflakeUtils.extractTimestamp(lastMessageId))} />
                     </BaseText>
                 }
@@ -319,7 +285,23 @@ function HiddenChannelLockScreen({ channel }: { channel: Channel; }) {
                 }
                 <div className={cl("allowed-users-and-roles-container")}>
                     <div className={cl("allowed-users-and-roles-container-title")}>
-                        <BaseText size="lg" weight="bold">Who can open this channel:</BaseText>
+                        {isPluginEnabled(PermissionsViewerPlugin.name) && permissions.length > 0 && (
+                            <Tooltip text="Permission Details">
+                                {({ onMouseLeave, onMouseEnter }) => (
+                                    <button
+                                        onMouseLeave={onMouseLeave}
+                                        onMouseEnter={onMouseEnter}
+                                        className={cl("allowed-users-and-roles-container-permdetails-btn")}
+                                        onClick={() => openRolesAndUsersPermissionsModal(permissions, GuildStore.getGuild(channel.guild_id)!, channel.name)}
+                                    >
+                                        <svg width="24" height="24" viewBox="0 0 24 24">
+                                            <path fill="currentColor" d="M7 12.001C7 10.8964 6.10457 10.001 5 10.001C3.89543 10.001 3 10.8964 3 12.001C3 13.1055 3.89543 14.001 5 14.001C6.10457 14.001 7 13.1055 7 12.001ZM14 12.001C14 10.8964 13.1046 10.001 12 10.001C10.8954 10.001 10 10.8964 10 12.001C10 13.1055 10.8954 14.001 12 14.001C13.1046 14.001 14 13.1055 14 12.001ZM19 10.001C20.1046 10.001 21 10.8964 21 12.001C21 13.1055 20.1046 14.001 19 14.001C17.8954 14.001 17 13.1055 17 12.001C17 10.8964 17.8954 10.001 19 10.001Z" />
+                                        </svg>
+                                    </button>
+                                )}
+                            </Tooltip>
+                        )}
+                        <BaseText size="lg" weight="bold">Allowed users and roles:</BaseText>
                         <Tooltip text={defaultAllowedUsersAndRolesDropdownState ? "Hide Allowed Users and Roles" : "View Allowed Users and Roles"}>
                             {({ onMouseLeave, onMouseEnter }) => (
                                 <button
@@ -340,19 +322,7 @@ function HiddenChannelLockScreen({ channel }: { channel: Channel; }) {
                             )}
                         </Tooltip>
                     </div>
-                    {defaultAllowedUsersAndRolesDropdownState && (
-                        <div className={cl("access-list")}>
-                            {accessEntries.length > 0
-                                ? accessEntries.map(entry => (
-                                    <div className={cl("access-entry")} key={entry.key}>
-                                        <span className={cl("access-entry-type")}>{entry.type}</span>
-                                        <span className={cl("access-entry-name")} style={{ color: entry.color }}>{entry.name}</span>
-                                    </div>
-                                ))
-                                : <BaseText size="md">No explicit VIEW_CHANNEL overwrites found.</BaseText>
-                            }
-                        </div>
-                    )}
+                    {defaultAllowedUsersAndRolesDropdownState && <ChannelBeginHeader channel={channel} />}
                 </div>
             </div>
         </div>

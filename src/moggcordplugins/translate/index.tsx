@@ -77,6 +77,11 @@ export default definePlugin({
     start() {
         // Force disable auto-translate on startup — must never be active
         settings.store.autoTranslate = false;
+
+        // Migrate legacy default: received messages were always translated to French
+        if (settings.store.receivedOutput === "fr") {
+            settings.store.receivedOutput = "user";
+        }
     },
 
     chatBarButton: {

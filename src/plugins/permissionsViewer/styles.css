@@ -1,3 +1,8 @@
+.vc-permviewer-user-popout {
+    padding: 12px;
+    min-width: 280px;
+}
+
 /* User Permissions Component */
 
 .vc-permviewer-user-header-container {

@@ -19,7 +19,15 @@
 import { BaseText } from "@components/BaseText";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { HeadingTertiary } from "@components/Heading";
-import { cl, getPermissionBits, getSortedRolesForMember, resolveGuildPermissionSpecMap, sortUserRoles } from "@plugins/permissionsViewer/utils";
+import {
+    cl,
+    getPermissionBits,
+    getPermissionSpecTitle,
+    getSortedRolesForMember,
+    hasPermissionBit,
+    resolveGuildPermissionSpecMap,
+    sortUserRoles,
+} from "@plugins/permissionsViewer/utils";
 import { getIntlMessage } from "@utils/discord";
 import { classes } from "@utils/misc";
 import type { Guild, GuildMember, RoleOrUserPermission } from "@vencord/discord-types";
@@ -113,9 +121,9 @@ function UserPermissionsComponent({ guild, guildMember, closePopout }: { guild: 
             if (!spec) continue;
 
             for (const { permissions, colorString, position, name } of userRoles) {
-                if ((permissions & bit) === bit) {
+                if (hasPermissionBit(permissions, bit)) {
                     userPermissions.push({
-                        permission: spec.title,
+                        permission: getPermissionSpecTitle(spec, bit),
                         roleName: name,
                         roleColor: colorString || "var(--primary-300)",
                         rolePosition: position
@@ -131,7 +139,7 @@ function UserPermissionsComponent({ guild, guildMember, closePopout }: { guild: 
         return [rolePermissions, userPermissions];
     }, [guild, guildMember, guildPermissionSpecMap, permissionBits, permissionsSortOrder]);
 
-    return <div>
+    return <div className={cl("user-popout")}>
         <div className={cl("user-header-container")}>
             <HeadingTertiary>Permissions</HeadingTertiary>
             <div className={cl("user-header-btns")}>
@@ -181,7 +189,7 @@ function UserPermissionsComponent({ guild, guildMember, closePopout }: { guild: 
                 </Tooltip>
             </div>
         </div>
-        {userPermissions.length > 0 && (
+        {userPermissions.length > 0 ? (
             <div className={cl("user-permissions-list")}>
                 {userPermissions.map(({ permission, roleColor, roleName }) => (
                     <Tooltip
@@ -196,8 +204,17 @@ function UserPermissionsComponent({ guild, guildMember, closePopout }: { guild: 
                     </Tooltip>
                 ))}
             </div>
+        ) : (
+            <BaseText size="sm" color="text-muted">No permissions found for this user.</BaseText>
         )}
     </div>;
 }
 
-export default ErrorBoundary.wrap(UserPermissionsComponent, { noop: true });
+export default ErrorBoundary.wrap(UserPermissionsComponent, {
+    fallback: ({ message }) => (
+        <div className={cl("user-popout")}>
+            <BaseText size="sm" color="text-muted">{message || "Permissions viewer failed to load."}</BaseText>
+        </div>
+    ),
+    message: "Permissions viewer failed to load."
+});

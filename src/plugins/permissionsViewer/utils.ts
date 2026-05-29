@@ -20,7 +20,7 @@ import { classNameFactory } from "@utils/css";
 import { Guild, GuildMember, Role } from "@vencord/discord-types";
 import { PermissionOverwriteType } from "@vencord/discord-types/enums";
 import { extractAndLoadChunksLazy, findByPropsLazy } from "@webpack";
-import { GuildRoleStore, PermissionsBits } from "@webpack/common";
+import { GuildRoleStore, i18n, PermissionsBits } from "@webpack/common";
 
 import { PermissionsSortOrder, settings } from ".";
 
@@ -29,11 +29,8 @@ export const { getGuildPermissionSpecMap } = findByPropsLazy("getGuildPermission
 
 export const cl = classNameFactory("vc-permviewer-");
 
-interface PermissionSpec { title: string; description: string; }
+interface PermissionSpec { title: string; description: string | (() => string); }
 
-// Standard Discord permission flags with their stable bit values. Used as a
-// last-resort source so the viewer keeps working even if Discord's webpack
-// exports (PermissionsBits / getGuildPermissionSpecMap) can't be resolved.
 const FALLBACK_PERMISSIONS: Record<string, bigint> = {
     CREATE_INSTANT_INVITE: 1n << 0n,
     KICK_MEMBERS: 1n << 1n,
@@ -96,22 +93,36 @@ function titleCasePermissionName(name: string) {
         .join(" ");
 }
 
-// Returns [name, bit] entries from Discord's PermissionsBits, or the hardcoded
-// fallback list if that export resolves to nothing.
 function getPermissionEntries(): [string, bigint][] {
     try {
         const entries = Object.entries(PermissionsBits)
             .filter((entry): entry is [string, bigint] => typeof entry[1] === "bigint");
         if (entries.length) return entries;
     } catch {
-        // fall through to fallback list
+        // fall through
     }
     return Object.entries(FALLBACK_PERMISSIONS);
 }
 
-// Resilient list of permission bits for components to iterate over.
 export function getPermissionBits(): bigint[] {
     return getPermissionEntries().map(([, bit]) => bit);
+}
+
+export function toPermissionBigInt(value: unknown): bigint {
+    if (typeof value === "bigint") return value;
+    if (typeof value === "number" && Number.isFinite(value)) return BigInt(value);
+    if (typeof value === "string" && value.length) {
+        try {
+            return BigInt(value);
+        } catch {
+            return 0n;
+        }
+    }
+    return 0n;
+}
+
+export function hasPermissionBit(permissions: unknown, bit: bigint): boolean {
+    return (toPermissionBigInt(permissions) & bit) === bit;
 }
 
 let fallbackSpecMap: Record<string, PermissionSpec> | null = null;
@@ -129,26 +140,61 @@ function buildFallbackPermissionSpecMap() {
     return map;
 }
 
-// Always layer Discord's spec map (nicer titles/descriptions) over our complete
-// fallback, so every permission bit is guaranteed to have an entry regardless of
-// how/whether Discord's map resolves.
+function formatPermissionSpecField(value: unknown): string | null {
+    if (typeof value === "string" && value.length) return value;
+    if (typeof value === "function") {
+        try {
+            const formatted = i18n.intl.format(value as any, {});
+            if (typeof formatted === "string" && formatted.length) return formatted;
+        } catch {
+            return null;
+        }
+    }
+    return null;
+}
+
+function isValidPermissionSpec(spec: unknown): spec is PermissionSpec {
+    if (!spec || typeof spec !== "object") return false;
+    return formatPermissionSpecField((spec as PermissionSpec).title) != null;
+}
+
+export function getPermissionSpecTitle(spec: PermissionSpec | undefined, bit: bigint): string {
+    const title = formatPermissionSpecField(spec?.title);
+    if (title) return title;
+
+    const fallback = buildFallbackPermissionSpecMap()[String(bit)];
+    return formatPermissionSpecField(fallback?.title) ?? `Permission ${String(bit)}`;
+}
+
+export function getPermissionSpecDescription(spec: PermissionSpec | undefined, bit: bigint): string {
+    const description = formatPermissionSpecField(spec?.description);
+    if (description) return description;
+
+    const fallback = buildFallbackPermissionSpecMap()[String(bit)];
+    return formatPermissionSpecField(fallback?.description) ?? getPermissionSpecTitle(spec, bit);
+}
+
 export function resolveGuildPermissionSpecMap(guild: Guild): Record<string, PermissionSpec> {
     const fallback = buildFallbackPermissionSpecMap();
+    const merged: Record<string, PermissionSpec> = { ...fallback };
 
     try {
         const map = getGuildPermissionSpecMap?.(guild);
-        if (map && Object.keys(map).length) return { ...fallback, ...map };
+        if (!map || typeof map !== "object") return merged;
+
+        for (const [key, spec] of Object.entries(map as Record<string, PermissionSpec>)) {
+            if (isValidPermissionSpec(spec)) merged[key] = spec;
+        }
     } catch {
         // use fallback only
     }
 
-    return fallback;
+    return merged;
 }
 
 export function getSortedRolesForMember({ id: guildId }: Guild, member: GuildMember) {
     const memberRoles = new Set(member.roles ?? []);
 
-    // The guild id is the @everyone role
     return GuildRoleStore
         .getSortedRoles(guildId)
         .filter(role => role.id === guildId || memberRoles.has(role.id));

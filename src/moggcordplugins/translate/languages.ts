@@ -36,6 +36,7 @@ export type DeeplLanguage = keyof typeof DeeplLanguages;
 
 export const GoogleLanguages = {
     "auto": "Detect language",
+    "user": "Your language (Discord)",
     "af": "Afrikaans",
     "sq": "Albanian",
     "am": "Amharic",
@@ -173,6 +174,7 @@ export const GoogleLanguages = {
 
 export const DeeplLanguages = {
     "": "Detect language",
+    "user": "Your language (Discord)",
     "ace": "Acehnese",
     "af": "Afrikaans",
     "sq": "Albanian",
