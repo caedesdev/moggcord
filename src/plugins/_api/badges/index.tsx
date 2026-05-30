@@ -81,7 +81,7 @@ const UserPluginContributorBadge: ProfileBadge = {
 
 let DonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
 let EquicordDonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
-let MoggcordBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
+let MoggcordBadges = {} as any;
 
 async function loadBadges(url: string, noCache = false) {
     const init = {} as RequestInit;
@@ -93,7 +93,7 @@ async function loadBadges(url: string, noCache = false) {
 async function loadAllBadges(noCache = false) {
     const vencordBadges = await loadBadges("https://badges.vencord.dev/badges.json", noCache).catch(() => ({}));
     const equicordBadges = await loadBadges("https://badge.equicord.org/badges.json", noCache).catch(() => ({}));
-    const moggcordBadges = await loadBadges("https://raw.githubusercontent.com/caedesdev/moggcord/main/merged_badges.json", noCache).catch(() => ({}));
+    const moggcordBadges = await loadBadges("https://raw.githubusercontent.com/caedesdev/moggcord/main/badges.json", noCache).catch(() => ({}));
 
     DonorBadges = vencordBadges;
     EquicordDonorBadges = equicordBadges;
@@ -270,11 +270,19 @@ export default definePlugin({
 
     getMoggcordBadges(userId: string) {
         try {
-            const userBadges = MoggcordBadges[userId];
+            // Support both old and new format
+            const userBadges = MoggcordBadges[userId] || (MoggcordBadges.users && MoggcordBadges.users[userId]);
             if (!userBadges || !Array.isArray(userBadges)) return [];
 
             const results: ProfileBadge[] = [];
-            for (const badge of userBadges) {
+            for (const badgeOrId of userBadges) {
+                if (!badgeOrId) continue;
+
+                let badge = badgeOrId;
+                if (typeof badgeOrId === "string" && MoggcordBadges.badges) {
+                     badge = MoggcordBadges.badges[badgeOrId];
+                }
+
                 if (!badge) continue;
 
                 const iconSrc = (badge as any).badge || (badge as any).iconSrc || (badge as any).icon || (badge as any).url;

@@ -1,0 +1,70 @@
+{
+  "badges": {
+    "creator_of_moggcord": {
+      "badge": "https://cdn.discordapp.com/icons/1508856416138694686/f723807161838ceb50b1303ac5f4958e.webp?size=1024",
+      "tooltip": "Creator of Moggcord",
+      "auto": true
+    },
+    "staff_moggcord": {
+      "badge": "https://i.imgur.com/RwDByY6.png",
+      "tooltip": "Staff of Moggcord",
+      "auto": true
+    },
+    "developer_moggcord": {
+      "badge": "https://i.imgur.com/vVTYtji.png",
+      "tooltip": "Developer of Moggcord",
+      "auto": true
+    },
+    "helper_moggcord": {
+      "badge": "https://i.imgur.com/dvgfcuW.png",
+      "tooltip": "Helper of Moggcord",
+      "auto": true
+    },
+    "partner": {
+      "badge": "https://i.imgur.com/Wyw0BqM.png",
+      "tooltip": "Partner"
+    },
+    "verified": {
+      "badge": "https://i.imgur.com/gVC6iEZ.png",
+      "tooltip": "Verified"
+    },
+    "vip": {
+      "badge": "https://i.imgur.com/tkxNYVs.png",
+      "tooltip": "VIP"
+    },
+    "certified_artist": {
+      "badge": "https://i.imgur.com/SyvIw01.png",
+      "tooltip": "Certified Artist"
+    },
+    "contributor": {
+      "badge": "https://i.imgur.com/sr7Su5H.png",
+      "tooltip": "Contributor"
+    },
+    "bug_hunter_lv1": {
+      "badge": "https://i.imgur.com/ksv6REv.png",
+      "tooltip": "Bug Hunter lv1"
+    },
+    "early_verified_developer": {
+      "badge": "https://i.imgur.com/SxrexRu.png",
+      "tooltip": "Early Verified Developer"
+    },
+    "early_supporter": {
+      "badge": "https://i.imgur.com/YR1DCoB.png",
+      "tooltip": "Early Supporter"
+    },
+    "supporters_moggcord": {
+      "badge": "https://i.imgur.com/Rr3Ixu0.gif",
+      "tooltip": "Supporters Moggcord",
+      "auto": true
+    },
+    "gifter_moggcord": {
+      "badge": "https://i.imgur.com/7A3sexF.png",
+      "tooltip": "Gifter Moggcord"
+    }
+  },
+  "users": {
+    "285824493748748299": [
+      "creator_of_moggcord"
+    ]
+  }
+}

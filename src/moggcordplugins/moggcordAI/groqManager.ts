@@ -1,27 +1,6 @@
-/*
- * Equicord, a Discord client mod
- * Copyright (c) 2024 Vendicated and contributors
- * SPDX-License-Identifier: GPL-3.0-or-later
- */
-
-/**
- * groqManager.ts — Gestionnaire de clé Groq partagé entre les plugins
- *
- * Fonctionnalités :
- * - Clé API stockée dans DataStore (un seul endroit)
- * - Rotation automatique de modèle sur 429 (rate limit)
- *   llama-3.3-70b-versatile → llama-3.1-8b-instant → gemma2-9b-it
- * - Retry avec backoff exponentiel
- * - File d'attente pour éviter les bursts simultanés
- */
-
 import { DataStore } from "@api/index";
-
-// ── Clés DataStore ─────────────────────────────────────────────────────────────
-
 const DS_API_KEY = "groq-shared-api-key";
 
-// Modèles en ordre de fallback (limites séparées sur Groq)
 const GROQ_MODELS = [
     "llama-3.3-70b-versatile",    // Le meilleur — quota RPM: 30/min
     "llama3-70b-8192",            // Ancien stable performant

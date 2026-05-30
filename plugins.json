@@ -9077,7 +9077,7 @@
         "tags":  [
 
                  ],
-        "name":  "ShowHiddenChannels",
+        "name":  "ChannelsShowHidden",
         "description":  "Show channels that you do not have access to view.",
         "authors":  [
                         {
