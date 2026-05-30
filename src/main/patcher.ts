@@ -87,7 +87,17 @@ if (!IS_VANILLA) {
 
     class BrowserWindow extends electron.BrowserWindow {
         constructor(options: BrowserWindowConstructorOptions) {
-            if (options?.webPreferences?.preload && options.title) {
+            const isDiscordPopout = (options as any)?.isDiscordPopout === true;
+
+            if (isDiscordPopout && options.webPreferences) {
+                if (process.env.DISCORD_PRELOAD) {
+                    options.webPreferences.preload = process.env.DISCORD_PRELOAD;
+                }
+                options.webPreferences.sandbox = false;
+                options.webPreferences.backgroundThrottling = false;
+            }
+
+            if (options?.webPreferences?.preload && options.title && !isDiscordPopout) {
                 const original = options.webPreferences.preload;
                 const isMainWindow = options.title === "Discord";
                 options.webPreferences.preload = join(__dirname, "preload.js");
@@ -143,7 +153,9 @@ if (!IS_VANILLA) {
                 super(options);
 
                 installPopoutGuard(this.webContents);
-                injectNoDragGuard(this.webContents);
+                if (!isDiscordPopout) {
+                    injectNoDragGuard(this.webContents);
+                }
 
                 if (isMainWindow) {
                     installMoggcordLoadingScreen(this);
@@ -261,7 +273,13 @@ if (!IS_VANILLA) {
                 if (isMainWindow && settings.disableMinSize) {
                     this.setMinimumSize = (_width: number, _height: number) => { };
                 }
-            } else super(options);
+            } else {
+                super(options);
+                installPopoutGuard(this.webContents);
+                if (!isDiscordPopout) {
+                    injectNoDragGuard(this.webContents);
+                }
+            }
 
             // Paint Moggcord branding over Discord's native splash window.
             try {

@@ -59,6 +59,12 @@
 
 /*  RolesAndUsersPermissions Component */
 
+.vc-permviewer-modal-content {
+    min-height: 420px;
+    padding: 8px 16px 16px !important;
+    overflow: hidden !important;
+}
+
 .vc-permviewer-modal-no-perms {
     width: 100%;
     min-height: 220px;

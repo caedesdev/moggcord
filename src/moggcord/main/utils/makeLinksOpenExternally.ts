@@ -122,7 +122,17 @@ export function makeLinksOpenExternally(win: BrowserWindow) {
             return result;
         }
 
-        if (url === "about:blank") return { action: "allow" };
+        if (url === "about:blank") {
+            if (frameName === "authorize" || frameName.startsWith("DISCORD_")) {
+                return {
+                    action: "allow",
+                    overrideBrowserWindowOptions: {
+                        isDiscordPopout: true
+                    } as any
+                };
+            }
+            return { action: "allow" };
+        }
 
         // Drop the static temp page Discord web loads for the connections popout
         if (frameName === "authorize" && searchParams.get("loading") === "true") return { action: "deny" };

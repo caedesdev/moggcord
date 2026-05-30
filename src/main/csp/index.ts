@@ -77,6 +77,11 @@ export const CspPolicies: PolicyMap = {
     "*.sndcdn.com": CSPSrc,
     "soundcloud.com": CSPSrc,
     "*.soundcloud.com": CSPSrc,
+
+    // hCaptcha (bot verification, OAuth flows)
+    "hcaptcha.com": [...CSPSrc, "script-src"],
+    "*.hcaptcha.com": [...CSPSrc, "script-src"],
+    "newassets.hcaptcha.com": [...CSPSrc, "script-src"],
 };
 
 const findHeader = (headers: PolicyMap, headerName: Lowercase<string>) => {

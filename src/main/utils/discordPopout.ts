@@ -1,13 +1,10 @@
 /*
- * Vesktop, a desktop app aiming to give you a snappier Discord Experience
- * Copyright (c) 2023 Vendicated and Vencord contributors
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { BrowserWindow, BrowserWindowConstructorOptions } from "electron";
-import { Settings } from "main/settings";
+import { BrowserWindow, type BrowserWindowConstructorOptions } from "electron";
 
-import { handleExternalUrl } from "./makeLinksOpenExternally";
+import { RendererSettings } from "../settings";
 
 const ALLOWED_FEATURES = new Set([
     "width",
@@ -32,12 +29,15 @@ const ALLOWED_FEATURES = new Set([
 
 const MIN_POPOUT_WIDTH = 320;
 const MIN_POPOUT_HEIGHT = 180;
+
+const settings = RendererSettings.store;
+
 const DEFAULT_POPOUT_OPTIONS: BrowserWindowConstructorOptions = {
     title: "Discord Popout",
     backgroundColor: "#2f3136",
     minWidth: MIN_POPOUT_WIDTH,
     minHeight: MIN_POPOUT_HEIGHT,
-    frame: Settings.store.customTitleBar !== true,
+    frame: !settings.frameless && !settings.mainWindowFrameless,
     titleBarStyle: process.platform === "darwin" ? "hidden" : undefined,
     trafficLightPosition:
         process.platform === "darwin"
@@ -46,10 +46,18 @@ const DEFAULT_POPOUT_OPTIONS: BrowserWindowConstructorOptions = {
                   y: 3
               }
             : undefined,
-    autoHideMenuBar: Settings.store.enableMenu
+    autoHideMenuBar: true
 };
 
 export const PopoutWindows = new Map<string, BrowserWindow>();
+
+let popoutCounter = 0;
+
+export function stablePopoutKey(frameName: string): string {
+    if (frameName.startsWith("DISCORD_")) return frameName;
+    if (frameName) return `DISCORD_${frameName}`;
+    return `DISCORD_POPOUT_${++popoutCounter}`;
+}
 
 function focusWindow(window: BrowserWindow) {
     window.setAlwaysOnTop(true);
@@ -70,7 +78,7 @@ function parseFeatureValue(feature: string) {
 function parseWindowFeatures(features: string) {
     const keyValuesParsed = features.split(",");
 
-    return keyValuesParsed.reduce((features, feature) => {
+    return keyValuesParsed.reduce<Record<string, unknown>>((features, feature) => {
         const [key, value] = feature.split("=");
         if (ALLOWED_FEATURES.has(key)) features[key] = parseFeatureValue(value);
 
@@ -82,26 +90,22 @@ export function createOrFocusPopup(key: string, features: string) {
     const existingWindow = PopoutWindows.get(key);
     if (existingWindow) {
         focusWindow(existingWindow);
-        return <const>{ action: "deny" };
+        return { action: "deny" } as const;
     }
 
-    return <const>{
+    return {
         action: "allow",
         overrideBrowserWindowOptions: {
             ...DEFAULT_POPOUT_OPTIONS,
             ...parseWindowFeatures(features)
         }
-    };
+    } as const;
 }
 
-export function setupPopout(win: BrowserWindow, key: string) {
+export function setupPopout(win: BrowserWindow, key: string, openExternal: (url: string) => void) {
     win.setMenuBarVisibility(false);
 
     PopoutWindows.set(key, win);
-
-    /* win.webContents.on("will-navigate", (evt, url) => {
-        // maybe prevent if not origin match
-    })*/
 
     win.on("enter-html-full-screen", () => {
         win.setFullScreen(true);
@@ -110,7 +114,10 @@ export function setupPopout(win: BrowserWindow, key: string) {
         win.setFullScreen(false);
     });
 
-    win.webContents.setWindowOpenHandler(({ url }) => handleExternalUrl(url));
+    win.webContents.setWindowOpenHandler(({ url }) => {
+        openExternal(url);
+        return { action: "deny" };
+    });
 
     win.once("closed", () => {
         win.removeAllListeners();

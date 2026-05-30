@@ -4,6 +4,8 @@
 
 import { shell, type WebContents } from "electron";
 
+import { createOrFocusPopup, setupPopout, stablePopoutKey } from "./discordPopout";
+
 const guardedWebContents = new WeakSet<WebContents>();
 
 const DISCORD_HOSTNAMES = ["discord.com", "canary.discord.com", "ptb.discord.com"];
@@ -31,31 +33,25 @@ export function isOverlayFrame(frameName: string | undefined): boolean {
     return !!frameName && OVERLAY_FRAME_NAMES.has(frameName);
 }
 
-function isPopoutRateLimited(): boolean {
+function recordPopoutRequest(): boolean {
     const now = Date.now();
     while (popoutTimestamps.length > 0 && now - popoutTimestamps[0] > POPOUT_RATE_LIMIT_WINDOW_MS) {
         popoutTimestamps.shift();
     }
     if (popoutTimestamps.length >= POPOUT_RATE_LIMIT_MAX) {
         console.warn("[Moggcord] Popout rate-limited (overlay retry loop?)");
-        return true;
+        return false;
     }
     popoutTimestamps.push(now);
-    return false;
+    return true;
 }
 
 export function shouldBlockWindowOpen(details: { url: string; frameName?: string }): boolean {
-    const { url, frameName = "" } = details;
+    const { frameName = "" } = details;
 
     if (isOverlayFrame(frameName)) {
         console.log("[Moggcord] Blocked overlay popout:", frameName);
         return true;
-    }
-
-    if (isDiscordPopoutUrl(url)) {
-        if (!frameName.startsWith("DISCORD_") && isPopoutRateLimited()) {
-            return true;
-        }
     }
 
     return false;
@@ -65,21 +61,7 @@ export function shouldBlockExternalOpen(url: string): boolean {
     return isDiscordPopoutUrl(url);
 }
 
-type WindowOpenHandler = Parameters<WebContents["setWindowOpenHandler"]>[0];
-
-const defaultWindowOpenHandler: WindowOpenHandler = ({ url, frameName }) => {
-    if (shouldBlockWindowOpen({ url, frameName })) {
-        return { action: "deny" };
-    }
-
-    if (url === "about:blank") {
-        return { action: "allow" };
-    }
-
-    if (isDiscordPopoutUrl(url)) {
-        return { action: "deny" };
-    }
-
+function openExternalUrl(url: string) {
     try {
         const { protocol } = new URL(url);
         switch (protocol) {
@@ -91,7 +73,60 @@ const defaultWindowOpenHandler: WindowOpenHandler = ({ url, frameName }) => {
                 shell.openExternal(url);
         }
     } catch { }
+}
 
+type WindowOpenHandler = Parameters<WebContents["setWindowOpenHandler"]>[0];
+
+const defaultWindowOpenHandler: WindowOpenHandler = ({ url, frameName = "", features }) => {
+    if (shouldBlockWindowOpen({ url, frameName })) {
+        return { action: "deny" };
+    }
+
+    try {
+        var { protocol, hostname, pathname, searchParams } = new URL(url);
+    } catch {
+        if (url === "about:blank") return { action: "allow" };
+        return { action: "deny" };
+    }
+
+    const isDiscordPopout = pathname === "/popout" && DISCORD_HOSTNAMES.includes(hostname);
+    if (isDiscordPopout || (frameName.startsWith("DISCORD_") && isDiscordPopout)) {
+        if (!recordPopoutRequest()) {
+            return { action: "deny" };
+        }
+
+        const key = stablePopoutKey(frameName);
+        const result = createOrFocusPopup(key, features);
+        if (result.action === "allow") {
+            return {
+                action: "allow",
+                overrideBrowserWindowOptions: {
+                    ...result.overrideBrowserWindowOptions,
+                    isDiscordPopout: true
+                } as any
+            };
+        }
+        return result;
+    }
+
+    if (url === "about:blank") {
+        if (frameName === "authorize" || frameName.startsWith("DISCORD_")) {
+            return {
+                action: "allow",
+                overrideBrowserWindowOptions: {
+                    isDiscordPopout: true
+                } as any
+            };
+        }
+        return { action: "allow" };
+    }
+
+    // Static placeholder Discord loads before the OAuth / bot verification popout navigates.
+    if (frameName === "authorize" && searchParams.get("loading") === "true") {
+        return { action: "deny" };
+    }
+
+    openExternalUrl(url);
     return { action: "deny" };
 };
 
@@ -112,9 +147,29 @@ export function installPopoutGuard(webContents: WebContents) {
 
     webContents.setWindowOpenHandler(defaultWindowOpenHandler);
 
-    webContents.on("did-create-window", (childWin, { frameName }) => {
+    webContents.on("did-create-window", (childWin, { frameName, options, url }: any) => {
         if (isOverlayFrame(frameName)) {
             childWin.close();
+            return;
+        }
+
+        let isPopout = frameName.startsWith("DISCORD_") || frameName === "authorize";
+
+        if (!isPopout) {
+            if (options && options.isDiscordPopout) {
+                isPopout = true;
+            } else if (url) {
+                try {
+                    const { pathname, hostname } = new URL(url);
+                    if (pathname === "/popout" && DISCORD_HOSTNAMES.includes(hostname)) {
+                        isPopout = true;
+                    }
+                } catch { }
+            }
+        }
+
+        if (isPopout) {
+            setupPopout(childWin, stablePopoutKey(frameName), openExternalUrl);
         }
     });
 }

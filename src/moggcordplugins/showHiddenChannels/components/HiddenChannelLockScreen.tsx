@@ -24,7 +24,7 @@ import openRolesAndUsersPermissionsModal from "@plugins/permissionsViewer/compon
 import { sortPermissionOverwrites } from "@plugins/permissionsViewer/utils";
 import { classes } from "@utils/misc";
 import { formatDuration } from "@utils/text";
-import type { Channel, RoleOrUserPermission } from "@vencord/discord-types";
+import type { Channel, Role, RoleOrUserPermission } from "@vencord/discord-types";
 import { PermissionOverwriteType } from "@vencord/discord-types/enums";
 import { findByPropsLazy, findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
 import { EmojiStore, FluxDispatcher, GuildMemberStore, GuildRoleStore, GuildStore, Parser, PermissionsBits, PermissionStore, SnowflakeUtils, Timestamp, Tooltip, UserStore, useEffect, useMemo, useState } from "@webpack/common";
@@ -111,44 +111,78 @@ type AccessEntry = {
     color?: string;
 };
 
-const hasViewChannel = (allow: bigint) => (allow & PermissionsBits.VIEW_CHANNEL) === PermissionsBits.VIEW_CHANNEL;
+function getRequiredPermission(channel: Channel): bigint {
+    return channel.isGuildVoice() || channel.isGuildStageVoice()
+        ? PermissionsBits.CONNECT
+        : PermissionsBits.VIEW_CHANNEL;
+}
+
+function applyOverwrite(base: bigint, overwrite: { allow: bigint; deny: bigint; }): bigint {
+    return (base & ~overwrite.deny) | overwrite.allow;
+}
+
+function roleHasChannelAccess(role: Role, channel: Channel, permission: bigint): boolean {
+    let perms = role.permissions;
+
+    const everyoneOverwrite = channel.permissionOverwrites[channel.guild_id];
+    if (everyoneOverwrite) {
+        perms = applyOverwrite(perms, everyoneOverwrite);
+    }
+
+    const roleOverwrite = channel.permissionOverwrites[role.id];
+    if (roleOverwrite) {
+        perms = applyOverwrite(perms, roleOverwrite);
+    }
+
+    if ((perms & PermissionsBits.ADMINISTRATOR) === PermissionsBits.ADMINISTRATOR) return true;
+    return (perms & permission) === permission;
+}
+
+function hasExplicitAllow(allow: bigint, deny: bigint, permission: bigint): boolean {
+    if ((deny & permission) === permission) return false;
+    return (allow & permission) === permission;
+}
 
 function getAccessEntries(channel: Channel): AccessEntry[] {
     const entries: AccessEntry[] = [];
+    const seen = new Set<string>();
     const guild = GuildStore.getGuild(channel.guild_id);
+    const permission = getRequiredPermission(channel);
+
+    const addEntry = (entry: AccessEntry) => {
+        if (seen.has(entry.key)) return;
+        seen.add(entry.key);
+        entries.push(entry);
+    };
 
     if (guild?.ownerId) {
         const owner = UserStore.getUser(guild.ownerId);
-        entries.push({
+        addEntry({
             key: `owner-${guild.ownerId}`,
             name: owner?.globalName ?? owner?.username ?? "Server Owner",
             type: "Owner"
         });
     }
 
-    const overwrites = Object.values(channel.permissionOverwrites)
-        .filter(overwrite => hasViewChannel(overwrite.allow));
+    const roles = GuildRoleStore.getSortedRoles(channel.guild_id) ?? [];
+    for (const role of roles) {
+        if (!roleHasChannelAccess(role, channel, permission)) continue;
 
-    const roleOverwrites = overwrites
-        .filter(overwrite => overwrite.type === PermissionOverwriteType.ROLE)
-        .sort((a, b) => (GuildRoleStore.getRole(channel.guild_id, b.id)?.position ?? 0) - (GuildRoleStore.getRole(channel.guild_id, a.id)?.position ?? 0));
-
-    for (const overwrite of roleOverwrites) {
-        const role = GuildRoleStore.getRole(channel.guild_id, overwrite.id);
-        entries.push({
-            key: `role-${overwrite.id}`,
-            name: role?.name ?? (overwrite.id === channel.guild_id ? "@everyone" : "Unknown role"),
+        addEntry({
+            key: `role-${role.id}`,
+            name: role.name,
             type: "Role",
-            color: role?.colorString
+            color: role.colorString
         });
     }
 
-    for (const overwrite of overwrites) {
+    for (const overwrite of Object.values(channel.permissionOverwrites)) {
         if (overwrite.type !== PermissionOverwriteType.MEMBER) continue;
+        if (!hasExplicitAllow(overwrite.allow, overwrite.deny, permission)) continue;
 
         const member = GuildMemberStore.getMember(channel.guild_id, overwrite.id);
         const user = UserStore.getUser(overwrite.id);
-        entries.push({
+        addEntry({
             key: `user-${overwrite.id}`,
             name: member?.nick ?? user?.globalName ?? user?.username ?? "Unknown user",
             type: "User"
@@ -158,9 +192,13 @@ function getAccessEntries(channel: Channel): AccessEntry[] {
     return entries;
 }
 
-function AccessListFallback({ entries }: { entries: AccessEntry[]; }) {
+function AccessListFallback({ channel, entries }: { channel: Channel; entries: AccessEntry[]; }) {
+    const permissionLabel = channel.isGuildVoice() || channel.isGuildStageVoice()
+        ? "CONNECT"
+        : "VIEW_CHANNEL";
+
     if (entries.length === 0) {
-        return <BaseText size="md">No explicit VIEW_CHANNEL overwrites found.</BaseText>;
+        return <BaseText size="md">No roles or users with {permissionLabel} access found.</BaseText>;
     }
 
     return (
@@ -178,6 +216,7 @@ function AccessListFallback({ entries }: { entries: AccessEntry[]; }) {
 function AllowedUsersAndRolesSection({ channel, permissions }: { channel: Channel; permissions: RoleOrUserPermission[]; }) {
     const { defaultAllowedUsersAndRolesDropdownState } = settings.use(["defaultAllowedUsersAndRolesDropdownState"]);
     const accessEntries = useMemo(() => getAccessEntries(channel), [channel]);
+    const isTextLike = !channel.isGuildVoice() && !channel.isGuildStageVoice();
 
     return (
         <div className={cl("allowed-users-and-roles-container")}>
@@ -220,9 +259,16 @@ function AllowedUsersAndRolesSection({ channel, permissions }: { channel: Channe
                 </Tooltip>
             </div>
             {defaultAllowedUsersAndRolesDropdownState && (
-                channelBeginHeaderFromPatch
-                    ? <ChannelBeginHeader channel={channel} />
-                    : <AccessListFallback entries={accessEntries} />
+                isTextLike ? (
+                    <>
+                        {channelBeginHeaderFromPatch && <ChannelBeginHeader channel={channel} />}
+                        <AccessListFallback channel={channel} entries={accessEntries} />
+                    </>
+                ) : channelBeginHeaderFromPatch ? (
+                    <ChannelBeginHeader channel={channel} />
+                ) : (
+                    <AccessListFallback channel={channel} entries={accessEntries} />
+                )
             )}
         </div>
     );
