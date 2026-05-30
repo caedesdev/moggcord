@@ -24,6 +24,7 @@ import { registerMediaPermissionsForSession } from "../moggcord/main/mediaPermis
 
 import { installMoggcordHomeIcon } from "./homeButtonIcon";
 import { installMoggcordLoadingScreen } from "./loadingScreen";
+import { injectNoDragGuard } from "./noDragGuard";
 import { schedulePostInstallRelaunchIfNeeded } from "./postInstallRelaunch";
 import { MOGGCORD_AVATAR_DATA_URL } from "./splashAssets";
 import { installMoggcordSplashOverlay } from "./splashOverlay";
@@ -142,6 +143,7 @@ if (!IS_VANILLA) {
                 super(options);
 
                 installPopoutGuard(this.webContents);
+                injectNoDragGuard(this.webContents);
 
                 if (isMainWindow) {
                     installMoggcordLoadingScreen(this);

@@ -16,7 +16,6 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { BaseText } from "@components/BaseText";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Flex } from "@components/Flex";
 import { InfoIcon, OwnerCrownIcon } from "@components/Icons";
@@ -25,11 +24,10 @@ import { cl, getPermissionBits, getPermissionSpecDescription, getPermissionSpecT
 import { copyToClipboard } from "@utils/clipboard";
 import { getIntlMessage, getUniqueUsername } from "@utils/discord";
 import { Logger } from "@utils/Logger";
-import { ModalCloseButton, ModalContent, ModalHeader, ModalProps, ModalRoot, ModalSize, openModalLazy } from "@utils/modal";
-import { Guild, Role, RoleOrUserPermission, UnicodeEmoji, User } from "@vencord/discord-types";
+import { Guild, RenderModalProps, Role, RoleOrUserPermission, UnicodeEmoji, User } from "@vencord/discord-types";
 import { PermissionOverwriteType } from "@vencord/discord-types/enums";
 import { findByCodeLazy } from "@webpack";
-import { ContextMenuApi, FluxDispatcher, GuildMemberStore, GuildRoleStore, Menu, ScrollerThin, Text, Tooltip, useEffect, useMemo, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
+import { ContextMenuApi, FluxDispatcher, GuildMemberStore, GuildRoleStore, Menu, Modal, openModalLazy, ScrollerThin, Text, Tooltip, useEffect, useMemo, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
 
 import { settings } from "..";
 import { PermissionAllowedIcon, PermissionDefaultIcon, PermissionDeniedIcon } from "./icons";
@@ -42,7 +40,7 @@ let didWarnRoleIconError = false;
 interface RolesAndUsersPermissionsProps {
     permissions: Array<RoleOrUserPermission>;
     guild: Guild;
-    modalProps: ModalProps;
+    modalProps: RenderModalProps;
     header: string;
 }
 
@@ -100,22 +98,20 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
     const roles = GuildRoleStore.getRolesSnapshot(guild.id) ?? {};
 
     return (
-        <ModalRoot {...modalProps} size={ModalSize.LARGE}>
-            <ModalHeader>
-                <BaseText size="lg" weight="semibold" style={{ flexGrow: 1 }}>{`${header} Permissions`}</BaseText>
-                <ModalCloseButton onClick={modalProps.onClose} />
-            </ModalHeader>
+        <Modal
+            {...modalProps}
+            size="xl"
+            title={`${header} Permissions`}
+        >
+            {!selectedItem && (
+                <div className={cl("modal-no-perms")}>
+                    <Text variant="heading-lg/normal">No permissions to display!</Text>
+                </div>
+            )}
 
-            <ModalContent>
-                {!selectedItem && (
-                    <div className={cl("modal-no-perms")}>
-                        <Text variant="heading-lg/normal">No permissions to display!</Text>
-                    </div>
-                )}
-
-                {selectedItem && (
-                    <div className={cl("modal-container")}>
-                    <ScrollerThin className={cl("modal-list")} orientation="auto">
+            {selectedItem && (
+                <div className={cl("modal-container")}>
+                    <ScrollerThin className={cl("modal-list")} orientation="vertical">
                         {sortedPermissions.map((permission, index) => {
                             const user: User | undefined = UserStore.getUser(permission.id ?? "");
                             const role: Role | undefined = roles[permission.id ?? ""];
@@ -170,7 +166,7 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
                                         <Text variant="text-md/normal" className={cl("modal-list-item-text")}>
                                             {
                                                 permission.type === PermissionOverwriteType.ROLE
-                                                    ? role?.name ?? "Unknown Role"
+                                                    ? role?.name ?? (permission as Role).name ?? "Unknown Role"
                                                     : permission.type === PermissionOverwriteType.MEMBER
                                                         ? (user != null && getUniqueUsername(user)) ?? "Unknown User"
                                                         : (
@@ -187,7 +183,7 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
                         })}
                     </ScrollerThin>
                     <div className={cl("modal-divider")} />
-                    <ScrollerThin className={cl("modal-perms")} orientation="auto">
+                    <ScrollerThin className={cl("modal-perms")} orientation="vertical">
                         {permissionBits.map(bit => {
                             const spec = guildPermissionSpecMap[String(bit)];
                             if (!spec) return null;
@@ -220,10 +216,9 @@ function RolesAndUsersPermissionsComponent({ permissions, guild, modalProps, hea
                             );
                         })}
                     </ScrollerThin>
-                    </div>
-                )}
-            </ModalContent>
-        </ModalRoot>
+                </div>
+            )}
+        </Modal>
     );
 }
 
@@ -312,18 +307,16 @@ function UserContextMenu({ userId }: { userId: string; }) {
 
 function PermissionsModalErrorFallback({ message, wrappedProps }: { message: string; wrappedProps: RolesAndUsersPermissionsProps; }) {
     return (
-        <ModalRoot {...wrappedProps.modalProps} size={ModalSize.LARGE}>
-            <ModalHeader>
-                <BaseText size="lg" weight="semibold" style={{ flexGrow: 1 }}>{`${wrappedProps.header} Permissions`}</BaseText>
-                <ModalCloseButton onClick={wrappedProps.modalProps.onClose} />
-            </ModalHeader>
-            <ModalContent>
-                <div className={cl("modal-error")}>
-                    <Text variant="heading-lg/semibold">Permissions viewer could not load.</Text>
-                    <Text variant="text-sm/normal" color="text-muted">{message}</Text>
-                </div>
-            </ModalContent>
-        </ModalRoot>
+        <Modal
+            {...wrappedProps.modalProps}
+            size="xl"
+            title={`${wrappedProps.header} Permissions`}
+        >
+            <div className={cl("modal-error")}>
+                <Text variant="heading-lg/semibold">Permissions viewer could not load.</Text>
+                <Text variant="text-sm/normal" color="text-muted">{message}</Text>
+            </div>
+        </Modal>
     );
 }
 

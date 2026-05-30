@@ -20,7 +20,6 @@ const CSS = `
     gap: 20px;
     background: radial-gradient(circle at 50% 38%, #1d1b2e 0%, #0c0b14 72%);
     font-family: "gg sans", "Segoe UI", system-ui, sans-serif;
-    -webkit-app-region: drag;
     user-select: none;
     animation: mgSplashFade .35s ease both;
 }

@@ -20,7 +20,6 @@ const CSS = `
     gap: 26px;
     background: radial-gradient(circle at 50% 40%, #1d1b2e 0%, #0c0b14 75%);
     font-family: "gg sans", "Segoe UI", system-ui, sans-serif;
-    -webkit-app-region: drag;
     user-select: none;
     opacity: 1;
     transition: opacity .45s ease;
@@ -140,7 +139,8 @@ const BOOTSTRAP = `(function () {
         '[class*="authBox"]',
         '[class*="qrCode"]',
         'input[type="password"]',
-        'input[name="email"]'
+        'input[name="email"]',
+        '[role="dialog"]'
     ].join(",");
 
     // Discord may wipe our node while it swaps the loading screen; rebuild it
