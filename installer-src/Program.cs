@@ -129,15 +129,26 @@ namespace MoggcordInstaller
 
             // Drag window from HTML
             _webView.NavigationCompleted += (s, e) => {
-                _webView.CoreWebView2.WebMessageReceived += (sender, args) => {
-                    if (args.TryGetWebMessageAsString() == "drag") {
-                        ReleaseCapture();
-                        SendMessage(this.Handle, 0xA1, 0x2, 0);
-                    }
-                };
+                RunOnUiThread(() => {
+                    if (_webView.CoreWebView2 == null) return;
+                    _webView.CoreWebView2.WebMessageReceived += (sender, args) => {
+                        if (args.TryGetWebMessageAsString() == "drag") {
+                            ReleaseCapture();
+                            SendMessage(this.Handle, 0xA1, 0x2, 0);
+                        }
+                    };
+                });
             };
 
-            InitializeWebView();
+            _ = InitializeWebViewAsync();
+        }
+
+        private void RunOnUiThread(Action action)
+        {
+            if (InvokeRequired)
+                BeginInvoke(action);
+            else
+                action();
         }
 
         [DllImport("user32.dll")]
@@ -145,14 +156,14 @@ namespace MoggcordInstaller
         [DllImport("user32.dll")]
         public static extern bool ReleaseCapture();
 
-        private async void InitializeWebView()
+        private async Task InitializeWebViewAsync()
         {
             var userDataFolder = Path.Combine(Path.GetTempPath(), "MoggcordInstaller_WebView2");
             CoreWebView2Environment env;
             try
             {
                 env = await CoreWebView2Environment.CreateAsync(null, userDataFolder);
-                await _webView.EnsureCoreWebView2Async(env);
+                await RunOnUiThreadAsync(() => _webView.EnsureCoreWebView2Async(env));
             }
             catch (Exception ex) when (
                 ex is System.Runtime.InteropServices.COMException ||
@@ -161,19 +172,44 @@ namespace MoggcordInstaller
                 ex.Message.Contains("0x80070002")
             )
             {
-                // WebView2 Runtime not installed on this machine
-                MessageBox.Show(
-                    "Microsoft Edge WebView2 Runtime is required to run the Moggcord Installer but was not found on your system.\n\n" +
-                    "Please download and install it from:\nhttps://aka.ms/webview2\n\n" +
-                    "After installing, restart the Moggcord Installer.",
-                    "WebView2 Runtime Required",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Error
-                );
-                Application.Exit();
+                RunOnUiThread(() =>
+                {
+                    MessageBox.Show(
+                        "Microsoft Edge WebView2 Runtime is required to run the Moggcord Installer but was not found on your system.\n\n" +
+                        "Please download and install it from:\nhttps://aka.ms/webview2\n\n" +
+                        "After installing, restart the Moggcord Installer.",
+                        "WebView2 Runtime Required",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Error
+                    );
+                    Application.Exit();
+                });
                 return;
             }
 
+            await RunOnUiThreadAsync(CompleteWebViewSetupAsync);
+        }
+
+        private Task RunOnUiThreadAsync(Func<Task> action)
+        {
+            var tcs = new TaskCompletionSource<object>();
+            RunOnUiThread(async () =>
+            {
+                try
+                {
+                    await action();
+                    tcs.SetResult(null);
+                }
+                catch (Exception ex)
+                {
+                    tcs.SetException(ex);
+                }
+            });
+            return tcs.Task;
+        }
+
+        private async Task CompleteWebViewSetupAsync()
+        {
             _backend = new MoggcordBackend(this, _webView);
             _webView.CoreWebView2.AddHostObjectToScript("backend", _backend);
 
@@ -294,38 +330,53 @@ namespace MoggcordInstaller
 
         public void SetStatus(string type, string text)
         {
-            if (_form == null || _webView?.CoreWebView2 == null)
+            if (_form == null || _webView == null)
             {
                 Console.WriteLine("[Moggcord] " + text);
                 return;
             }
-            _form.Invoke(new Action(() => {
+
+            RunOnUiThread(() =>
+            {
+                if (_webView.CoreWebView2 == null) return;
                 var safeText = text.Replace("'", "\\'").Replace("\n", " ");
-                _webView.CoreWebView2.ExecuteScriptAsync($"if(typeof setStatus === 'function') setStatus('{type}', '{safeText}');");
-            }));
+                _ = _webView.CoreWebView2.ExecuteScriptAsync($"if(typeof setStatus === 'function') setStatus('{type}', '{safeText}');");
+            });
         }
 
         public void SetProgress(double percent, string text, double mbDownloaded = -1, double mbTotal = -1)
         {
-            if (_form == null || _webView?.CoreWebView2 == null)
+            if (_form == null || _webView == null)
             {
                 Console.WriteLine($"[Moggcord] {text} ({percent:F0}%)");
                 return;
             }
-            _form.Invoke(new Action(() => {
+
+            RunOnUiThread(() =>
+            {
+                if (_webView.CoreWebView2 == null) return;
                 var safeText = text.Replace("\\", "\\\\").Replace("'", "\\'").Replace("\n", " ");
                 var percentStr = percent.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
                 if (mbDownloaded >= 0 && mbTotal >= 0)
                 {
-                    var mbDlStr    = mbDownloaded.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+                    var mbDlStr = mbDownloaded.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
                     var mbTotalStr = mbTotal.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
-                    _webView.CoreWebView2.ExecuteScriptAsync($"if(typeof setLoading === 'function') setLoading(true, '{safeText}', {percentStr}, {mbDlStr}, {mbTotalStr});");
+                    _ = _webView.CoreWebView2.ExecuteScriptAsync($"if(typeof setLoading === 'function') setLoading(true, '{safeText}', {percentStr}, {mbDlStr}, {mbTotalStr});");
                 }
                 else
                 {
-                    _webView.CoreWebView2.ExecuteScriptAsync($"if(typeof setLoading === 'function') setLoading(true, '{safeText}', {percentStr});");
+                    _ = _webView.CoreWebView2.ExecuteScriptAsync($"if(typeof setLoading === 'function') setLoading(true, '{safeText}', {percentStr});");
                 }
-            }));
+            });
+        }
+
+        private void RunOnUiThread(Action action)
+        {
+            if (_form == null) return;
+            if (_form.InvokeRequired)
+                _form.BeginInvoke(action);
+            else
+                action();
         }
 
         public async Task<bool> IsInjected(string path)

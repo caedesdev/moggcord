@@ -25,8 +25,9 @@ import { sortPermissionOverwrites } from "@plugins/permissionsViewer/utils";
 import { classes } from "@utils/misc";
 import { formatDuration } from "@utils/text";
 import type { Channel, RoleOrUserPermission } from "@vencord/discord-types";
+import { PermissionOverwriteType } from "@vencord/discord-types/enums";
 import { findByPropsLazy, findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
-import { EmojiStore, FluxDispatcher, GuildMemberStore, GuildStore, Parser, PermissionsBits, PermissionStore, SnowflakeUtils, Timestamp, Tooltip, useEffect, useState } from "@webpack/common";
+import { EmojiStore, FluxDispatcher, GuildMemberStore, GuildRoleStore, GuildStore, Parser, PermissionsBits, PermissionStore, SnowflakeUtils, Timestamp, Tooltip, UserStore, useEffect, useMemo, useState } from "@webpack/common";
 import type { ComponentType } from "react";
 
 import { cl, settings } from "..";
@@ -63,9 +64,15 @@ const enum ChannelFlags {
 const ChatScrollClasses = findCssClassesLazy("auto", "managedReactiveScroller", "customTheme");
 const TagComponent = findComponentByCodeLazy("#{intl::FORUM_TAG_A11Y_FILTER_BY_TAG}");
 
-let ChannelBeginHeader: ComponentType<{ channel: Channel; }> = () => null;
+const noopChannelBeginHeader = () => null;
+let ChannelBeginHeader: ComponentType<{ channel: Channel; }> = noopChannelBeginHeader;
+let channelBeginHeaderFromPatch = false;
+
 export const setChannelBeginHeader = (value: ComponentType<{ channel: Channel; }>) => {
-    ChannelBeginHeader = value;
+    if (value && value !== noopChannelBeginHeader) {
+        ChannelBeginHeader = value;
+        channelBeginHeaderFromPatch = true;
+    }
 };
 
 const EmojiParser = findByPropsLazy("convertSurrogateToName");
@@ -97,8 +104,131 @@ const VideoQualityModesToNames = {
 
 const HiddenChannelLogo = "/assets/433e3ec4319a9d11b0cbe39342614982.svg";
 
-function HiddenChannelLockScreen({ channel }: { channel: Channel; }) {
+type AccessEntry = {
+    key: string;
+    name: string;
+    type: "Owner" | "Role" | "User";
+    color?: string;
+};
+
+const hasViewChannel = (allow: bigint) => (allow & PermissionsBits.VIEW_CHANNEL) === PermissionsBits.VIEW_CHANNEL;
+
+function getAccessEntries(channel: Channel): AccessEntry[] {
+    const entries: AccessEntry[] = [];
+    const guild = GuildStore.getGuild(channel.guild_id);
+
+    if (guild?.ownerId) {
+        const owner = UserStore.getUser(guild.ownerId);
+        entries.push({
+            key: `owner-${guild.ownerId}`,
+            name: owner?.globalName ?? owner?.username ?? "Server Owner",
+            type: "Owner"
+        });
+    }
+
+    const overwrites = Object.values(channel.permissionOverwrites)
+        .filter(overwrite => hasViewChannel(overwrite.allow));
+
+    const roleOverwrites = overwrites
+        .filter(overwrite => overwrite.type === PermissionOverwriteType.ROLE)
+        .sort((a, b) => (GuildRoleStore.getRole(channel.guild_id, b.id)?.position ?? 0) - (GuildRoleStore.getRole(channel.guild_id, a.id)?.position ?? 0));
+
+    for (const overwrite of roleOverwrites) {
+        const role = GuildRoleStore.getRole(channel.guild_id, overwrite.id);
+        entries.push({
+            key: `role-${overwrite.id}`,
+            name: role?.name ?? (overwrite.id === channel.guild_id ? "@everyone" : "Unknown role"),
+            type: "Role",
+            color: role?.colorString
+        });
+    }
+
+    for (const overwrite of overwrites) {
+        if (overwrite.type !== PermissionOverwriteType.MEMBER) continue;
+
+        const member = GuildMemberStore.getMember(channel.guild_id, overwrite.id);
+        const user = UserStore.getUser(overwrite.id);
+        entries.push({
+            key: `user-${overwrite.id}`,
+            name: member?.nick ?? user?.globalName ?? user?.username ?? "Unknown user",
+            type: "User"
+        });
+    }
+
+    return entries;
+}
+
+function AccessListFallback({ entries }: { entries: AccessEntry[]; }) {
+    if (entries.length === 0) {
+        return <BaseText size="md">No explicit VIEW_CHANNEL overwrites found.</BaseText>;
+    }
+
+    return (
+        <div className={cl("access-list")}>
+            {entries.map(entry => (
+                <div className={cl("access-entry")} key={entry.key}>
+                    <span className={cl("access-entry-type")}>{entry.type}</span>
+                    <span className={cl("access-entry-name")} style={{ color: entry.color }}>{entry.name}</span>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+function AllowedUsersAndRolesSection({ channel, permissions }: { channel: Channel; permissions: RoleOrUserPermission[]; }) {
     const { defaultAllowedUsersAndRolesDropdownState } = settings.use(["defaultAllowedUsersAndRolesDropdownState"]);
+    const accessEntries = useMemo(() => getAccessEntries(channel), [channel]);
+
+    return (
+        <div className={cl("allowed-users-and-roles-container")}>
+            <div className={cl("allowed-users-and-roles-container-title")}>
+                {isPluginEnabled(PermissionsViewerPlugin.name) && permissions.length > 0 && (
+                    <Tooltip text="Permission Details">
+                        {({ onMouseLeave, onMouseEnter }) => (
+                            <button
+                                onMouseLeave={onMouseLeave}
+                                onMouseEnter={onMouseEnter}
+                                className={cl("allowed-users-and-roles-container-permdetails-btn")}
+                                onClick={() => openRolesAndUsersPermissionsModal(permissions, GuildStore.getGuild(channel.guild_id)!, channel.name)}
+                            >
+                                <svg width="24" height="24" viewBox="0 0 24 24">
+                                    <path fill="currentColor" d="M7 12.001C7 10.8964 6.10457 10.001 5 10.001C3.89543 10.001 3 10.8964 3 12.001C3 13.1055 3.89543 14.001 5 14.001C6.10457 14.001 7 13.1055 7 12.001ZM14 12.001C14 10.8964 13.1046 10.001 12 10.001C10.8954 10.001 10 10.8964 10 12.001C10 13.1055 10.8954 14.001 12 14.001C13.1046 14.001 14 13.1055 14 12.001ZM19 10.001C20.1046 10.001 21 10.8964 21 12.001C21 13.1055 20.1046 14.001 19 14.001C17.8954 14.001 17 13.1055 17 12.001C17 10.8964 17.8954 10.001 19 10.001Z" />
+                                </svg>
+                            </button>
+                        )}
+                    </Tooltip>
+                )}
+                <BaseText size="lg" weight="bold">Allowed users and roles:</BaseText>
+                <Tooltip text={defaultAllowedUsersAndRolesDropdownState ? "Hide Allowed Users and Roles" : "View Allowed Users and Roles"}>
+                    {({ onMouseLeave, onMouseEnter }) => (
+                        <button
+                            onMouseLeave={onMouseLeave}
+                            onMouseEnter={onMouseEnter}
+                            className={cl("allowed-users-and-roles-container-toggle-btn")}
+                            onClick={() => settings.store.defaultAllowedUsersAndRolesDropdownState = !defaultAllowedUsersAndRolesDropdownState}
+                        >
+                            <svg
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                transform={defaultAllowedUsersAndRolesDropdownState ? "scale(1 -1)" : "scale(1 1)"}
+                            >
+                                <path fill="currentColor" d="M16.59 8.59003L12 13.17L7.41 8.59003L6 10L12 16L18 10L16.59 8.59003Z" />
+                            </svg>
+                        </button>
+                    )}
+                </Tooltip>
+            </div>
+            {defaultAllowedUsersAndRolesDropdownState && (
+                channelBeginHeaderFromPatch
+                    ? <ChannelBeginHeader channel={channel} />
+                    : <AccessListFallback entries={accessEntries} />
+            )}
+        </div>
+    );
+}
+
+function HiddenChannelLockScreen({ channel }: { channel: Channel; }) {
     const [permissions, setPermissions] = useState<RoleOrUserPermission[]>([]);
 
     const {
@@ -283,47 +413,7 @@ function HiddenChannelLockScreen({ channel }: { channel: Channel; }) {
                         </div>
                     </div>
                 }
-                <div className={cl("allowed-users-and-roles-container")}>
-                    <div className={cl("allowed-users-and-roles-container-title")}>
-                        {isPluginEnabled(PermissionsViewerPlugin.name) && permissions.length > 0 && (
-                            <Tooltip text="Permission Details">
-                                {({ onMouseLeave, onMouseEnter }) => (
-                                    <button
-                                        onMouseLeave={onMouseLeave}
-                                        onMouseEnter={onMouseEnter}
-                                        className={cl("allowed-users-and-roles-container-permdetails-btn")}
-                                        onClick={() => openRolesAndUsersPermissionsModal(permissions, GuildStore.getGuild(channel.guild_id)!, channel.name)}
-                                    >
-                                        <svg width="24" height="24" viewBox="0 0 24 24">
-                                            <path fill="currentColor" d="M7 12.001C7 10.8964 6.10457 10.001 5 10.001C3.89543 10.001 3 10.8964 3 12.001C3 13.1055 3.89543 14.001 5 14.001C6.10457 14.001 7 13.1055 7 12.001ZM14 12.001C14 10.8964 13.1046 10.001 12 10.001C10.8954 10.001 10 10.8964 10 12.001C10 13.1055 10.8954 14.001 12 14.001C13.1046 14.001 14 13.1055 14 12.001ZM19 10.001C20.1046 10.001 21 10.8964 21 12.001C21 13.1055 20.1046 14.001 19 14.001C17.8954 14.001 17 13.1055 17 12.001C17 10.8964 17.8954 10.001 19 10.001Z" />
-                                        </svg>
-                                    </button>
-                                )}
-                            </Tooltip>
-                        )}
-                        <BaseText size="lg" weight="bold">Allowed users and roles:</BaseText>
-                        <Tooltip text={defaultAllowedUsersAndRolesDropdownState ? "Hide Allowed Users and Roles" : "View Allowed Users and Roles"}>
-                            {({ onMouseLeave, onMouseEnter }) => (
-                                <button
-                                    onMouseLeave={onMouseLeave}
-                                    onMouseEnter={onMouseEnter}
-                                    className={cl("allowed-users-and-roles-container-toggle-btn")}
-                                    onClick={() => settings.store.defaultAllowedUsersAndRolesDropdownState = !defaultAllowedUsersAndRolesDropdownState}
-                                >
-                                    <svg
-                                        width="24"
-                                        height="24"
-                                        viewBox="0 0 24 24"
-                                        transform={defaultAllowedUsersAndRolesDropdownState ? "scale(1 -1)" : "scale(1 1)"}
-                                    >
-                                        <path fill="currentColor" d="M16.59 8.59003L12 13.17L7.41 8.59003L6 10L12 16L18 10L16.59 8.59003Z" />
-                                    </svg>
-                                </button>
-                            )}
-                        </Tooltip>
-                    </div>
-                    {defaultAllowedUsersAndRolesDropdownState && <ChannelBeginHeader channel={channel} />}
-                </div>
+                <AllowedUsersAndRolesSection channel={channel} permissions={permissions} />
             </div>
         </div>
     );
