@@ -11,6 +11,7 @@ body.moggcord-stealth #moggcord-titlebar-btn,
 body.moggcord-stealth #moggcord-titlebar-link-style,
 
 /* MoggcordAI nav button */
-body.moggcord-stealth .nai-nav-item {
+body.moggcord-stealth .nai-nav-item,
+body.moggcord-stealth .mhub-nav-item {
     display: none !important;
 }

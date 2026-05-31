@@ -225,6 +225,7 @@ const NON_REACT_SELECTORS = [
     "#moggcord-titlebar-btn",
     "#moggcord-titlebar-link-style",
     ".nai-nav-item",
+    ".mhub-nav-item",
 ];
 
 function hideNonReactElements(hide: boolean) {

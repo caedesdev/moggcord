@@ -7,6 +7,8 @@ import { checkForUpdates, update, rebuild, UpdateLogger } from "@utils/updater";
 import { relaunch } from "@utils/native";
 import { React, useState, useEffect, ReactDOM, createRoot } from "@webpack/common";
 
+import { openMoggcordHub } from "../moggcordHub/openHub";
+
 declare const VERSION: string;
 
 let bannerRoot: ReturnType<typeof createRoot> | null = null;
@@ -109,6 +111,25 @@ function UpdateBanner() {
                 </span>
             </div>
             <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
+                <button
+                    type="button"
+                    onClick={e => { e.stopPropagation(); openMoggcordHub("changelog"); }}
+                    disabled={loading}
+                    style={{
+                        background: "transparent",
+                        border: "1px solid rgba(255,255,255,0.35)",
+                        borderRadius: 6,
+                        color: "#fff",
+                        padding: "4px 12px",
+                        cursor: loading ? "not-allowed" : "pointer",
+                        fontSize: 12,
+                        fontWeight: 600,
+                        fontFamily: "inherit",
+                        pointerEvents: "auto",
+                    }}
+                >
+                    What's new
+                </button>
                 <button
                     type="button"
                     onClick={e => { e.stopPropagation(); doUpdate(); }}
