@@ -1355,7 +1355,7 @@
       };
       discords.push(entry);
       renderCard(entry, discords.length - 1, injected, "profile");
-      selectDiscord(discords.length - 1);
+      await selectDiscord(discords.length - 1);
       input.value = "";
       document.getElementById("manual-row").classList.remove("visible");
     }
@@ -1369,30 +1369,44 @@
       return list[0] || null;
     }
 
-    async function maybeAutoInstall() {
+    async function maybeAutoSelect(preferPath) {
       if (discords.length === 0) return;
+
+      if (preferPath) {
+        const idx = discords.findIndex(d => d.path === preferPath);
+        if (idx !== -1) {
+          await selectDiscord(idx);
+          return;
+        }
+      }
+
+      try {
+        const saved = sessionStorage.getItem("moggcord-installer-target");
+        if (saved) {
+          const idx = discords.findIndex(d => d.path === saved);
+          if (idx !== -1) {
+            await selectDiscord(idx);
+            return;
+          }
+        }
+      } catch (e) {}
+
+      for (let i = 0; i < discords.length; i++) {
+        try {
+          if (await window.moggcord.isInjected(discords[i].path)) {
+            await selectDiscord(i);
+            return;
+          }
+        } catch (e) {}
+      }
 
       const target = pickBestDiscord(discords);
       if (!target) return;
-
       const idx = discords.findIndex(d => d.path === target.path);
-      if (idx === -1) return;
-
-      let injected = false;
-      try { injected = await window.moggcord.isInjected(target.path); } catch (e) {}
-
-      selectDiscord(idx);
-
-      if (injected) {
-        setStatus("success", `${target.name} already has Moggcord installed.`);
-        return;
-      }
-
-      setStatus("loading", `Auto-installing into ${target.name}…`);
-      await handleInject();
+      if (idx !== -1) await selectDiscord(idx);
     }
 
-    async function loadDiscords() {
+    async function loadDiscords(preferPath) {
       setStatus("loading", "Detecting Discord installations...");
 
       try {
@@ -1429,8 +1443,7 @@
       }
 
       setStatus("idle", "Select an installation target.");
-      updateSelected(null);
-      await maybeAutoInstall();
+      await maybeAutoSelect(preferPath);
     }
 
     function renderCard(d, i, injected, iconCls, hasThirdParty = false) {
@@ -1465,7 +1478,7 @@
           <div class="radio"></div>
         </div>
       `;
-      card.addEventListener("click", () => selectDiscord(i));
+      card.addEventListener("click", () => selectDiscord(Number(card.dataset.index)));
       list.appendChild(card);
     }
 
@@ -1474,25 +1487,35 @@
       document.getElementById("selected-path").textContent = target ? target.path : "Choose a Discord installation first.";
     }
 
-    function selectDiscord(index) {
+    async function selectDiscord(index) {
+      if (!discords[index]) return;
+
       selected = discords[index];
+      try { sessionStorage.setItem("moggcord-installer-target", selected.path); } catch (e) {}
       updateSelected(selected);
 
-      document.querySelectorAll(".discord-card").forEach((c, i) => {
-        c.classList.toggle("selected", i === index);
+      document.querySelectorAll(".discord-card").forEach(c => {
+        c.classList.toggle("selected", Number(c.dataset.index) === index);
       });
 
       document.getElementById("btn-inject").disabled = false;
       document.getElementById("btn-uninject").disabled = false;
 
-      const card = document.querySelectorAll(".discord-card")[index];
+      const card = document.querySelector(`.discord-card[data-index="${index}"]`);
       const isThirdParty = card && card.dataset.thirdParty === "1";
-      if (isThirdParty) {
-        setStatus("loading", `${selected.name}: Vencord or Equicord detected. Inject will replace it with Moggcord.`);
+
+      let injected = false;
+      try { injected = await window.moggcord.isInjected(selected.path); } catch (e) {}
+
+      if (injected) {
+        document.getElementById("btn-inject").textContent = "Update Moggcord";
+        setStatus("success", `${selected.name} already has Moggcord. Click Update to reinstall.`);
+      } else if (isThirdParty) {
         document.getElementById("btn-inject").textContent = "Replace with Moggcord";
+        setStatus("loading", `${selected.name}: Vencord or Equicord detected. Inject will replace it with Moggcord.`);
       } else {
-        setStatus("idle", `Selected: ${selected.name} at ${selected.path}`);
         document.getElementById("btn-inject").textContent = "Inject Moggcord";
+        setStatus("idle", `Selected: ${selected.name}`);
       }
     }
 
@@ -1534,9 +1557,8 @@
           setTimeout(async () => {
             setLoading(false);
             setStatus("success", `Moggcord injected into ${selected.name}. Restart Discord.`);
-            await loadDiscords();
-            const idx = discords.findIndex(d => d.path === selected.path);
-            if (idx !== -1) selectDiscord(idx);
+            const injectedPath = selected.path;
+            await loadDiscords(injectedPath);
           }, 700);
         } else {
           setLoading(false);
@@ -1558,7 +1580,7 @@
         setTimeout(async () => {
           setLoading(false);
           setStatus("success", `Moggcord uninjected from ${selected.name}.`);
-          await loadDiscords();
+          await loadDiscords(selected?.path);
         }, 600);
       } else {
         setLoading(false);

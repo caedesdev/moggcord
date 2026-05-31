@@ -1,67 +1,30 @@
 /*
- * Moggcord — Local injector for Discord Desktop
- * Injects Moggcord into an existing Discord install by:
- * 1. Finding Discord's resources directory
- * 2. Renaming app.asar → _app.asar (backup)
- * 3. Creating an app/ folder with a loader that requires Moggcord's patcher.js
+ * Moggcord — Local injector for Discord Desktop (dev / safe re-inject)
  *
- * Usage: pnpm inject   (or: node scripts/inject.mjs)
+ * Usage: pnpm inject:dev   (or: node scripts/inject.mjs)
+ *
+ * Re-running is safe: refreshes the loader without touching _app.asar again.
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
 import "./checkNodeVersion.js";
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "fs";
+import { existsSync, renameSync, statSync } from "fs";
 import { dirname, join, resolve } from "path";
 import { fileURLToPath } from "url";
 
+import {
+    findAllDiscordResources,
+    isMoggcordDevInjection,
+    isValidAsarFile,
+    prepareForReinject,
+    warnIfCorruptAppAsar,
+    writeMoggcordLoader,
+} from "./discordResources.mjs";
+
 const BASE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST_DIR = join(BASE_DIR, "dist", "desktop");
-
-function findAllDiscordResources() {
-    const platform = process.platform;
-    const candidates = [];
-
-    if (platform === "win32") {
-        const localAppData = process.env.LOCALAPPDATA || "";
-
-        for (const channel of ["Discord", "DiscordPTB", "DiscordCanary", "DiscordDevelopment"]) {
-            const base = join(localAppData, channel);
-            if (!existsSync(base)) continue;
-            try {
-                const versions = readdirSync(base)
-                    .filter(d => /^app-\d+\.\d+\.\d+$/.test(d))
-                    .sort()
-                    .reverse();
-                for (const ver of versions) {
-                    candidates.push(join(base, ver, "resources"));
-                }
-            } catch { }
-        }
-    } else if (platform === "darwin") {
-        candidates.push(
-            "/Applications/Discord.app/Contents/Resources",
-            "/Applications/Discord PTB.app/Contents/Resources",
-            "/Applications/Discord Canary.app/Contents/Resources"
-        );
-    } else if (platform === "linux") {
-        candidates.push(
-            "/usr/share/discord/resources",
-            "/usr/lib/discord/resources",
-            "/opt/discord/resources",
-            "/opt/Discord/resources",
-            join(process.env.HOME || "", ".local/share/flatpak/app/com.discordapp.Discord/current/active/files/discord/resources"),
-            "/snap/discord/current/usr/share/discord/resources"
-        );
-    }
-
-    // Keep paths that exist and contain app.asar, app/, or _app.asar
-    return candidates.filter(p => {
-        if (!existsSync(p)) return false;
-        return existsSync(join(p, "app.asar")) || existsSync(join(p, "app")) || existsSync(join(p, "_app.asar"));
-    });
-}
 
 function checkBuild() {
     const patcherPath = join(DIST_DIR, "patcher.js");
@@ -72,56 +35,54 @@ function checkBuild() {
     }
 }
 
+function refreshInjection(resourcesDir) {
+    writeMoggcordLoader(resourcesDir, join(DIST_DIR, "patcher.js"));
+    console.log(`\x1b[32m[Moggcord] Refreshed injection (no backup touched): ${resourcesDir}\x1b[0m`);
+    return true;
+}
+
 function inject(resourcesDir) {
     const appAsarPath = join(resourcesDir, "app.asar");
     const backupPath = join(resourcesDir, "_app.asar");
-    const appDirPath = join(resourcesDir, "app");
 
-    if (existsSync(appDirPath) && existsSync(join(appDirPath, "package.json"))) {
-        try {
-            const pkg = JSON.parse(readFileSync(join(appDirPath, "package.json"), "utf-8"));
-            if (pkg.name === "moggcord") {
-                console.log("\x1b[33m[Moggcord] Already injected! Run 'pnpm uninject' first to reinject.\x1b[0m");
-                return false;
-            }
-        } catch { }
+    if (isMoggcordDevInjection(resourcesDir) && existsSync(backupPath) && isValidAsarFile(backupPath)) {
+        return refreshInjection(resourcesDir);
     }
 
-    if (existsSync(appAsarPath) && !existsSync(backupPath)) {
-        let isDir = false;
-        try { isDir = statSync(appAsarPath).isDirectory(); } catch { }
-        if (isDir) {
-            console.warn("\x1b[33m[Moggcord] app.asar is a folder — another mod may be installed.\x1b[0m");
-            console.warn("\x1b[33m            Aborting. Run 'pnpm uninject' to clean up first.\x1b[0m");
-            return false;
-        }
-        console.log("[Moggcord] Backing up app.asar → _app.asar...");
-        renameSync(appAsarPath, backupPath);
-    } else if (!existsSync(backupPath)) {
-        console.error("\x1b[31m[Moggcord] No app.asar or _app.asar found in resources!\x1b[0m");
+    if (isMoggcordDevInjection(resourcesDir) || existsSync(join(resourcesDir, "app"))) {
+        console.log("[Moggcord] Cleaning previous injection before reinstall...");
+        prepareForReinject(resourcesDir);
+    }
+
+    if (!existsSync(appAsarPath)) {
+        console.error("\x1b[31m[Moggcord] No app.asar found — cannot inject.\x1b[0m");
+        console.error("\x1b[33m           If Discord is broken, reinstall Discord Stable, then inject once.\x1b[0m");
+        warnIfCorruptAppAsar(resourcesDir);
         return false;
     }
 
-    if (existsSync(appAsarPath)) {
-        try {
-            rmSync(appAsarPath, { recursive: true, force: true });
-        } catch (e) {
-            console.error(`\x1b[31m[Moggcord] Could not remove old app.asar: ${e.message}\x1b[0m`);
-            return false;
-        }
+    let isDir = false;
+    try { isDir = statSync(appAsarPath).isDirectory(); } catch { }
+    if (isDir) {
+        console.error("\x1b[31m[Moggcord] app.asar is a folder — another mod may be installed.\x1b[0m");
+        console.error("\x1b[33m           Run 'pnpm uninject:dev' or reinstall Discord.\x1b[0m");
+        return false;
     }
 
-    mkdirSync(appDirPath, { recursive: true });
+    if (!isValidAsarFile(appAsarPath)) {
+        console.error("\x1b[31m[Moggcord] app.asar looks corrupt or too small.\x1b[0m");
+        warnIfCorruptAppAsar(resourcesDir);
+        return false;
+    }
 
-    writeFileSync(join(appDirPath, "package.json"), JSON.stringify({
-        name: "moggcord",
-        main: "index.js"
-    }, null, 2));
+    if (!existsSync(backupPath)) {
+        console.log("[Moggcord] Backing up app.asar → _app.asar...");
+        renameSync(appAsarPath, backupPath);
+    } else if (existsSync(appAsarPath)) {
+        console.log("\x1b[33m[Moggcord] app.asar + _app.asar both present — keeping existing backup.\x1b[0m");
+    }
 
-    const patcherPath = join(DIST_DIR, "patcher.js").replace(/\\/g, "\\\\");
-    writeFileSync(join(appDirPath, "index.js"),
-        `// Moggcord Injector — auto-generated, do not edit\n"use strict";\nrequire("${patcherPath}");\n`
-    );
+    writeMoggcordLoader(resourcesDir, join(DIST_DIR, "patcher.js"));
 
     console.log(`\x1b[32m[Moggcord] Successfully injected into: ${resourcesDir}\x1b[0m`);
     console.log(`\x1b[32m[Moggcord] Moggcord dist directory: ${DIST_DIR}\x1b[0m`);
@@ -138,15 +99,15 @@ if (allResources.length === 0) {
     process.exit(1);
 }
 
-if (allResources.length === 1) {
-    console.log(`[Moggcord] Discord found: ${allResources[0]}`);
-    inject(allResources[0]);
-} else {
-    console.log(`[Moggcord] Found ${allResources.length} Discord installations:`);
-    let injectedCount = 0;
-    for (const res of allResources) {
-        console.log(`\n  → ${res}`);
-        if (inject(res)) injectedCount++;
-    }
-    console.log(`\n\x1b[32m[Moggcord] ${injectedCount}/${allResources.length} injection(s) succeeded.\x1b[0m`);
+let injectedCount = 0;
+for (const res of allResources) {
+    console.log(`\n[Moggcord] Discord resources: ${res}`);
+    if (inject(res)) injectedCount++;
 }
+
+if (injectedCount === 0) {
+    console.error("\x1b[31m[Moggcord] Injection failed for all targets.\x1b[0m");
+    process.exit(1);
+}
+
+console.log(`\n\x1b[32m[Moggcord] ${injectedCount}/${allResources.length} injection(s) succeeded.\x1b[0m`);

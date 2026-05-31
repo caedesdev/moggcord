@@ -3,12 +3,10 @@
  * Downloads EquilotlCli.exe from Equicord releases and runs it
  * with environment variables pointing at Moggcord files.
  *
- * The executable shows a GUI to pick the target Discord install.
- *
  * Usage:
- *   pnpm inject    → install Moggcord into the chosen Discord
+ *   pnpm inject    → install Moggcord into the chosen Discord (Equilotl GUI)
+ *   pnpm inject:dev → safe local inject for development (scripts/inject.mjs)
  *   pnpm uninject  → uninstall Moggcord from Discord
- *   pnpm repair    → repair the installation
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -16,12 +14,25 @@
 import "./checkNodeVersion.js";
 
 import { execFileSync, execSync } from "child_process";
-import { createWriteStream, existsSync, mkdirSync, readFileSync, writeFileSync, readdirSync, renameSync, rmSync, statSync } from "fs";
-import { chmodSync } from "fs";
+import {
+    createWriteStream,
+    chmodSync,
+    existsSync,
+    mkdirSync,
+    readdirSync,
+    readFileSync,
+    writeFileSync,
+} from "fs";
 import { dirname, join } from "path";
 import { Readable } from "stream";
 import { finished } from "stream/promises";
 import { fileURLToPath } from "url";
+
+import {
+    findAllDiscordResources,
+    prepareForReinject,
+    warnIfCorruptAppAsar,
+} from "./discordResources.mjs";
 
 const BASE_URL = "https://github.com/Equicord/Equilotl/releases/latest/download/";
 const INSTALLER_PATH_DARWIN = "Equilotl.app/Contents/MacOS/Equilotl";
@@ -153,20 +164,6 @@ function startDiscord() {
     return false;
 }
 
-function warnIfCorruptAppAsar(resourcesDir) {
-    const appAsar = join(resourcesDir, "app.asar");
-    const backup = join(resourcesDir, "_app.asar");
-    try {
-        if (existsSync(appAsar) && statSync(appAsar).size < 10_000) {
-            console.warn(`\x1b[33m[Moggcord] Warning: app.asar in ${resourcesDir} looks too small (${statSync(appAsar).size} bytes).\x1b[0m`);
-            console.warn("\x1b[33m           Reinstall Discord if the client does not start.\x1b[0m");
-        }
-        if (existsSync(backup) && statSync(backup).size < 10_000) {
-            console.warn(`\x1b[33m[Moggcord] Warning: _app.asar backup is also tiny — original Discord app may be lost.\x1b[0m`);
-        }
-    } catch { }
-}
-
 function checkBuild() {
     const patcherPath = join(BASE_DIR, "dist", "desktop", "patcher.js");
     if (!existsSync(patcherPath)) {
@@ -177,105 +174,25 @@ function checkBuild() {
 }
 
 function cleanOldMoggcord() {
-    console.log("[Moggcord] Scanning and cleaning up old installations...");
-    const platform = process.platform;
-    const candidates = [];
-
-    if (platform === "win32") {
-        const localAppData = process.env.LOCALAPPDATA || "";
-        for (const channel of ["Discord", "DiscordPTB", "DiscordCanary", "DiscordDevelopment"]) {
-            const base = join(localAppData, channel);
-            if (!existsSync(base)) continue;
-            try {
-                const versions = readdirSync(base)
-                    .filter(d => /^app-\d+\.\d+\.\d+$/.test(d));
-                for (const ver of versions) {
-                    candidates.push(join(base, ver, "resources"));
-                }
-            } catch { }
-        }
-    } else if (platform === "darwin") {
-        candidates.push(
-            "/Applications/Discord.app/Contents/Resources",
-            "/Applications/Discord PTB.app/Contents/Resources",
-            "/Applications/Discord Canary.app/Contents/Resources"
-        );
-    } else if (platform === "linux") {
-        candidates.push(
-            "/usr/share/discord/resources",
-            "/usr/lib/discord/resources",
-            "/opt/discord/resources",
-            "/opt/Discord/resources",
-            join(process.env.HOME || "", ".local/share/flatpak/app/com.discordapp.Discord/current/active/files/discord/resources"),
-            "/snap/discord/current/usr/share/discord/resources"
-        );
-    }
+    console.log("[Moggcord] Preparing Discord for safe re-inject...");
+    const candidates = findAllDiscordResources();
 
     let cleanedAny = false;
-
     for (const resourcesDir of candidates) {
-        if (!existsSync(resourcesDir)) continue;
-
-        const appDirPath = join(resourcesDir, "app");
-        const backupPath = join(resourcesDir, "_app.asar");
-        const appAsarPath = join(resourcesDir, "app.asar");
-
         try {
-            if (existsSync(appDirPath)) {
-                let shouldDelete = false;
-                try {
-                    const pkgFile = join(appDirPath, "package.json");
-                    if (existsSync(pkgFile)) {
-                        const pkg = JSON.parse(readFileSync(pkgFile, "utf-8"));
-                        if (pkg.name === "moggcord") {
-                            shouldDelete = true;
-                        }
-                    } else {
-                        if (existsSync(backupPath)) shouldDelete = true;
-                    }
-                } catch {
-                    shouldDelete = true;
-                }
-
-                if (shouldDelete) {
-                    console.log(`[Moggcord] Removing old app/ folder in: ${resourcesDir}`);
-                    rmSync(appDirPath, { recursive: true, force: true });
-                    cleanedAny = true;
-                }
-            }
-
-            if (existsSync(backupPath)) {
-                let isAsarDir = false;
-                if (existsSync(appAsarPath)) {
-                    try {
-                        isAsarDir = statSync(appAsarPath).isDirectory();
-                    } catch {}
-                }
-
-                if (isAsarDir) {
-                    console.log(`[Moggcord] Removing temporary app.asar folder in: ${resourcesDir}`);
-                    rmSync(appAsarPath, { recursive: true, force: true });
-                }
-
-                if (!existsSync(appAsarPath) || isAsarDir) {
-                    console.log(`[Moggcord] Restoring _app.asar -> app.asar in: ${resourcesDir}`);
-                    renameSync(backupPath, appAsarPath);
-                    cleanedAny = true;
-                } else {
-                    console.log(`[Moggcord] Removing obsolete _app.asar backup in: ${resourcesDir}`);
-                    rmSync(backupPath, { force: true });
-                    cleanedAny = true;
-                }
+            if (prepareForReinject(resourcesDir)) {
+                console.log(`[Moggcord] Restored clean state: ${resourcesDir}`);
+                cleanedAny = true;
             }
         } catch (e) {
-            console.error(`[Moggcord] Error while cleaning ${resourcesDir}:`, e.message);
+            console.error(`[Moggcord] Error while preparing ${resourcesDir}:`, e.message);
         }
     }
 
     if (cleanedAny) {
-        console.log("[Moggcord] Old installations cleaned up successfully!");
+        console.log("[Moggcord] Discord prepared for injection.");
     } else {
-        console.log("[Moggcord] No old installations to clean up.");
+        console.log("[Moggcord] No previous injection to clean up.");
     }
 }
 
@@ -343,15 +260,8 @@ try {
 }
 
 if (isInstall) {
-    const localAppData = process.env.LOCALAPPDATA || "";
-    for (const channel of ["Discord", "DiscordPTB", "DiscordCanary", "DiscordDevelopment"]) {
-        const base = join(localAppData, channel);
-        if (!existsSync(base)) continue;
-        try {
-            for (const ver of readdirSync(base).filter(d => /^app-\d+\.\d+\.\d+$/.test(d))) {
-                warnIfCorruptAppAsar(join(base, ver, "resources"));
-            }
-        } catch { }
+    for (const resourcesDir of findAllDiscordResources()) {
+        warnIfCorruptAppAsar(resourcesDir);
     }
 
     markPostInstallRelaunch();

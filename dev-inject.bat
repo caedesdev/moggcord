@@ -29,11 +29,11 @@ if %errorlevel% neq 0 (
 echo        Build termine.
 
 echo.
-echo  [3/4] Injection...
-call pnpm inject
+echo  [3/4] Injection (dev, sicheres Re-Inject)...
+call pnpm inject:dev
 if %errorlevel% neq 0 (
     echo.
-    echo  [ERREUR] pnpm inject a echoue. Arret.
+    echo  [ERREUR] pnpm inject:dev a echoue. Arret.
     pause
     exit /b 1
 )

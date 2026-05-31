@@ -16,8 +16,10 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-import { definePluginSettings } from "@api/Settings";
+import { definePluginSettings, Settings } from "@api/Settings";
 import ErrorBoundary from "@components/ErrorBoundary";
+import { getCustomColorString } from "@plugins/customUserColors";
+import { getCreatorColorInt, getCreatorColorString, getCreatorGlowStyle } from "@moggcordplugins/creatorGlow/colors";
 import { Devs } from "@utils/constants";
 import { Logger } from "@utils/Logger";
 import definePlugin, { makeRange, OptionType } from "@utils/types";
@@ -165,6 +167,14 @@ export default definePlugin({
 
     getColorString(userId: string, channelOrGuildId: string) {
         try {
+            const creatorColor = getCreatorColorString(userId);
+            if (creatorColor) return creatorColor;
+
+            if (Settings.plugins.CustomUserColors.enabled) {
+                const customColor = getCustomColorString(userId, true);
+                if (customColor) return customColor;
+            }
+
             const guildId = ChannelStore.getChannel(channelOrGuildId)?.guild_id ?? GuildStore.getGuild(channelOrGuildId)?.id;
             if (guildId == null) return null;
 
@@ -177,11 +187,17 @@ export default definePlugin({
     },
 
     getColorInt(userId: string, channelOrGuildId: string) {
+        const creatorInt = getCreatorColorInt(userId);
+        if (creatorInt != null) return creatorInt;
+
         const colorString = this.getColorString(userId, channelOrGuildId);
         return colorString && parseInt(colorString.slice(1), 16);
     },
 
     getColorStyle(userId: string, channelOrGuildId: string) {
+        const creatorStyle = getCreatorGlowStyle(userId);
+        if (creatorStyle) return creatorStyle;
+
         const colorString = this.getColorString(userId, channelOrGuildId);
 
         return colorString && {
@@ -196,6 +212,16 @@ export default definePlugin({
 
             // Do not apply role color if the send fails, otherwise it becomes indistinguishable
             if (message.state === "SEND_FAILED") return;
+
+            const creatorColor = getCreatorColorString(message?.author?.id);
+            if (creatorColor && messageSaturation !== 0) {
+                const value = `color-mix(in oklab, ${creatorColor} ${messageSaturation}%, var({DEFAULT}))`;
+                return {
+                    color: value.replace("{DEFAULT}", "--text-default"),
+                    "--text-strong": value.replace("{DEFAULT}", "--text-strong"),
+                    "--text-muted": value.replace("{DEFAULT}", "--text-muted"),
+                };
+            }
 
             if (author.colorString != null && messageSaturation !== 0) {
                 const value = `color-mix(in oklab, ${author.colorString} ${messageSaturation}%, var({DEFAULT}))`;

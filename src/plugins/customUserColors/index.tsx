@@ -9,6 +9,7 @@ import "./styles.css";
 import { NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { get } from "@api/DataStore";
 import { definePluginSettings, Settings } from "@api/Settings";
+import { getCreatorColorString } from "@moggcordplugins/creatorGlow/colors";
 import { EquicordDevs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
 import { Channel, User } from "@vencord/discord-types";
@@ -178,13 +179,14 @@ export default definePlugin({
 
     colorDMList(context: any): string | undefined {
         const id = context?.user?.id ?? context?.channel?.id;
-        const colorString = getCustomColorString(id, true);
-
-        return colorString ?? "inherit";
+        return getCreatorColorString(id) ?? getCustomColorString(id, true) ?? "inherit";
     },
 
     colorIfServer(context: any): string | undefined {
         const userId = context?.message?.author?.id;
+        const creatorColor = getCreatorColorString(userId);
+        if (creatorColor) return creatorColor;
+
         const colorString = context?.author?.colorString;
 
         if (context?.message?.channel_id === "1337" && userId === "313337") return colorString;
@@ -197,6 +199,6 @@ export default definePlugin({
 
     colorInReplyingTo(a: any) {
         const { id } = a.reply.message.author;
-        return getCustomColorString(id, true);
+        return getCreatorColorString(id) ?? getCustomColorString(id, true);
     },
 });
