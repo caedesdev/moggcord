@@ -7,10 +7,7 @@ import { UserProfileStore } from "@webpack/common";
 
 const logger = new Logger("MoggcordBadges", "#a855f7");
 
-const API_BASES = [
-    "https://api.ninifxe.de",
-    "https://bot.ninifxe.de",
-];
+const API_BASE = "https://api.ninifxe.de";
 
 const USER_CACHE_TTL_MS = 10 * 60 * 1000;
 
@@ -26,9 +23,18 @@ interface BadgeDefinition {
     auto?: boolean;
 }
 
+type UserBadgeEntry =
+    | string
+    | { badgeId?: string; id?: string; badge?: string; tooltip?: string; grantedAt?: string | null; };
+
+interface UserBadgesResponse {
+    userId?: string;
+    badges?: UserBadgeEntry[];
+}
+
 interface BulkData {
     badges: Record<string, BadgeDefinition>;
-    users: Record<string, string[]>;
+    users: Record<string, UserBadgeEntry[]>;
 }
 
 const userCache = new Map<string, { badges: MoggcordApiBadge[]; fetchedAt: number; }>();
@@ -36,24 +42,45 @@ const inFlight = new Map<string, Promise<void>>();
 
 let bulkData: BulkData | null = null;
 
-async function fetchJson<T>(path: string, noCache = false): Promise<T | null> {
-    const init: RequestInit = {};
-    if (noCache) init.cache = "no-cache";
+function extractBadgeIds(entries: UserBadgeEntry[] | undefined): string[] {
+    if (!entries?.length) return [];
 
-    for (const base of API_BASES) {
-        try {
-            const res = await fetch(`${base}${path}`, init);
-            if (!res.ok) continue;
-            return await res.json() as T;
-        } catch (e) {
-            logger.debug(`Failed to fetch ${base}${path}`, e);
-        }
-    }
-
-    return null;
+    return entries.flatMap(entry => {
+        if (typeof entry === "string") return entry ? [entry] : [];
+        const id = entry.badgeId ?? entry.id;
+        return id ? [id] : [];
+    });
 }
 
-function resolveBadges(userId: string, badgeIds: string[]): MoggcordApiBadge[] {
+/** /api/users/:id returns { id, badge, tooltip } objects — use directly. */
+function parseDirectBadges(entries: UserBadgeEntry[] | undefined): MoggcordApiBadge[] {
+    if (!entries?.length) return [];
+
+    return entries.flatMap(entry => {
+        if (typeof entry !== "object" || entry == null || typeof entry.badge !== "string") return [];
+
+        const id = entry.id ?? entry.badgeId;
+        if (!id) return [];
+
+        return [{ id, badge: entry.badge, tooltip: entry.tooltip ?? id }];
+    });
+}
+
+async function fetchJson<T>(path: string, noCache = false): Promise<T | null> {
+    try {
+        const res = await fetch(`${API_BASE}${path}`, noCache ? { cache: "no-cache" } : {});
+        if (!res.ok) {
+            logger.warn(`GET ${path} → ${res.status}`);
+            return null;
+        }
+        return await res.json() as T;
+    } catch (e) {
+        logger.warn(`GET ${path} failed`, e);
+        return null;
+    }
+}
+
+function resolveBadges(badgeIds: string[]): MoggcordApiBadge[] {
     if (!bulkData?.badges) return [];
 
     return badgeIds.flatMap(id => {
@@ -63,36 +90,52 @@ function resolveBadges(userId: string, badgeIds: string[]): MoggcordApiBadge[] {
     });
 }
 
+function badgesFromEntries(entries: UserBadgeEntry[] | undefined): MoggcordApiBadge[] {
+    const direct = parseDirectBadges(entries);
+    if (direct.length) return direct;
+    return resolveBadges(extractBadgeIds(entries));
+}
+
+function notifyChange() {
+    UserProfileStore.emitChange();
+}
+
 function cacheUserBadges(userId: string, badges: MoggcordApiBadge[]) {
     userCache.set(userId, { badges, fetchedAt: Date.now() });
-    UserProfileStore.emitChange();
+    notifyChange();
 }
 
 export async function loadMoggcordBadgeData(noCache = false) {
     const data = await fetchJson<BulkData>("/api/data", noCache);
-    if (data?.badges) {
-        bulkData = data;
-        userCache.clear();
-        UserProfileStore.emitChange();
-    }
+    if (!data?.badges) return;
+
+    bulkData = data;
+    userCache.clear();
+    notifyChange();
 }
 
 async function fetchUserBadges(userId: string, noCache = false) {
     const cached = userCache.get(userId);
     if (!noCache && cached && Date.now() - cached.fetchedAt < USER_CACHE_TTL_MS) return;
 
-    const response = await fetchJson<{ badges?: string[]; } | string[]>(`/api/users/${userId}`, noCache);
+    const response = await fetchJson<UserBadgesResponse | UserBadgeEntry[]>(`/api/users/${userId}`, noCache);
 
-    let badgeIds: string[] = [];
     if (Array.isArray(response)) {
-        badgeIds = response;
-    } else if (response && Array.isArray(response.badges)) {
-        badgeIds = response.badges;
-    } else if (bulkData?.users?.[userId]) {
-        badgeIds = bulkData.users[userId];
+        cacheUserBadges(userId, badgesFromEntries(response));
+        return;
     }
 
-    cacheUserBadges(userId, resolveBadges(userId, badgeIds));
+    if (response && Array.isArray(response.badges)) {
+        cacheUserBadges(userId, badgesFromEntries(response.badges));
+        return;
+    }
+
+    if (bulkData?.users?.[userId]) {
+        cacheUserBadges(userId, badgesFromEntries(bulkData.users[userId]));
+        return;
+    }
+
+    cacheUserBadges(userId, []);
 }
 
 export function getMoggcordApiBadges(userId: string): MoggcordApiBadge[] {
@@ -102,7 +145,7 @@ export function getMoggcordApiBadges(userId: string): MoggcordApiBadge[] {
     }
 
     if (bulkData?.users?.[userId]) {
-        const badges = resolveBadges(userId, bulkData.users[userId]);
+        const badges = badgesFromEntries(bulkData.users[userId]);
         userCache.set(userId, { badges, fetchedAt: Date.now() });
         return badges;
     }
