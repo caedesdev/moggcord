@@ -28,6 +28,9 @@ import type { Channel, Role } from "@vencord/discord-types";
 import { ChannelStore, PermissionsBits, PermissionStore, Tooltip } from "@webpack/common";
 
 import HiddenChannelLockScreen, { setChannelBeginHeader } from "./components/HiddenChannelLockScreen";
+import { TextChannelLockOverlay } from "./textChannelLockOverlay";
+
+let textChannelLockOverlay: TextChannelLockOverlay | null = null;
 
 export const cl = classNameFactory("vc-shc-");
 
@@ -283,6 +286,83 @@ export default definePlugin({
                 {
                     match: /(?<=renderChat\(\){)/,
                     replace: "if($self.isHiddenChannel(this?.props?.channel))return $self.HiddenChannelLockScreen(this?.props?.channel);"
+                },
+                {
+                    match: /(?<=renderChat(?:",|=)\(\)=>{)/,
+                    replace: "if($self.isHiddenChannel(this?.props?.channel))return $self.HiddenChannelLockScreen(this?.props?.channel);"
+                },
+                {
+                    match: /(?<=renderMessages\(\){)/,
+                    replace: "if($self.isHiddenChannel(this?.props?.channel))return $self.HiddenChannelLockScreen(this?.props?.channel);"
+                },
+                {
+                    match: /(?<=renderMessages(?:",|=)\(\)=>{)/,
+                    replace: "if($self.isHiddenChannel(this?.props?.channel))return $self.HiddenChannelLockScreen(this?.props?.channel);"
+                }
+            ]
+        },
+        // Fallback when Discord moves Channel layout code to another module
+        {
+            find: "renderSidebar(){",
+            all: true,
+            replacement: [
+                {
+                    match: /(?<=renderSidebar\(\){)/,
+                    replace: "if($self.isHiddenChannel(this?.props?.channel))return null;"
+                },
+                {
+                    match: /(?<=renderChat\(\){)/,
+                    replace: "if($self.isHiddenChannel(this?.props?.channel))return $self.HiddenChannelLockScreen(this?.props?.channel);"
+                },
+                {
+                    match: /(?<=renderChat(?:",|=)\(\)=>{)/,
+                    replace: "if($self.isHiddenChannel(this?.props?.channel))return $self.HiddenChannelLockScreen(this?.props?.channel);"
+                },
+                {
+                    match: /(?<=renderMessages\(\){)/,
+                    replace: "if($self.isHiddenChannel(this?.props?.channel))return $self.HiddenChannelLockScreen(this?.props?.channel);"
+                },
+                {
+                    match: /(?<=renderMessages(?:",|=)\(\)=>{)/,
+                    replace: "if($self.isHiddenChannel(this?.props?.channel))return $self.HiddenChannelLockScreen(this?.props?.channel);"
+                }
+            ]
+        },
+        // Replace Discord's default no-access screen for hidden text channels
+        {
+            find: "#{intl::NO_ACCESS}",
+            all: true,
+            replacement: {
+                match: /(\i\(\i\)\{let\{channel:(\i).+?)(return \(0,\i\.jsx)/,
+                replace: (m, start, channel, ret) => `${start}if($self.isHiddenChannel(${channel}))return $self.HiddenChannelLockScreen(${channel});${ret}`
+            }
+        },
+        // Patch the messages list when Discord no longer uses Channel.renderChat
+        {
+            find: "messagesNavigationDescription",
+            all: true,
+            replacement: [
+                {
+                    match: /(?<=render\(\)\{)/,
+                    replace: "if($self.isHiddenTextChannel(this?.props?.channel))return $self.HiddenChannelLockScreen(this?.props?.channel);"
+                },
+                {
+                    match: /(?<=render(?:",|=)\(\)=>{)/,
+                    replace: "if($self.isHiddenTextChannel(this?.props?.channel))return $self.HiddenChannelLockScreen(this?.props?.channel);"
+                }
+            ]
+        },
+        {
+            find: 'data-list-id:"chat-messages"',
+            all: true,
+            replacement: [
+                {
+                    match: /(?<=render\(\)\{)/,
+                    replace: "if($self.isHiddenTextChannel(this?.props?.channel))return $self.HiddenChannelLockScreen(this?.props?.channel);"
+                },
+                {
+                    match: /(?<=render(?:",|=)\(\)=>{)/,
+                    replace: "if($self.isHiddenTextChannel(this?.props?.channel))return $self.HiddenChannelLockScreen(this?.props?.channel);"
                 }
             ]
         },
@@ -299,23 +379,6 @@ export default definePlugin({
                     replace: "$& if($self.isHiddenChannel({channelId: arguments[0]?.channelId || arguments[0]}))return;"
                 }
             ]
-        },
-        // Fallback for newer Discord versions to render Lock Screen in chat
-        {
-            find: 'tutorialId:"chat-input"',
-            all: true,
-            replacement: {
-                match: /(?:function\s*\w*\s*\(\w+\)\s*\{(?=\s*(?:var\s+[^;]+;\s*)?let\s*\{\s*channel\s*:)|renderChat(?:\"|\'|:|=|\s)*\([^)]*\)\s*\{)/,
-                replace: "$& if($self.isHiddenChannel(arguments[0]?.channel || this?.props?.channel)) return $self.HiddenChannelLockScreen(arguments[0]?.channel || this?.props?.channel);"
-            }
-        },
-        {
-            find: '"chat-messages"',
-            all: true,
-            replacement: {
-                match: /(?:function\s*\w*\s*\(\w+\)\s*\{(?=\s*(?:var\s+[^;]+;\s*)?let\s*\{\s*channel\s*:)|renderChat(?:\"|\'|:|=|\s)*\([^)]*\)\s*\{)/,
-                replace: "$& if($self.isHiddenChannel(arguments[0]?.channel || this?.props?.channel)) return $self.HiddenChannelLockScreen(arguments[0]?.channel || this?.props?.channel);"
-            }
         },
         // Prevent voice connection robustly
         {
@@ -352,7 +415,7 @@ export default definePlugin({
                 {
                     // Change the permissionOverwrite check to CONNECT if the channel is locked
                     match: /permissionOverwrites\[.+?\i=(?<=context:(\i)}.+?)(?=(.+?)VIEW_CHANNEL)/,
-                    replace: (m, channel, permCheck) => `${m}!Vencord.Webpack.Common.PermissionStore.can(${CONNECT}n,${channel})?${permCheck}CONNECT):`
+                    replace: (m, channel, permCheck) => `${m}($self.isVoiceLikeChannel(${channel})&&!Vencord.Webpack.Common.PermissionStore.can(${CONNECT}n,${channel}))?${permCheck}CONNECT):`
                 },
                 {
                     // Include the @everyone role in the allowed roles list for Hidden Channels
@@ -560,8 +623,26 @@ export default definePlugin({
         setChannelBeginHeader(value);
     },
 
+    start() {
+        textChannelLockOverlay = new TextChannelLockOverlay(this);
+        textChannelLockOverlay.start();
+    },
+
+    stop() {
+        textChannelLockOverlay?.stop();
+        textChannelLockOverlay = null;
+    },
+
+    isVoiceLikeChannel(channel: Channel) {
+        return channel.isGuildVoice() || channel.isGuildStageVoice();
+    },
+
+    isHiddenTextChannel(channel: Channel) {
+        return this.isHiddenChannel(channel) && !this.isVoiceLikeChannel(channel);
+    },
+
     swapViewChannelWithConnectPermission(mergedPermissions: bigint, channel: Channel) {
-        if (!PermissionStore.can(PermissionsBits.CONNECT, channel)) {
+        if (this.isVoiceLikeChannel(channel) && !PermissionStore.can(PermissionsBits.CONNECT, channel)) {
             mergedPermissions &= ~PermissionsBits.VIEW_CHANNEL;
             mergedPermissions |= PermissionsBits.CONNECT;
         }

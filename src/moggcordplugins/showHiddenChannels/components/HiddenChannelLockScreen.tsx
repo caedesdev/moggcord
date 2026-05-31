@@ -216,7 +216,6 @@ function AccessListFallback({ channel, entries }: { channel: Channel; entries: A
 function AllowedUsersAndRolesSection({ channel, permissions }: { channel: Channel; permissions: RoleOrUserPermission[]; }) {
     const { defaultAllowedUsersAndRolesDropdownState } = settings.use(["defaultAllowedUsersAndRolesDropdownState"]);
     const accessEntries = useMemo(() => getAccessEntries(channel), [channel]);
-    const isTextLike = !channel.isGuildVoice() && !channel.isGuildStageVoice();
 
     return (
         <div className={cl("allowed-users-and-roles-container")}>
@@ -259,12 +258,7 @@ function AllowedUsersAndRolesSection({ channel, permissions }: { channel: Channe
                 </Tooltip>
             </div>
             {defaultAllowedUsersAndRolesDropdownState && (
-                isTextLike ? (
-                    <>
-                        {channelBeginHeaderFromPatch && <ChannelBeginHeader channel={channel} />}
-                        <AccessListFallback channel={channel} entries={accessEntries} />
-                    </>
-                ) : channelBeginHeaderFromPatch ? (
+                channelBeginHeaderFromPatch ? (
                     <ChannelBeginHeader channel={channel} />
                 ) : (
                     <AccessListFallback channel={channel} entries={accessEntries} />

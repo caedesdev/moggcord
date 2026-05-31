@@ -31,6 +31,10 @@ import { ContextMenuApi, Menu, Toasts, UserStore } from "@webpack/common";
 import Plugins, { PluginMeta } from "~plugins";
 
 import { EquicordDonorModal, EquicordTranslatorModal, VencordDonorModal } from "./modals";
+import {
+    getMoggcordApiBadges,
+    loadMoggcordBadgeData
+} from "./moggcordBadgesApi";
 
 const CONTRIBUTOR_BADGE = "https://cdn.discordapp.com/emojis/1092089799109775453.png?size=64";
 const EQUICORD_CONTRIBUTOR_BADGE = "https://equicord.org/assets/favicon.png";
@@ -81,7 +85,6 @@ const UserPluginContributorBadge: ProfileBadge = {
 
 let DonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
 let EquicordDonorBadges = {} as Record<string, Array<Record<"tooltip" | "badge", string>>>;
-let MoggcordBadges = {} as any;
 
 async function loadBadges(url: string, noCache = false) {
     const init = {} as RequestInit;
@@ -93,11 +96,11 @@ async function loadBadges(url: string, noCache = false) {
 async function loadAllBadges(noCache = false) {
     const vencordBadges = await loadBadges("https://badges.vencord.dev/badges.json", noCache).catch(() => ({}));
     const equicordBadges = await loadBadges("https://badge.equicord.org/badges.json", noCache).catch(() => ({}));
-    const moggcordBadges = await loadBadges("https://raw.githubusercontent.com/caedesdev/moggcord/main/badges.json", noCache).catch(() => ({}));
 
     DonorBadges = vencordBadges;
     EquicordDonorBadges = equicordBadges;
-    MoggcordBadges = moggcordBadges;
+
+    await loadMoggcordBadgeData(noCache);
 }
 
 let intervalId: any;
@@ -168,12 +171,6 @@ export default definePlugin({
     get EquicordDonorBadges() {
         return EquicordDonorBadges;
     },
-
-    get MoggcordBadges() {
-        return MoggcordBadges;
-    },
-
-
 
     toolboxActions: {
         async "Refetch Badges"() {
@@ -270,44 +267,30 @@ export default definePlugin({
 
     getMoggcordBadges(userId: string) {
         try {
-            // Support both old and new format
-            const userBadges = MoggcordBadges[userId] || (MoggcordBadges.users && MoggcordBadges.users[userId]);
-            if (!userBadges || !Array.isArray(userBadges)) return [];
+            const userBadges = getMoggcordApiBadges(userId);
+            if (!userBadges.length) return [];
 
-            const results: ProfileBadge[] = [];
-            for (const badgeOrId of userBadges) {
-                if (!badgeOrId) continue;
-
-                let badge = badgeOrId;
-                if (typeof badgeOrId === "string" && MoggcordBadges.badges) {
-                     badge = MoggcordBadges.badges[badgeOrId];
-                }
-
-                if (!badge) continue;
-
-                const iconSrc = (badge as any).badge || (badge as any).iconSrc || (badge as any).icon || (badge as any).url;
-                if (!iconSrc || typeof iconSrc !== "string") continue;
-
-                results.push({
-                    iconSrc: iconSrc,
-                    description: (badge as any).tooltip || (badge as any).description || (badge as any).label || "Moggcord Badge",
-                    link: (badge as any).link || "",
-                    position: BadgePosition.START,
-                    props: {
-                        style: {
-                            borderRadius: "0%",
-                            maxHeight: "22px",
-                            maxWidth: "22px"
-                        }
+            return userBadges.map(b => ({
+                iconSrc: b.badge,
+                description: b.tooltip,
+                key: b.id,
+                link: "",
+                position: BadgePosition.START,
+                props: {
+                    style: {
+                        borderRadius: "0%",
+                        maxHeight: "22px",
+                        maxWidth: "22px"
                     },
-                    onContextMenu(event, b) {
-                        ContextMenuApi.openContextMenu(event, () => <BadgeContextMenu badge={b as any} />);
-                    }
-                });
-            }
-            return results;
+                    loading: "lazy" as const,
+                    "aria-label": b.tooltip
+                },
+                onContextMenu(event, badge) {
+                    ContextMenuApi.openContextMenu(event, () => <BadgeContextMenu badge={badge} />);
+                }
+            } satisfies ProfileBadge));
         } catch (e) {
-            console.error("[BadgeAPI] Error processing badges for", userId, e);
+            new Logger("BadgeAPI#getMoggcordBadges").error(e);
             return [];
         }
     }
