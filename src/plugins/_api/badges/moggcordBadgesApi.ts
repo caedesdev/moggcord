@@ -3,7 +3,7 @@
  */
 
 import { Logger } from "@utils/Logger";
-import { UserProfileStore } from "@webpack/common";
+import { UserProfileStore, UserStore } from "@webpack/common";
 
 const logger = new Logger("MoggcordBadges", "#a855f7");
 
@@ -98,6 +98,9 @@ function badgesFromEntries(entries: UserBadgeEntry[] | undefined): MoggcordApiBa
 
 function notifyChange() {
     UserProfileStore.emitChange();
+    try {
+        UserStore.emitChange();
+    } catch { /* noop */ }
 }
 
 function cacheUserBadges(userId: string, badges: MoggcordApiBadge[]) {
@@ -136,6 +139,29 @@ async function fetchUserBadges(userId: string, noCache = false) {
     }
 
     cacheUserBadges(userId, []);
+}
+
+export const MOGGCORD_CREATOR_BADGE_ID = "creator_of_moggcord";
+
+const CREATOR_BADGE_IDS = new Set([
+    MOGGCORD_CREATOR_BADGE_ID,
+    "owner",
+    "owner_moggcord",
+]);
+
+export function userHasMoggcordCreatorBadge(userId: string | undefined | null): boolean {
+    if (!userId) return false;
+
+    const badges = getMoggcordApiBadges(userId);
+    if (badges.some(b => CREATOR_BADGE_IDS.has(b.id) || /creator|owner/i.test(b.tooltip))) {
+        return true;
+    }
+
+    if (bulkData?.users?.[userId]) {
+        return extractBadgeIds(bulkData.users[userId]).some(id => CREATOR_BADGE_IDS.has(id));
+    }
+
+    return false;
 }
 
 export function getMoggcordApiBadges(userId: string): MoggcordApiBadge[] {

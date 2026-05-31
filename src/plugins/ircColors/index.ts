@@ -18,6 +18,7 @@
 
 import { definePluginSettings, Settings } from "@api/Settings";
 import { getCustomColorString } from "@plugins/customUserColors";
+import { getCreatorColorString } from "@moggcordplugins/creatorGlow/colors";
 import { hash as h64 } from "@intrnl/xxhash64";
 import { Devs } from "@utils/constants";
 import definePlugin, { OptionType } from "@utils/types";
@@ -107,6 +108,9 @@ export default definePlugin({
 
     calculateNameColorForMessageContext(context: any) {
         const userId: string | undefined = context?.message?.author?.id;
+        const creatorColor = getCreatorColorString(userId);
+        if (creatorColor) return creatorColor;
+
         const colorString = context?.author?.colorString;
         const color = calculateNameColorForUser(userId);
 
@@ -146,6 +150,9 @@ export default definePlugin({
     calculateNameColorForListContext(context: any) {
         try {
             const id = context?.user?.id;
+            const creatorColor = getCreatorColorString(id);
+            if (creatorColor) return creatorColor;
+
             const colorString = context?.colorString;
             const color = calculateNameColorForUser(id);
 

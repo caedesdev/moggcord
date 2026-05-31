@@ -544,7 +544,7 @@
             "enabled": false
         },
         "NoDevtoolsWarning": {
-            "enabled": false
+            "enabled": true
         },
         "NoF1": {
             "enabled": false

@@ -5,25 +5,29 @@
  */
 
 import { addContextMenuPatch, NavContextMenuPatchCallback, removeContextMenuPatch } from "@api/ContextMenu";
-import { DataStore } from "@api/index";
 import { Modals, openModal } from "@utils/modal";
 import definePlugin from "@utils/types";
 import { RelationshipType } from "@vencord/discord-types/enums";
 import { findByProps } from "@webpack";
-import { ChannelStore, Constants, GuildMemberStore, Menu, React, RelationshipStore, FluxDispatcher, RestAPI, Toasts, UserStore, UserUtils } from "@webpack/common";
+import { ChannelStore, GuildMemberStore, Menu, React, RelationshipStore, FluxDispatcher, Toasts, UserStore, UserUtils } from "@webpack/common";
 
-const DS_KEY = "FakeFriends_state";
+import { FakeFriendsSettings } from "./settingsPanel";
+import {
+    addDirectFriend,
+    addPendingRequest,
+    bindOrigGetRelType,
+    bindGetRawRelationshipsMap,
+    fakeState,
+    fetchAllGuildMembers,
+    getGuildCandidates,
+    loadState,
+    persistState,
+    reapplyFakeStates,
+    removeFakeFriendById,
+    syncFakeRelationships,
+} from "./state";
 
-// fakeState is in memory only — does NOT persist across restarts
-const fakeState = new Map<string, "pending" | "accepted">();
-
-async function persistState() {
-    // No persistence — fakeState reset on restart intentionally
-}
-
-async function loadState() {
-    // No loading at startup — fakeState starts empty
-}
+import "./style.css";
 
 const FAKE_DM_PHRASES = [
     "hey don't you have discord?", "hello!", "hi :)", "yo", "good morning!",
@@ -42,21 +46,27 @@ let origGetRelType: Function | null = null;
 let origIsFriend: Function | null = null;
 let origGetFriendIDs: Function | null = null;
 let origGetMutable: Function | null = null;
+let origGetSince: Function | null = null;
+let origGetRelationships: Function | null = null;
 
 function patchStore() {
     const store = RelationshipStore as any;
-    if (!origGetRelType && typeof store.getRelationshipType === "function") {
-        origGetRelType = store.getRelationshipType;
+    if (typeof store.getRelationshipType === "function") {
+        if (!origGetRelType) {
+            origGetRelType = store.getRelationshipType;
+            bindOrigGetRelType(store.getRelationshipType);
+        }
         store.getRelationshipType = function (userId: string) {
             const s = fakeState.get(userId);
-            if (s === "accepted") return RelationshipType.FRIEND;
             if (s === "pending") return RelationshipType.INCOMING_REQUEST;
+            if (s === "accepted") return RelationshipType.FRIEND;
             return origGetRelType!.call(this, userId);
         };
     }
     if (!origIsFriend && typeof store.isFriend === "function") {
         origIsFriend = store.isFriend;
         store.isFriend = function (userId: string) {
+            if (fakeState.get(userId) === "pending") return false;
             if (fakeState.get(userId) === "accepted") return true;
             return origIsFriend!.call(this, userId);
         };
@@ -71,13 +81,34 @@ function patchStore() {
     }
     if (!origGetMutable && typeof store.getMutableRelationships === "function") {
         origGetMutable = store.getMutableRelationships;
+        bindGetRawRelationshipsMap(() => origGetMutable!.call(RelationshipStore));
         store.getMutableRelationships = function () {
             const real = origGetMutable!.call(this);
             for (const [id, s] of fakeState) {
                 if (s === "accepted") real.set(id, RelationshipType.FRIEND);
-                if (s === "pending") real.set(id, RelationshipType.INCOMING_REQUEST);
+                else if (s === "pending") real.set(id, RelationshipType.INCOMING_REQUEST);
             }
             return real;
+        };
+    }
+    if (!origGetRelationships && typeof store.getRelationships === "function") {
+        origGetRelationships = store.getRelationships;
+        store.getRelationships = function () {
+            const rels = { ...origGetRelationships!.call(this) };
+            for (const [id, s] of fakeState) {
+                if (s === "pending") rels[id] = RelationshipType.INCOMING_REQUEST;
+                else if (s === "accepted") rels[id] = RelationshipType.FRIEND;
+            }
+            return rels;
+        };
+    }
+    if (!origGetSince && typeof store.getSince === "function") {
+        origGetSince = store.getSince;
+        store.getSince = function (userId: string) {
+            if (fakeState.has(userId)) {
+                return origGetSince!.call(this, userId) ?? new Date().toISOString();
+            }
+            return origGetSince!.call(this, userId);
         };
     }
 }
@@ -88,6 +119,8 @@ function unpatchStore() {
     if (origIsFriend) { store.isFriend = origIsFriend; origIsFriend = null; }
     if (origGetFriendIDs) { store.getFriendIDs = origGetFriendIDs; origGetFriendIDs = null; }
     if (origGetMutable) { store.getMutableRelationships = origGetMutable; origGetMutable = null; }
+    if (origGetRelationships) { store.getRelationships = origGetRelationships; origGetRelationships = null; }
+    if (origGetSince) { store.getSince = origGetSince; origGetSince = null; }
 }
 
 // ── Patch acceptFriend ─────────────────────────────────────────────────────────
@@ -106,6 +139,7 @@ function patchAcceptFriend() {
                     type: "RELATIONSHIP_UPDATE",
                     relationship: { id: userId, type: RelationshipType.FRIEND, nickname: null, since: new Date().toISOString() }
                 });
+                syncFakeRelationships();
                 return;
             }
             return origAccept!.call(this, userId, ...args);
@@ -146,64 +180,6 @@ function isBot(user: any): boolean {
 function makeSnowflake(): string {
     const ts = BigInt(Date.now() - 1420070400000);
     return String((ts << 22n) | BigInt(Math.floor(Math.random() * 0xFFFFF)));
-}
-
-function dispatchRelationship(user: any, type: RelationshipType) {
-    FluxDispatcher.dispatch({
-        type: "RELATIONSHIP_UPDATE",
-        relationship: { id: user.id, type, nickname: null, since: new Date().toISOString(), user: makeUserPayload(user) }
-    });
-}
-
-async function addDirectFriend(user: any) {
-    fakeState.set(user.id, "accepted");
-    await persistState();
-    dispatchRelationship(user, RelationshipType.FRIEND);
-}
-
-async function addPendingRequest(user: any) {
-    fakeState.set(user.id, "pending");
-    await persistState();
-    FluxDispatcher.dispatch({
-        type: "RELATIONSHIP_ADD",
-        relationship: {
-            id: user.id,
-            type: RelationshipType.INCOMING_REQUEST,
-            nickname: null,
-            since: new Date().toISOString(),
-            user: makeUserPayload(user),
-        },
-        incoming: true,
-    });
-}
-
-// ── Reapplying fakeStates at startup ──────────────────────────────────
-// After reload, we redispatch all saved states
-async function reapplyFakeStates() {
-    for (const [userId, state] of fakeState) {
-        try {
-            let user = UserStore.getUser(userId) as any;
-            if (!user) {
-                try { await UserUtils.getUser(userId); } catch { }
-                user = UserStore.getUser(userId) as any;
-            }
-            if (!user) continue;
-
-            if (state === "accepted") {
-                FluxDispatcher.dispatch({
-                    type: "RELATIONSHIP_UPDATE",
-                    relationship: { id: userId, type: RelationshipType.FRIEND, nickname: null, since: new Date().toISOString(), user: makeUserPayload(user) }
-                });
-            } else if (state === "pending") {
-                FluxDispatcher.dispatch({
-                    type: "RELATIONSHIP_ADD",
-                    relationship: { id: userId, type: RelationshipType.INCOMING_REQUEST, nickname: null, since: new Date().toISOString(), user: makeUserPayload(user) },
-                    incoming: true,
-                });
-            }
-            await new Promise(r => setTimeout(r, 50));
-        } catch { }
-    }
 }
 
 // ── Fake DM ────────────────────────────────────────────────────────────────────
@@ -517,48 +493,6 @@ function askCount(title: string, max: number): Promise<number | null> {
     });
 }
 
-// ── Candidats d'un serveur ────────────────────────────────────────────────────
-async function fetchAllGuildMembers(guildId: string): Promise<void> {
-    const queries = [
-        ..."abcdefghijklmnopqrstuvwxyz0123456789".split(""),
-        ..."!@#$%^&*_-+=.[]{}".split(""),
-    ];
-
-    const before = (GuildMemberStore.getMemberIds(guildId) as string[]).length;
-
-    for (const q of queries) {
-        FluxDispatcher.dispatch({
-            type: "GUILD_MEMBERS_REQUEST",
-            guildIds: [guildId],
-            query: q,
-            limit: 100,
-        });
-        await new Promise(r => setTimeout(r, 80));
-    }
-
-    await new Promise(r => setTimeout(r, 1000));
-
-    const after = (GuildMemberStore.getMemberIds(guildId) as string[]).length;
-    const loaded = after - before;
-    console.log(`[FakeFriends] ${after} members in cache (${loaded > 0 ? "+" + loaded : "already loaded"})`);
-    Toasts.show({ message: `${after} members available`, type: Toasts.Type.SUCCESS, id: Toasts.genId() });
-}
-
-function getGuildCandidates(guildId: string): string[] {
-    const me = UserStore.getCurrentUser()?.id;
-    const memberIds: string[] = (GuildMemberStore.getMemberIds(guildId) as string[]) ?? [];
-    const realRelNone = (id: string) => {
-        const fn = origGetRelType ?? ((uid: string) => (RelationshipStore as any).getRelationshipType(uid));
-        return fn.call(RelationshipStore, id) === RelationshipType.NONE;
-    };
-    return memberIds.filter(id => {
-        if (id === me || !realRelNone(id)) return false;
-        const cached = UserStore.getUser(id) as any;
-        if (cached && isBot(cached)) return false;
-        return true;
-    });
-}
-
 // ── Fake Friend Request avec saisie du nombre ─────────────────────────────────
 async function floodGuild(guildId: string) {
     Toasts.show({ message: "Loading members...", type: Toasts.Type.MESSAGE, id: "ff-loading" });
@@ -579,16 +513,19 @@ async function floodGuild(guildId: string) {
     const selected = pool.slice(0, count);
     const BATCH = 10;
     let sent = 0;
+    const defer = { persist: false as const, sync: false as const };
     for (let i = 0; i < selected.length; i += BATCH) {
         const batch = selected.slice(i, i + BATCH);
         const users = await Promise.all(batch.map(id => loadUser(id)));
         for (const user of users) {
             if (!user || isBot(user)) continue;
-            await addPendingRequest(user);
+            await addPendingRequest(user, defer);
             sent++;
         }
-        await new Promise(r => setTimeout(r, 60));
+        await new Promise(r => setTimeout(r, 120));
     }
+    await persistState();
+    syncFakeRelationships();
     Toasts.show({ message: `${sent} fake friend request${sent > 1 ? "s" : ""} sent!`, type: Toasts.Type.SUCCESS, id: Toasts.genId() });
 }
 
@@ -603,12 +540,9 @@ async function removeFakeFriendsForGuild(guildId: string) {
     }
 
     for (const id of toRemove) {
-        fakeState.delete(id);
-        try {
-            FluxDispatcher.dispatch({ type: "RELATIONSHIP_REMOVE", relationship: { id } });
-        } catch { }
+        await removeFakeFriendById(id);
     }
-    await persistState();
+
     Toasts.show({ message: `${toRemove.length} fake request${toRemove.length > 1 ? "s" : ""} removed!`, type: Toasts.Type.SUCCESS, id: Toasts.genId() });
 }
 
@@ -811,18 +745,14 @@ const userContextPatch: NavContextMenuPatchCallback = (children, props) => {
             items = [
                 <Menu.MenuItem key="ff-cancel" id="ff-cancel" label="Cancel la fake demande" color="danger"
                     action={async () => {
-                        fakeState.delete(userId);
-                        await persistState();
-                        FluxDispatcher.dispatch({ type: "RELATIONSHIP_REMOVE", relationship: { id: userId } });
+                        await removeFakeFriendById(userId);
                     }} />
             ];
         } else {
             items = [
                 <Menu.MenuItem key="ff-remove" id="ff-remove" label="Retirer des fake friends" color="danger"
                     action={async () => {
-                        fakeState.delete(userId);
-                        await persistState();
-                        FluxDispatcher.dispatch({ type: "RELATIONSHIP_REMOVE", relationship: { id: userId } });
+                        await removeFakeFriendById(userId);
                     }} />
             ];
         }
@@ -877,9 +807,38 @@ const guildContextPatch: NavContextMenuPatchCallback = (children, props) => {
 export default definePlugin({
     name: "FakeFriends",
     enabledByDefault: true,
-    description: "Locally simulates Discord friends and requests. Persistent between reloads.",
+    description: "Simuliert Fake-Freunde und Anfragen lokal. Bleibt nach Neustart erhalten — verwaltbar in den Plugin-Einstellungen.",
     authors: [{ name: "Moggcord", id: 0n }],
     dependencies: ["ContextMenuAPI"],
+    settingsAboutComponent: FakeFriendsSettings,
+
+    isFakePending(userId?: string | null) {
+        return !!userId && fakeState.get(userId) === "pending";
+    },
+
+    patches: [
+        {
+            find: '"FriendsStore"',
+            replacement: [
+                {
+                    match: /case (\i\.\i)\.PENDING:return (\i)\.type===(\i\.\i\.INCOMING_REQUEST)/,
+                    replace: "case $1.PENDING:return $2.type===$3||$self.isFakePending($2.userId)",
+                },
+                {
+                    match: /case (\i\.\i)\.ALL:return (\i)\.type===1/,
+                    replace: "case $1.ALL:return $2.type===1&&!$self.isFakePending($2.userId)",
+                },
+                {
+                    match: /case (\i\.\i)\.ONLINE:return (\i)\.type===1&&(\i)\.status/,
+                    replace: "case $1.ONLINE:return $2.type===1&&!$self.isFakePending($2.userId)&&$3.status",
+                },
+                {
+                    match: /(?<=case (\i\.\i)\.SUGGESTIONS:return \d+===(\i)\.type)/,
+                    replace: ";case $1.PENDING:return $2.type===3||$self.isFakePending($2.userId)",
+                },
+            ],
+        },
+    ],
 
     async start() {
         patchStore();
@@ -892,8 +851,9 @@ export default definePlugin({
         // Charger l'état persistant puis réappliquer les dispatches
         await loadState();
         if (fakeState.size > 0) {
-            // Délai pour laisser Discord se charger complètement
-            setTimeout(() => reapplyFakeStates(), 3000);
+            setTimeout(async () => {
+                await reapplyFakeStates();
+            }, 3000);
         }
     },
 

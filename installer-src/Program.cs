@@ -8,6 +8,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.RegularExpressions;
 using Microsoft.Web.WebView2.Core;
 using Microsoft.Web.WebView2.WinForms;
@@ -421,18 +422,22 @@ namespace MoggcordInstaller
                     var dPath = Path.Combine(localAppData, c);
                     if (!Directory.Exists(dPath)) continue;
 
-                    foreach (var dir in Directory.GetDirectories(dPath, "app-*"))
-                    {
-                        var resources = Path.Combine(dir, "resources");
-                        if (!Directory.Exists(resources)) continue;
+                    var latestApp = Directory.GetDirectories(dPath, "app-*")
+                        .Select(dir => new { dir, version = Path.GetFileName(dir).Replace("app-", "") })
+                        .OrderByDescending(x => x.version, StringComparer.Ordinal)
+                        .FirstOrDefault();
 
-                        list.Add(new {
-                            name = names[i],
-                            path = resources,
-                            asarPath = Path.Combine(resources, "app.asar"),
-                            version = Path.GetFileName(dir).Replace("app-", "")
-                        });
-                    }
+                    if (latestApp == null) continue;
+
+                    var resources = Path.Combine(latestApp.dir, "resources");
+                    if (!Directory.Exists(resources)) continue;
+
+                    list.Add(new {
+                        name = names[i],
+                        path = resources,
+                        asarPath = Path.Combine(resources, "app.asar"),
+                        version = latestApp.version
+                    });
                 }
                 return JsonSerializer.Serialize(list);
             });
@@ -1075,12 +1080,18 @@ namespace MoggcordInstaller
             catch { }
         }
 
+        private static string GetDiscordProcessName(string resPath)
+        {
+            if (resPath.Contains("DiscordPTB", StringComparison.OrdinalIgnoreCase)) return "DiscordPTB";
+            if (resPath.Contains("DiscordCanary", StringComparison.OrdinalIgnoreCase)) return "DiscordCanary";
+            if (resPath.Contains("DiscordDevelopment", StringComparison.OrdinalIgnoreCase)) return "DiscordDevelopment";
+            return "Discord";
+        }
+
         private void KillDiscord(string resPath)
         {
             SetStatus("loading", "Closing Discord...");
-            var procName = resPath.Contains("DiscordPTB") ? "DiscordPTB" :
-                           resPath.Contains("DiscordCanary") ? "DiscordCanary" :
-                           resPath.Contains("DiscordDevelopment") ? "DiscordDevelopment" : "Discord";
+            var procName = GetDiscordProcessName(resPath);
 
             foreach (var name in new[] { procName, "DiscordSystemHelper" })
             {
@@ -1097,9 +1108,7 @@ namespace MoggcordInstaller
         {
             try {
                 var exe = Path.Combine(Path.GetDirectoryName(resPath), "..", "Update.exe");
-                var procName = resPath.Contains("DiscordPTB") ? "DiscordPTB.exe" :
-                               resPath.Contains("DiscordCanary") ? "DiscordCanary.exe" :
-                               resPath.Contains("DiscordDevelopment") ? "DiscordDevelopment.exe" : "Discord.exe";
+                var procName = GetDiscordProcessName(resPath) + ".exe";
                                
                 if (File.Exists(exe)) Process.Start(exe, $"--processStart {procName}");
             } catch { }

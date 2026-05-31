@@ -5,6 +5,7 @@
  */
 
 import { openModal, ModalRoot, ModalContent, ModalCloseButton } from "@utils/modal";
+import { addHeaderBarButton, HeaderBarButton, removeHeaderBarButton } from "@api/HeaderBar";
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType } from "@utils/types";
@@ -765,46 +766,26 @@ function MoggcordAINavButton({ selected }: { selected?: boolean; }) {
 
 export default definePlugin({
     name: "MoggcordAI",
-    enabledByDefault: true,
-    description: "AI Chat (Groq) integrated in Discord. Replaces 'Shop' in the DM panel.",
+    enabledByDefault: false,
+    description: "AI Chat (Groq). Opens from the header bar button or message context menu when enabled.",
     authors: [{ name: "Moggcord", id: 0n }],
     settings,
 
-    patches: [
-        {
-            // Patch 1 : Remplace la page Boutique (Shop) par notre panneau MoggcordAI
-            find: "CollectiblesShop",
-            replacement: [
-                {
-                    // Variante A : CollectiblesShop:function(){...} ou CollectiblesShop:SomeVar
-                    match: /CollectiblesShop\s*:\s*(\i)/,
-                    replace: "CollectiblesShop:()=>$self.renderPanel()",
-                },
-                {
-                    // Variante B : CollectiblesShop:()=>someVar
-                    match: /CollectiblesShop\s*:\s*\(\)\s*=>\s*(\i)/,
-                    replace: "CollectiblesShop:()=>$self.renderPanel()",
-                },
-                {
-                    // Variante C : import/require de CollectiblesShop comme prop React
-                    match: /([{,])CollectiblesShop:(\i)([,}])/,
-                    replace: "$1CollectiblesShop:()=>$self.renderPanel()$3",
-                },
-            ]
-        },
-        {
-            // Patch 2 : Injecter le bouton MoggcordAI dans la barre latérale DM (Ancien système réactivé avec correctif de version)
-            find: ".FRIENDS},\"friends\"",
-            replacement: {
-                // On cible l'injection du bouton Boutique (Shop) dans le composant Sidebar
-                // Le match $1 capture l'expression de sélection (selected: ...)
-                match: /\(0,\i\.jsx\)\(\i\.\i,\{selected:(\i===\i\.BVt\.COLLECTIBLES_SHOP).{0,400}?\},"discord-shop"\)/,
-                replace: "$self.renderNavButton($1)"
-            }
-        },
-    ],
+    patches: [],
 
     start() {
+        addHeaderBarButton("moggcord-ai", () => (
+            <HeaderBarButton
+                tooltip="Moggcord AI"
+                icon={(props: React.ComponentProps<"svg">) => (
+                    <svg width={props.width ?? 20} height={props.height ?? 20} viewBox="0 0 24 24" fill="currentColor" {...props}>
+                        <path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7h1a1 1 0 0 1 1 1v3a1 1 0 0 1-1 1h-1v1a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-1H2a1 1 0 0 1-1-1v-3a1 1 0 0 1 1-1h1a7 7 0 0 1 7-7h1V5.73c-.6-.34-1-.99-1-1.73a2 2 0 0 1 2-2z" />
+                    </svg>
+                )}
+                onClick={() => openModal(props => <MoggcordAIChat rootProps={props} />)}
+            />
+        ), 54);
+
         // Copy the legacy Settings API key into the shared DataStore once.
         const keyFromSettings = settings.store.apiKey?.trim();
         if (keyFromSettings) {
@@ -815,22 +796,13 @@ export default definePlugin({
                 }
             });
         }
-        // The nav button is injected via the React-safe webpack patch (renderNavButton).
-        // No manual DOM surgery: moving/hiding React-owned sidebar nodes breaks the
-        // sidebar's interactivity (servers/DMs become unclickable).
+        // Opens from header bar when enabled — no Shop slot hijack.
     },
 
     stop() {
+        removeHeaderBarButton("moggcord-ai");
         const legacy = document.getElementById("nai-nav-injected");
         if (legacy) legacy.remove();
-    },
-
-    renderNavButton(selected?: boolean) {
-        return <MoggcordAINavButton selected={selected} />;
-    },
-
-    renderPanel() {
-        return <MoggcordAIPanel />;
     },
 
     contextMenus: {
