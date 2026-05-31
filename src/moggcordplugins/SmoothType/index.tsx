@@ -82,6 +82,9 @@ function buildCSS(): string {
 #vc-smoothtype-caret.is-blinking {
     animation: vc-blink 1s ease-in-out infinite;
 }
+#vc-smoothtype-caret.is-instant {
+    transition: none !important;
+}
 #vc-smoothtype-caret {
     position: fixed;
     top: 0; left: 0;
@@ -107,7 +110,12 @@ function getCaret(): HTMLDivElement {
     return el;
 }
 
+function getExistingCaret(): HTMLDivElement | null {
+    return document.getElementById("vc-smoothtype-caret") as HTMLDivElement | null;
+}
+
 let blinkTimer: ReturnType<typeof setTimeout> | null = null;
+let instantTimer: ReturnType<typeof setTimeout> | null = null;
 
 function startBlink() { getCaret().classList.add("is-blinking"); }
 
@@ -117,13 +125,33 @@ function stopBlink() {
     blinkTimer = setTimeout(startBlink, 1000);
 }
 
-function applyCaretPosition() {
+function hideCaret() {
+    const el = getExistingCaret();
+    if (el) el.style.display = "none";
+}
+
+function isSlateEditorActive() {
+    return Boolean(document.activeElement?.closest("[data-slate-editor]"));
+}
+
+function moveInstantlyForTyping() {
     const el = getCaret();
-    if (!document.activeElement?.closest("[data-slate-editor]")) {
-        el.style.display = "none"; return;
+    el.classList.add("is-instant");
+    if (instantTimer) clearTimeout(instantTimer);
+    instantTimer = setTimeout(() => {
+        instantTimer = null;
+        getExistingCaret()?.classList.remove("is-instant");
+    }, 90);
+}
+
+function applyCaretPosition(instant = false) {
+    const el = getCaret();
+    if (!isSlateEditorActive()) {
+        hideCaret(); return;
     }
+    if (instant) moveInstantlyForTyping();
     const sel = window.getSelection();
-    if (!sel?.rangeCount) { el.style.display = "none"; return; }
+    if (!sel?.rangeCount) { hideCaret(); return; }
     const range = sel.getRangeAt(0).cloneRange();
     range.collapse(false);
     const rects = range.getClientRects();
@@ -133,7 +161,7 @@ function applyCaretPosition() {
         const parent = (node.nodeType === Node.TEXT_NODE ? node.parentElement : node) as HTMLElement | null;
         if (parent) rect = parent.getBoundingClientRect();
     }
-    if (!rect || rect.height === 0) { el.style.display = "none"; return; }
+    if (!rect || rect.height === 0) { hideCaret(); return; }
     const newLeft = rect.right + "px";
     const newTop = rect.top + "px";
     if (el.style.left !== newLeft || el.style.top !== newTop) {
@@ -145,34 +173,29 @@ function applyCaretPosition() {
     el.style.height = rect.height + "px";
 }
 
-let observer: MutationObserver | null = null;
 let observerRaf = 0;
+let instantUpdate = false;
 
-function scheduleCaretUpdate() {
+function scheduleCaretUpdate(instant = false) {
+    if (!isSlateEditorActive()) {
+        hideCaret();
+        return;
+    }
+    instantUpdate = instantUpdate || instant;
     if (observerRaf) return;
     observerRaf = requestAnimationFrame(() => {
         observerRaf = 0;
-        applyCaretPosition();
+        const shouldMoveInstantly = instantUpdate;
+        instantUpdate = false;
+        applyCaretPosition(shouldMoveInstantly);
     });
-}
-
-function startObserver() {
-    observer = new MutationObserver(() => scheduleCaretUpdate());
-    observer.observe(document.body, { childList: true, subtree: true });
-}
-
-function stopObserver() {
-    observer?.disconnect();
-    observer = null;
-    if (observerRaf) cancelAnimationFrame(observerRaf);
-    observerRaf = 0;
 }
 
 const handlers = {
     sel:   () => scheduleCaretUpdate(),
     focus: () => scheduleCaretUpdate(),
-    blur:  () => { getCaret().style.display = "none"; },
-    key:   () => scheduleCaretUpdate(),
+    blur:  () => hideCaret(),
+    key:   () => scheduleCaretUpdate(true),
     click: () => scheduleCaretUpdate(),
 };
 
@@ -180,6 +203,7 @@ function startListeners() {
     document.addEventListener("selectionchange", handlers.sel);
     document.addEventListener("focusin", handlers.focus);
     document.addEventListener("focusout", handlers.blur);
+    document.addEventListener("input", handlers.key, true);
     document.addEventListener("keyup", handlers.key, true);
     document.addEventListener("click", handlers.click, true);
 }
@@ -188,6 +212,7 @@ function stopListeners() {
     document.removeEventListener("selectionchange", handlers.sel);
     document.removeEventListener("focusin", handlers.focus);
     document.removeEventListener("focusout", handlers.blur);
+    document.removeEventListener("input", handlers.key, true);
     document.removeEventListener("keyup", handlers.key, true);
     document.removeEventListener("click", handlers.click, true);
 }
@@ -206,7 +231,7 @@ function removeCSS() {
 
 export default definePlugin({
     name: "SmoothType",
-    enabledByDefault: true,
+    enabledByDefault: false,
     description: "The plugin allows you to fully customize the cursor caret's visual settings, including adjustable transition delays and custom CSS animation effects.",
     authors: [Devs.coll,Devs.viciouscal],
     settings,
@@ -214,13 +239,15 @@ export default definePlugin({
     start() {
         applyCSS();
         getCaret();
-        startObserver();
         startListeners();
     },
 
     stop() {
-        stopObserver();
         stopListeners();
+        if (observerRaf) cancelAnimationFrame(observerRaf);
+        observerRaf = 0;
+        if (instantTimer) clearTimeout(instantTimer);
+        instantTimer = null;
         removeCSS();
         if (blinkTimer) clearTimeout(blinkTimer);
         document.getElementById("vc-smoothtype-caret")?.remove();

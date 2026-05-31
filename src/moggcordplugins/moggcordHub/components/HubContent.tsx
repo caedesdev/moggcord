@@ -2,7 +2,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { React, TabBar, useEffect, useState } from "@webpack/common";
+import { classes } from "@utils/misc";
+import { React, useEffect, useState } from "@webpack/common";
 
 import { markGuideSeen, markVersionSeen } from "../whatsNew";
 import { ChangelogTab } from "./ChangelogTab";
@@ -50,22 +51,21 @@ export function HubContent({
                         <div className="mhub-modal-logo">M</div>
                         <div className="mhub-modal-brand-text">
                             <h1 className="mhub-modal-title">Moggcord Hub</h1>
-                            <p className="mhub-modal-subtitle">News, Changelog & Plugin-Guide</p>
+                            <p className="mhub-modal-subtitle">News, changelog, and plugin guide</p>
                         </div>
                     </div>
-                    <TabBar
-                        type="top"
-                        look="brand"
-                        className="mhub-tab-bar"
-                        selectedItem={tab}
-                        onItemSelect={item => setTab(item as HubTab)}
-                    >
+                    <nav className="mhub-tab-bar" aria-label="Moggcord Hub sections">
                         {(Object.keys(TAB_LABELS) as HubTab[]).map(id => (
-                            <TabBar.Item key={id} id={id} className="mhub-tab-bar-item">
+                            <button
+                                key={id}
+                                type="button"
+                                className={classes("mhub-tab-button", tab === id && "mhub-tab-button-active")}
+                                onClick={() => setTab(id)}
+                            >
                                 {TAB_LABELS[id]}
-                            </TabBar.Item>
+                            </button>
                         ))}
-                    </TabBar>
+                    </nav>
                 </div>
             </header>
             <div className={bodyClass}>
