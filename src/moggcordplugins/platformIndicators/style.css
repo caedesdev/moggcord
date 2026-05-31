@@ -1,12 +1,13 @@
-.vc-platform-indicator:empty {
-    display: none !important;
-}
-
 .vc-platform-indicator {
     display: inline-flex;
     justify-content: center;
     align-items: center;
     gap: 2px;
+    flex: 0 0 auto;
+}
+
+.vc-platform-indicator:empty {
+    display: none !important;
 }
 
 .vc-platform-indicator-profile {
@@ -18,4 +19,8 @@
     position: relative;
     vertical-align: top;
     top: -1px;
+}
+
+.vc-platform-indicator-member-list {
+    margin-left: 2px;
 }

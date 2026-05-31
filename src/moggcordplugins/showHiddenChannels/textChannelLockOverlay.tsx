@@ -25,15 +25,28 @@ import type { Root } from "react-dom/client";
 import HiddenChannelLockScreen from "./components/HiddenChannelLockScreen";
 
 const MessagesClasses = findCssClassesLazy("messagesWrapper", "scrollerInner", "navigationDescription");
+const OverlayClassName = "vc-shc-text-overlay";
 
 type PluginApi = {
     isHiddenTextChannel(channel: Channel): boolean;
 };
 
-function findMessagesWrapper(): HTMLElement | null {
+function isValidAnchor(candidate: HTMLElement | null | undefined) {
+    return candidate != null && !candidate.closest('[class*="popout"]') && !candidate.closest('[class*="modal"]');
+}
+
+function findRenderedLockScreen(): HTMLElement | null {
+    const lockScreen = Array.from(document.querySelectorAll(".vc-shc-container"))
+        .find(el => !el.closest(`.${OverlayClassName}`));
+
+    return lockScreen?.parentElement as HTMLElement | null;
+}
+
+function findChannelAnchor(): HTMLElement | null {
     const { messagesWrapper } = MessagesClasses;
 
     const candidates: Array<HTMLElement | null | undefined> = [
+        findRenderedLockScreen(),
         messagesWrapper ? document.querySelector(`div.${messagesWrapper}`) as HTMLElement : null,
         document.querySelector('[class*="messagesWrapper"]') as HTMLElement,
         document.querySelector('ol[data-list-id="chat-messages"]')?.closest('[class*="messagesWrapper"]') as HTMLElement,
@@ -41,18 +54,28 @@ function findMessagesWrapper(): HTMLElement | null {
     ];
 
     for (const candidate of candidates) {
-        if (!candidate) continue;
-        if (candidate.closest('[class*="popout"]') || candidate.closest('[class*="modal"]')) continue;
+        if (!isValidAnchor(candidate)) continue;
         return candidate;
     }
 
     return null;
 }
 
-function patchAlreadyRendered(wrapper: HTMLElement) {
-    return Array.from(wrapper.querySelectorAll(".vc-shc-container")).some(
-        el => !el.closest(".vc-shc-text-overlay")
-    );
+function findOverlayTarget(anchor: HTMLElement): HTMLElement {
+    const anchorRect = anchor.getBoundingClientRect();
+    let target = anchor;
+
+    for (let parent = anchor.parentElement; parent && parent !== document.body; parent = parent.parentElement) {
+        if (!isValidAnchor(parent)) break;
+
+        const rect = parent.getBoundingClientRect();
+        if (Math.abs(rect.left - anchorRect.left) > 12) break;
+        if (rect.width < anchorRect.width || rect.height < anchorRect.height) continue;
+
+        target = parent;
+    }
+
+    return target;
 }
 
 export class TextChannelLockOverlay {
@@ -98,8 +121,8 @@ export class TextChannelLockOverlay {
             return;
         }
 
-        const wrapper = findMessagesWrapper();
-        if (!wrapper) {
+        const anchor = findChannelAnchor();
+        if (!anchor) {
             if (!this.observer) {
                 this.observer = new MutationObserver(this.scheduleUpdate);
                 this.observer.observe(document.body, { childList: true, subtree: true });
@@ -107,19 +130,14 @@ export class TextChannelLockOverlay {
             return;
         }
 
-        if (patchAlreadyRendered(wrapper)) {
-            this.unmount();
-            this.observer?.disconnect();
-            this.observer = null;
-            return;
-        }
+        const target = findOverlayTarget(anchor);
 
         if (this.mountedChannelId !== channelId) {
             this.unmount();
             this.mountedChannelId = channelId;
         }
 
-        this.mount(wrapper, channel);
+        this.mount(target, channel);
         this.observer?.disconnect();
         this.observer = null;
     }
@@ -127,7 +145,7 @@ export class TextChannelLockOverlay {
     private mount(wrapper: HTMLElement, channel: Channel) {
         if (!this.container) {
             this.container = document.createElement("div");
-            this.container.className = "vc-shc-text-overlay";
+            this.container.className = OverlayClassName;
             this.root = createRoot(this.container);
         }
 

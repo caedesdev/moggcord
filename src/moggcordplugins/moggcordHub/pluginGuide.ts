@@ -5,12 +5,7 @@
 import { isPluginEnabled } from "@api/PluginManager";
 import Plugins, { PluginMeta } from "~plugins";
 
-import {
-    getGermanDescription,
-    GUIDE_CATEGORIES,
-    resolveCategory,
-    type GuideCategory,
-} from "./guideData";
+import { getGuideDescription, GUIDE_CATEGORIES, resolveCategory, type GuideCategory } from "./guideData";
 
 export interface GuideEntry {
     name: string;
@@ -46,7 +41,7 @@ export function collectGuideEntries(onlyDefaultOn = true): GuideEntry[] {
 
         entries.push({
             name: plugin.name,
-            description: getGermanDescription(plugin.name, plugin.description),
+            description: getGuideDescription(plugin.name, plugin.description),
             categoryId: resolveCategory(plugin.name, plugin.description),
             enabled: isPluginEnabled(name),
             isMoggcord,

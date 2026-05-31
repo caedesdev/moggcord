@@ -10,12 +10,12 @@ import {
     startPlugin,
     stopPlugin,
 } from "@api/PluginManager";
-import { useSettings } from "@api/Settings";
+import { SettingsStore } from "@api/Settings";
 import { openPluginModal } from "@components/settings/tabs";
 import { Switch } from "@components/Switch";
 import { classes } from "@utils/misc";
 import { Plugin } from "@utils/types";
-import { React, showToast, Toasts, useMemo, useState } from "@webpack/common";
+import { React, showToast, Toasts, useEffect, useMemo, useState } from "@webpack/common";
 import { Settings } from "Vencord";
 import Plugins from "~plugins";
 
@@ -32,6 +32,8 @@ const CATEGORY_ICON: Record<string, string> = {
     advanced: "⚠️",
     other: "📦",
 };
+
+const SEARCH_DELAY_MS = 120;
 
 function togglePluginEnabled(plugin: Plugin) {
     const settings = Settings.plugins[plugin.name];
@@ -116,22 +118,36 @@ function PluginRow({ entry }: { entry: ReturnType<typeof collectGuideEntries>[nu
 }
 
 export function GuideTab() {
-    useSettings(["plugins.*"]);
-
     const [query, setQuery] = useState("");
+    const [deferredQuery, setDeferredQuery] = useState("");
     const [onlyActive, setOnlyActive] = useState(false);
     const [onlyMoggcord, setOnlyMoggcord] = useState(false);
     const [category, setCategory] = useState<string>("all");
+    const [settingsRevision, setSettingsRevision] = useState(0);
 
-    const allEntries = collectGuideEntries(false);
+    useEffect(() => {
+        const update = () => setSettingsRevision(v => v + 1);
+
+        SettingsStore.addPrefixChangeListener("plugins", update);
+
+        return () => SettingsStore.removePrefixChangeListener("plugins", update);
+    }, []);
+
+    useEffect(() => {
+        const timeout = setTimeout(() => setDeferredQuery(query), SEARCH_DELAY_MS);
+
+        return () => clearTimeout(timeout);
+    }, [query]);
+
+    const allEntries = useMemo(() => collectGuideEntries(false), [settingsRevision]);
 
     const filtered = useMemo(() => {
-        let list = filterGuideEntries(allEntries, query);
+        let list = filterGuideEntries(allEntries, deferredQuery);
         if (onlyActive) list = list.filter(e => e.enabled);
         if (onlyMoggcord) list = list.filter(e => e.isMoggcord);
         if (category !== "all") list = list.filter(e => e.categoryId === category);
         return list;
-    }, [allEntries, query, onlyActive, onlyMoggcord, category]);
+    }, [allEntries, deferredQuery, onlyActive, onlyMoggcord, category]);
 
     const grouped = useMemo(() => groupGuideEntries(filtered), [filtered]);
 
@@ -149,15 +165,49 @@ export function GuideTab() {
         return counts;
     }, [allEntries]);
 
-    const isSearching = query.trim().length > 0 || onlyActive || onlyMoggcord;
+    const isSearching = deferredQuery.trim().length > 0 || onlyActive || onlyMoggcord;
+
+    const guideResults = useMemo(() => {
+        if (filtered.length === 0) {
+            return <div className="mhub-state">No plugins found.</div>;
+        }
+
+        if (isSearching || category !== "all") {
+            return (
+                <div className="mhub-plugin-list">
+                    {filtered.map(entry => (
+                        <PluginRow key={entry.name} entry={entry} />
+                    ))}
+                </div>
+            );
+        }
+
+        return grouped.map(section => (
+            <div key={section.id} className="mhub-guide-block">
+                <header className={`mhub-guide-block-head mhub-cat-head-${section.id}`}>
+                    <span className="mhub-guide-block-icon">{CATEGORY_ICON[section.id] ?? "•"}</span>
+                    <div>
+                        <h3>{section.label}</h3>
+                        <p>{section.description}</p>
+                    </div>
+                    <span className="mhub-guide-block-count">{section.plugins.length}</span>
+                </header>
+                <div className="mhub-plugin-list">
+                    {section.plugins.map(entry => (
+                        <PluginRow key={entry.name} entry={entry} />
+                    ))}
+                </div>
+            </div>
+        ));
+    }, [category, filtered, grouped, isSearching]);
 
     return (
         <div className="mhub-guide">
             <div className="mhub-guide-hero">
                 <div className="mhub-guide-hero-text">
-                    <h2>Plugin-Guide</h2>
+                    <h2>Plugin guide</h2>
                     <p>
-                        Alle Plugins auf einen Blick — ein- und ausschalten oder Details öffnen.
+                        Browse every plugin, toggle it, or open its settings.
                     </p>
                 </div>
                 <div className="mhub-stat-row">
@@ -167,7 +217,7 @@ export function GuideTab() {
                     </div>
                     <div className="mhub-stat-box mhub-stat-box-green">
                         <span className="mhub-stat-num">{stats.active}</span>
-                        <span className="mhub-stat-label">Aktiv</span>
+                        <span className="mhub-stat-label">Active</span>
                     </div>
                     <div className="mhub-stat-box mhub-stat-box-blue">
                         <span className="mhub-stat-num">{stats.moggcord}</span>
@@ -189,15 +239,18 @@ export function GuideTab() {
                         className="mhub-search-input"
                         value={query}
                         onChange={e => setQuery(e.target.value)}
-                        placeholder="Plugin suchen…"
+                        placeholder="Search plugins..."
                         spellCheck={false}
                     />
                     {query && (
                         <button
                             type="button"
                             className="mhub-search-clear"
-                            aria-label="Suche löschen"
-                            onClick={() => setQuery("")}
+                            aria-label="Clear search"
+                            onClick={() => {
+                                setQuery("");
+                                setDeferredQuery("");
+                            }}
                         >
                             ×
                         </button>
@@ -209,14 +262,14 @@ export function GuideTab() {
                         className={classes("mhub-filter-chip", onlyActive && "active")}
                         onClick={() => setOnlyActive(v => !v)}
                     >
-                        Nur aktive
+                        Active only
                     </button>
                     <button
                         type="button"
                         className={classes("mhub-filter-chip", onlyMoggcord && "active")}
                         onClick={() => setOnlyMoggcord(v => !v)}
                     >
-                        Nur Moggcord
+                        Moggcord only
                     </button>
                 </div>
             </div>
@@ -231,7 +284,7 @@ export function GuideTab() {
                                 onClick={() => setCategory("all")}
                             >
                                 <span className="mhub-cat-icon">✦</span>
-                                <span className="mhub-cat-label">Alle</span>
+                                <span className="mhub-cat-label">All</span>
                                 <span className="mhub-cat-count">{allEntries.length}</span>
                             </button>
                             {GUIDE_CATEGORIES.map(cat => {
@@ -256,33 +309,7 @@ export function GuideTab() {
 
                 <div className="mhub-guide-main">
                     <div className="mhub-guide-main-scroll">
-                        {filtered.length === 0 ? (
-                            <div className="mhub-state">Keine Plugins gefunden.</div>
-                        ) : isSearching || category !== "all" ? (
-                            <div className="mhub-plugin-list">
-                                {filtered.map(entry => (
-                                    <PluginRow key={entry.name} entry={entry} />
-                                ))}
-                            </div>
-                        ) : (
-                            grouped.map(section => (
-                                <div key={section.id} className="mhub-guide-block">
-                                    <header className={`mhub-guide-block-head mhub-cat-head-${section.id}`}>
-                                        <span className="mhub-guide-block-icon">{CATEGORY_ICON[section.id] ?? "•"}</span>
-                                        <div>
-                                            <h3>{section.label}</h3>
-                                            <p>{section.description}</p>
-                                        </div>
-                                        <span className="mhub-guide-block-count">{section.plugins.length}</span>
-                                    </header>
-                                    <div className="mhub-plugin-list">
-                                        {section.plugins.map(entry => (
-                                            <PluginRow key={entry.name} entry={entry} />
-                                        ))}
-                                    </div>
-                                </div>
-                            ))
-                        )}
+                        {guideResults}
                     </div>
                 </div>
             </div>

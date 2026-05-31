@@ -2,7 +2,7 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { NO_DRAG_GUARD_CSS, NO_DRAG_GUARD_STYLE_ID, NO_DRAG_INTERACTIVE_SELECTOR } from "@shared/noDragGuard";
+import { NO_DRAG_GUARD_CSS, NO_DRAG_GUARD_STYLE_ID } from "@shared/noDragGuard";
 import definePlugin from "@utils/types";
 
 // On a slow cold start Discord can leave `-webkit-app-region: drag` on <body>,
@@ -28,25 +28,17 @@ function injectStyle() {
 function bodyIsDraggable(): boolean {
     const b = document.body;
     if (!b) return false;
-    const region = getComputedStyle(b).webkitAppRegion || (getComputedStyle(b) as any).appRegion;
+    const style = getComputedStyle(b) as CSSStyleDeclaration & { appRegion?: string; };
+    const region = style.webkitAppRegion || style.appRegion;
     return region === "drag";
 }
 
-// Inline !important beats any stylesheet rule that set body to drag.
 function enforceNoDrag() {
     const b = document.body;
     if (!b) return;
     if (bodyIsDraggable()) {
         b.style.setProperty("-webkit-app-region", "no-drag", "important");
-        console.warn("[Moggcord] Cleared stuck title-bar drag region on <body> (sidebar was unclickable).");
     }
-
-    document.querySelectorAll<HTMLElement>(NO_DRAG_INTERACTIVE_SELECTOR).forEach(el => {
-        const region = getComputedStyle(el).webkitAppRegion || (getComputedStyle(el) as any).appRegion;
-        if (region === "drag") {
-            el.style.setProperty("-webkit-app-region", "no-drag", "important");
-        }
-    });
 }
 
 let observer: MutationObserver | null = null;
@@ -65,15 +57,12 @@ export default definePlugin({
         injectStyle();
         enforceNoDrag();
 
-        // Re-assert if Discord clears our inline override (e.g. on theme/layout changes).
         observer = new MutationObserver(() => enforceNoDrag());
         const observeTarget = document.body ?? document.documentElement;
         if (observeTarget) {
             observer.observe(observeTarget, {
                 attributes: true,
-                attributeFilter: ["style", "class"],
-                childList: true,
-                subtree: true
+                attributeFilter: ["style", "class"]
             });
         } else {
             window.addEventListener("DOMContentLoaded", () => {

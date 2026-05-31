@@ -4,6 +4,7 @@
 
 import { Button, LinkButton } from "@components/Button";
 import { Link } from "@components/Link";
+import { classes } from "@utils/misc";
 import { checkForUpdates, rebuild, update, UpdateLogger } from "@utils/updater";
 import { relaunch } from "@utils/native";
 import { React, useEffect, useState } from "@webpack/common";
@@ -97,15 +98,23 @@ export function HomeTab({
 
     return (
         <div className={compact ? "mhub-home mhub-home-compact" : "mhub-home"}>
-            {!compact && (
-                <section className="mhub-hero">
-                    <div className="mhub-hero-icon">M</div>
-                    <div>
-                        <h2 className="mhub-hero-title">Moggcord Hub</h2>
-                        <p className="mhub-muted">News, updates, and quick links for your client.</p>
+            <section className={classes("mhub-hero", compact && "mhub-hero-compact")}>
+                <div className="mhub-hero-icon">M</div>
+                <div className="mhub-hero-copy">
+                    <span className="mhub-eyebrow">Discord Desktop Mod</span>
+                    <h2 className="mhub-hero-title">Moggcord</h2>
+                    <p className="mhub-hero-tagline">get good. GET MOGGCORD!</p>
+                    <p className="mhub-muted">News, updates, plugin guide, and quick links for your client.</p>
+                    <div className="mhub-actions mhub-hero-actions">
+                        <Button size="small" onClick={onOpenGuide}>
+                            View plugins
+                        </Button>
+                        <Button size="small" variant="secondary" onClick={onOpenChangelog}>
+                            View changelog
+                        </Button>
                     </div>
-                </section>
-            )}
+                </div>
+            </section>
 
             <div className="mhub-card">
                 <h3 className="mhub-card-title">Version</h3>
@@ -138,13 +147,13 @@ export function HomeTab({
             </div>
 
             <div className="mhub-card">
-                <h3 className="mhub-card-title">Plugin-Guide</h3>
+                <h3 className="mhub-card-title">Plugin guide</h3>
                 <p className="mhub-muted">
-                    Viele Plugins sind standardmäßig aktiv. Der Guide erklärt, wofür sie da sind.
+                    Most plugins are enabled by default. The guide explains what each one does.
                 </p>
                 <div className="mhub-actions">
                     <Button size="small" onClick={onOpenGuide}>
-                        Plugin-Guide öffnen
+                        Open plugin guide
                     </Button>
                 </div>
             </div>
@@ -154,11 +163,7 @@ export function HomeTab({
                     <h3 className="mhub-card-title">Latest release</h3>
                     <p className="mhub-latest-name">{latestRelease.name}</p>
                     <p className="mhub-muted">{latestRelease.tag}</p>
-                    {latestRelease.body && (
-                        <p className="mhub-latest-preview">
-                            {latestRelease.body.split("\n").find(l => l.trim() && !l.startsWith("#"))?.slice(0, 160) ?? ""}
-                        </p>
-                    )}
+                    <p className="mhub-latest-preview">Open the changelog to see what changed in this release.</p>
                     <div className="mhub-actions">
                         <Button size="small" variant="secondary" onClick={onOpenChangelog}>
                             View changelog

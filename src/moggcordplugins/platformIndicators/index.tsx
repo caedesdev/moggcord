@@ -8,11 +8,13 @@ import "./style.css";
 
 import { definePluginSettings, migratePluginSetting } from "@api/Settings";
 import { Devs, EquicordDevs } from "@utils/constants";
-import { classes } from "@utils/misc";
+import { classNameFactory } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
 import { DiscordPlatform, User } from "@vencord/discord-types";
 import { filters, findStoreLazy, mapMangledModuleLazy } from "@webpack";
 import { AuthenticationStore, PresenceStore, Tooltip, UserStore, useStateFromStores } from "@webpack/common";
+
+const cl = classNameFactory("vc-platform-");
 
 export interface Session {
     sessionId: string;
@@ -149,8 +151,11 @@ const PlatformIndicator = ({ user, isProfile, isMessage, isMemberList }: Platfor
 
     return (
         <div
-            className={classes("vc-platform-indicator", isProfile && "vc-platform-indicator-profile", isMessage && "vc-platform-indicator-message")}
-            style={{ marginLeft: isMemberList ? "4px" : undefined }}
+            className={cl("indicator", {
+                "indicator-profile": isProfile,
+                "indicator-message": isMessage,
+                "indicator-member-list": isMemberList
+            })}
         >
             {icons}
         </div>
@@ -199,9 +204,10 @@ const settings = definePluginSettings({
 
 export default definePlugin({
     name: "PlatformIndicators",
-    enabledByDefault: false,
+    enabledByDefault: true,
     description: "Adds platform indicators (Desktop, Mobile, Web...) to users",
     authors: [Devs.kemo, Devs.TheSun, Devs.Nuckyz, Devs.Ven, EquicordDevs.neoarz],
+    dependencies: ["MemberListDecoratorsAPI", "MessageDecorationsAPI", "NicknameIconsAPI"],
     isModified: true,
     settings,
 

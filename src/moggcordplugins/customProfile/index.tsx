@@ -512,8 +512,16 @@ function updateCachedRealData() {
 let _domQueued = false;
 let _domMutations: MutationRecord[] = [];
 
+function shouldSkipDomText(node: Node) {
+    const element = node.nodeType === Node.TEXT_NODE
+        ? (node as Text).parentElement
+        : node instanceof Element ? node : null;
+    return Boolean(element?.closest("[data-slate-editor], textarea, input, [contenteditable='true'], [role='textbox']"));
+}
+
 function scanTextNode(node: Text) {
     if (!isEnabled || !node.nodeValue) return;
+    if (shouldSkipDomText(node)) return;
     const val = (node as any).__cp_orig || node.nodeValue;
     let result = val;
     try { if (_trueOriginalUser) { _realUsername = _trueOriginalUser.username || _realUsername; _realGlobalName = _trueOriginalUser.globalName || _realGlobalName; } } catch { }
@@ -535,6 +543,7 @@ function scanTextNode(node: Text) {
 }
 
 function scanNode(node: Node) {
+    if (shouldSkipDomText(node)) return;
     if (node.nodeType === Node.TEXT_NODE) { scanTextNode(node as Text); return; }
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
     let n: Node | null;
