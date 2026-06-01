@@ -153,10 +153,6 @@ try {
 
 # ── Succès ────────────────────────────────────────────────────────────────────
 Write-Host ""
-$MarkerDir = Join-Path $env:LOCALAPPDATA "Moggcord"
-New-Item -ItemType Directory -Force -Path $MarkerDir | Out-Null
-Set-Content -Path (Join-Path $MarkerDir ".pending-relaunch") -Value ([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds())
-
 Write-Host "  Redémarrage de Discord..." -ForegroundColor DarkGray
 Write-Host "  (Discord startet einmal kurz neu, damit alles anklickbar ist.)" -ForegroundColor DarkGray
 $DiscordRoot = Join-Path $env:LOCALAPPDATA "Discord"

@@ -80,6 +80,10 @@ const logger = new Logger("UserArea");
 export const buttons = new Map<string, ButtonEntry>();
 
 export function addUserAreaButton(id: string, render: UserAreaButtonFactory, priority = 0) {
+    if (typeof render !== "function") {
+        logger.error(`addUserAreaButton(${id}): render must be a function, got ${typeof render}`);
+        return;
+    }
     buttons.set(id, { render, priority });
 }
 

@@ -7,6 +7,20 @@
     gap: 10px;
 }
 
+.ti-hint {
+    margin: 0;
+    font-size: 12px;
+    line-height: 1.45;
+    color: var(--text-muted, #b5bac1);
+}
+
+.ti-hint code {
+    font-size: 11px;
+    background: rgba(255, 255, 255, 0.06);
+    padding: 1px 4px;
+    border-radius: 3px;
+}
+
 /* Onglets */
 .ti-bar {
     display: flex;
@@ -440,8 +454,40 @@
 
 .ti-results-summary {
     display: flex;
+    flex-wrap: wrap;
     gap: 12px;
     font-size: 12px;
-    padding: 0 2px;
+    padding: 4px 2px 0;
     align-items: center;
+}
+
+.ti-summary-stat {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.ti-summary-stat--ok {
+    color: #3ba55c;
+}
+
+.ti-summary-stat--bad {
+    color: #ed4245;
+}
+
+.ti-summary-stat--warn {
+    color: #faa61a;
+}
+
+.ti-status-msg {
+    margin-top: 8px;
+    padding: 8px 10px;
+    border-radius: 6px;
+    background: rgba(250, 166, 26, 0.12);
+    color: #faa61a;
+    font-size: 12px;
+    line-height: 1.4;
 }

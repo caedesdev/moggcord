@@ -8,23 +8,31 @@ import { addContextMenuPatch, NavContextMenuPatchCallback, removeContextMenuPatc
 import { Modals, openModal } from "@utils/modal";
 import definePlugin from "@utils/types";
 import { RelationshipType } from "@vencord/discord-types/enums";
-import { findByProps } from "@webpack";
+import { find, filters } from "@webpack";
 import { ChannelStore, GuildMemberStore, Menu, React, RelationshipStore, FluxDispatcher, Toasts, UserStore, UserUtils } from "@webpack/common";
 
 import { FakeFriendsSettings } from "./settingsPanel";
 import {
     addDirectFriend,
     addPendingRequest,
+    applyFakeRelationshipsToStore,
     bindOrigGetRelType,
     bindGetRawRelationshipsMap,
+    ensureFakesOnRelationshipMap,
     fakeState,
     fetchAllGuildMembers,
+    getCachedAcceptedFriendIds,
+    getExtraFakePendingCount,
     getGuildCandidates,
+    invalidateRelationshipMapCache,
     loadState,
     persistState,
-    reapplyFakeStates,
+    scheduleReapplyOnConnect,
     removeFakeFriendById,
+    removeFakeFriendsByIds,
     syncFakeRelationships,
+    teardownReapplySchedule,
+    touchFakeState,
 } from "./state";
 
 import "./style.css";
@@ -48,6 +56,7 @@ let origGetFriendIDs: Function | null = null;
 let origGetMutable: Function | null = null;
 let origGetSince: Function | null = null;
 let origGetRelationships: Function | null = null;
+let origGetPendingCount: Function | null = null;
 
 function patchStore() {
     const store = RelationshipStore as any;
@@ -75,8 +84,9 @@ function patchStore() {
         origGetFriendIDs = store.getFriendIDs;
         store.getFriendIDs = function () {
             const real: string[] = origGetFriendIDs!.call(this);
-            const extra = [...fakeState.entries()].filter(([, s]) => s === "accepted").map(([id]) => id);
-            return [...new Set([...real, ...extra])];
+            const extra = getCachedAcceptedFriendIds();
+            if (!extra.length) return real;
+            return extra.length === 1 && !real.length ? extra : [...new Set([...real, ...extra])];
         };
     }
     if (!origGetMutable && typeof store.getMutableRelationships === "function") {
@@ -84,22 +94,30 @@ function patchStore() {
         bindGetRawRelationshipsMap(() => origGetMutable!.call(RelationshipStore));
         store.getMutableRelationships = function () {
             const real = origGetMutable!.call(this);
-            for (const [id, s] of fakeState) {
-                if (s === "accepted") real.set(id, RelationshipType.FRIEND);
-                else if (s === "pending") real.set(id, RelationshipType.INCOMING_REQUEST);
-            }
+            ensureFakesOnRelationshipMap(real);
             return real;
         };
     }
     if (!origGetRelationships && typeof store.getRelationships === "function") {
         origGetRelationships = store.getRelationships;
         store.getRelationships = function () {
-            const rels = { ...origGetRelationships!.call(this) };
+            const rels = origGetRelationships!.call(this);
+            if (!fakeState.size) return rels;
+
+            let out: Record<string, number> | null = null;
             for (const [id, s] of fakeState) {
-                if (s === "pending") rels[id] = RelationshipType.INCOMING_REQUEST;
-                else if (s === "accepted") rels[id] = RelationshipType.FRIEND;
+                const type = s === "pending" ? RelationshipType.INCOMING_REQUEST : RelationshipType.FRIEND;
+                if (rels[id] === type) continue;
+                if (!out) out = { ...rels };
+                out[id] = type;
             }
-            return rels;
+            return out ?? rels;
+        };
+    }
+    if (!origGetPendingCount && typeof store.getPendingCount === "function") {
+        origGetPendingCount = store.getPendingCount;
+        store.getPendingCount = function () {
+            return origGetPendingCount!.call(this) + getExtraFakePendingCount();
         };
     }
     if (!origGetSince && typeof store.getSince === "function") {
@@ -120,7 +138,9 @@ function unpatchStore() {
     if (origGetFriendIDs) { store.getFriendIDs = origGetFriendIDs; origGetFriendIDs = null; }
     if (origGetMutable) { store.getMutableRelationships = origGetMutable; origGetMutable = null; }
     if (origGetRelationships) { store.getRelationships = origGetRelationships; origGetRelationships = null; }
+    if (origGetPendingCount) { store.getPendingCount = origGetPendingCount; origGetPendingCount = null; }
     if (origGetSince) { store.getSince = origGetSince; origGetSince = null; }
+    invalidateRelationshipMapCache();
 }
 
 // ── Patch acceptFriend ─────────────────────────────────────────────────────────
@@ -128,12 +148,13 @@ let origAccept: Function | null = null;
 
 function patchAcceptFriend() {
     try {
-        const RA = findByProps("acceptFriend", "addFriend") as any;
+        const RA = find(filters.byProps("acceptFriend", "addFriend"), { isIndirect: true }) as any;
         if (!RA || origAccept) return;
         origAccept = RA.acceptFriend;
         RA.acceptFriend = async function (userId: string, ...args: any[]) {
             if (fakeState.get(userId) === "pending") {
                 fakeState.set(userId, "accepted");
+                touchFakeState();
                 await persistState();
                 FluxDispatcher.dispatch({
                     type: "RELATIONSHIP_UPDATE",
@@ -150,7 +171,7 @@ function patchAcceptFriend() {
 function unpatchAcceptFriend() {
     try {
         if (!origAccept) return;
-        const RA = findByProps("acceptFriend", "addFriend") as any;
+        const RA = find(filters.byProps("acceptFriend", "addFriend"), { isIndirect: true }) as any;
         if (RA) RA.acceptFriend = origAccept;
         origAccept = null;
     } catch { }
@@ -539,9 +560,7 @@ async function removeFakeFriendsForGuild(guildId: string) {
         return;
     }
 
-    for (const id of toRemove) {
-        await removeFakeFriendById(id);
-    }
+    await removeFakeFriendsByIds(toRemove);
 
     Toasts.show({ message: `${toRemove.length} fake request${toRemove.length > 1 ? "s" : ""} removed!`, type: Toasts.Type.SUCCESS, id: Toasts.genId() });
 }
@@ -588,7 +607,7 @@ const fakeMessageRequests = new Map<string, { user: any; channelId: string; msgI
 function patchMessageRequestStore() {
     if (MessageRequestStore) return;
     try {
-        const store = findByProps("getRequests", "hasRequest") as any;
+        const store = find(filters.byProps("getRequests", "hasRequest"), { isIndirect: true }) as any;
 
         if (!store) return;
         MessageRequestStore = store;
@@ -734,7 +753,6 @@ const userContextPatch: NavContextMenuPatchCallback = (children, props) => {
         let items: React.ReactElement[] = [];
         if (!state) {
             items = [
-                <Menu.MenuItem key="ff-friend" id="ff-friend" label="Fake Friend" action={() => doFakeFriend(userId)} />,
                 <Menu.MenuItem key="ff-request" id="ff-request" label="Fake Friend Request" action={() => doFakeFriendRequest(userId)} />,
             ];
         } else if (state === "pending") {
@@ -802,7 +820,7 @@ const guildContextPatch: NavContextMenuPatchCallback = (children, props) => {
 export default definePlugin({
     name: "FakeFriends",
     enabledByDefault: true,
-    description: "Simuliert Fake-Freunde und Anfragen lokal. Bleibt nach Neustart erhalten — verwaltbar in den Plugin-Einstellungen.",
+    description: "Simuliert eingehende Fake-Freundschaftsanfragen (nur lokal/pending). Bleibt nach Neustart gespeichert.",
     authors: [{ name: "Moggcord", id: 0n }],
     dependencies: ["ContextMenuAPI"],
     settingsAboutComponent: FakeFriendsSettings,
@@ -845,14 +863,13 @@ export default definePlugin({
 
         // Charger l'état persistant puis réappliquer les dispatches
         await loadState();
-        if (fakeState.size > 0) {
-            setTimeout(async () => {
-                await reapplyFakeStates();
-            }, 3000);
-        }
+        applyFakeRelationshipsToStore();
+        syncFakeRelationships();
+        scheduleReapplyOnConnect();
     },
 
     stop() {
+        teardownReapplySchedule();
         removeContextMenuPatch("user-context", userContextPatch);
         removeContextMenuPatch("guild-context", guildContextPatch);
         unpatchAcceptFriend();

@@ -18,7 +18,7 @@
 
 import { markPendingRelaunch } from "./postInstallRelaunch";
 import { app } from "electron";
-import { existsSync, mkdirSync, readdirSync, renameSync, statSync, writeFileSync } from "original-fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, statSync, writeFileSync } from "original-fs";
 import { basename, dirname, join } from "path";
 
 function isNewer($new: string, old: string) {
@@ -47,6 +47,42 @@ function patchLatest() {
         const resources = join(discordPath, latestVersion, "resources");
         const app = join(resources, "app.asar");
         const _app = join(resources, "_app.asar");
+        const appDir = join(resources, "app");
+        const buildInfo = join(resources, "build_info.json");
+
+        let newUpdater = false;
+        try {
+            newUpdater = JSON.parse(readFileSync(buildInfo, "utf8")).newUpdater === true;
+        } catch { /* noop */ }
+
+        if (newUpdater) {
+            if (!existsSync(_app) || statSync(_app).isDirectory()) return;
+            console.info("[Moggcord] Detected Host Update (newUpdater). Repatching loader...");
+            mkdirSync(appDir, { recursive: true });
+            writeFileSync(join(appDir, "package.json"), JSON.stringify({
+                name: "moggcord",
+                main: "index.js"
+            }));
+            writeFileSync(join(appDir, "index.js"), `// Moggcord repatch (newUpdater)
+"use strict";
+const fs = require("fs");
+const path = require("path");
+const localAppData = process.env.LOCALAPPDATA || "";
+const exeDir = path.dirname(process.execPath);
+const candidates = [
+    path.join(localAppData, "Moggcord", "dist", "patcher.js"),
+    path.join(process.resourcesPath, "dist", "patcher.js"),
+    path.join(process.resourcesPath, "app", "dist", "desktop", "patcher.js"),
+    path.join(exeDir, "resources", "dist", "patcher.js"),
+    path.join(exeDir, "dist", "patcher.js")
+];
+const patcherPath = candidates.find(fs.existsSync);
+if (!patcherPath) throw new Error("[Moggcord] patcher.js not found. Checked: " + candidates.join(", "));
+require(patcherPath);
+`);
+            markPendingRelaunch();
+            return;
+        }
 
         if (!existsSync(app) || statSync(app).isDirectory()) return;
 

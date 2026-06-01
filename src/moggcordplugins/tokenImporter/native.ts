@@ -11,11 +11,22 @@ import { join } from "path";
 import { execFileSync } from "child_process";
 import * as crypto from "crypto";
 
-const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) discord/1.0.9175 Chrome/128.0.6613.186 Electron/32.2.7 Safari/537.36";
-const X_SUPER_PROPERTIES = "eyJvcyI6IldpbmRvd3MiLCJicm93c2VyIjoiRGlzY29yZCBDbGllbnQiLCJyZWxlYXNlX2NoYW5uZWwiOiJzdGFibGUiLCJjbGllbnRfdmVyc2lvbiI6IjEuMC45MTc1IiwiaGFzX2NsaWVudF9tb2RzIjpmYWxzZX0=";
+const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) discord/1.0.9239 Chrome/134.0.6998.205 Electron/35.3.0 Safari/537.36";
+const X_SUPER_PROPERTIES = "eyJvcyI6IldpbmRvd3MiLCJicm93c2VyIjoiRGlzY29yZCBDbGllbnQiLCJyZWxlYXNlX2NoYW5uZWwiOiJzdGFibGUiLCJjbGllbnRfdmVyc2lvbiI6IjEuMC45MjM5IiwiaGFzX2NsaWVudF9tb2RzIjpmYWxzZX0=";
+
+/** Decode snowflake user id from a normal (non-MFA) Discord token. */
+export function decodeTokenUserId(_: any, token: string): string | null {
+    if (token.startsWith("mfa.")) return null;
+    try {
+        const decoded = Buffer.from(token.split(".")[0]!, "base64").toString("utf8");
+        return /^\d{17,20}$/.test(decoded) ? decoded : null;
+    } catch {
+        return null;
+    }
+}
 
 // Verification token
-export async function checkToken(_: any, token: string): Promise<{ valid: boolean; user?: any; error?: string; }> {
+export async function checkToken(_: any, token: string): Promise<{ valid: boolean; user?: any; error?: string; retryAfter?: number; }> {
     return new Promise(resolve => {
         const req = request({
             hostname: "discord.com",
@@ -44,8 +55,12 @@ export async function checkToken(_: any, token: string): Promise<{ valid: boolea
                     // Token vraiment invalid/révoqué
                     resolve({ valid: false, error: "unauthorized" });
                 } else if (res.statusCode === 429) {
-                    // Rate limited — pas invalid, juste throttlé
-                    resolve({ valid: false, error: "rate_limited" });
+                    let retryAfter = Number.parseFloat(String(res.headers["retry-after"] ?? "5")) || 5;
+                    try {
+                        const body = JSON.parse(data);
+                        if (body.retry_after != null) retryAfter = Number(body.retry_after) || retryAfter;
+                    } catch { /* header only */ }
+                    resolve({ valid: false, error: "rate_limited", retryAfter: Math.ceil(retryAfter) });
                 } else {
                     resolve({ valid: false, error: `http_${res.statusCode}` });
                 }

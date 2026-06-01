@@ -17,6 +17,57 @@ export const fakeState = new Map<string, FakeFriendState>();
 let origGetRelType: ((userId: string) => number) | null = null;
 let getRawRelationshipsMap: (() => Map<string, number>) | null = null;
 
+let cachedAcceptedFriendIds: string[] = [];
+export let cachedRelationshipMap: Map<string, number> | null = null;
+
+const USER_FETCH_DELAY_MS = 450;
+
+function bumpFakeStateVersion() {
+    cachedAcceptedFriendIds = [];
+    cachedRelationshipMap = null;
+}
+
+export function touchFakeState() {
+    bumpFakeStateVersion();
+    invalidateRelationshipMapCache();
+}
+
+export function invalidateRelationshipMapCache() {
+    cachedRelationshipMap = null;
+}
+
+export function ensureFakesOnRelationshipMap(map: Map<string, number>) {
+    if (!fakeState.size) return;
+    if (map === cachedRelationshipMap) return;
+    cachedRelationshipMap = map;
+
+    for (const [id, s] of fakeState) {
+        if (s === "pending") map.set(id, RelationshipType.INCOMING_REQUEST);
+        else if (s === "accepted") map.set(id, RelationshipType.FRIEND);
+    }
+}
+
+export function getCachedAcceptedFriendIds(): string[] {
+    if (!cachedAcceptedFriendIds.length) {
+        cachedAcceptedFriendIds = [...fakeState.entries()]
+            .filter(([, s]) => s === "accepted")
+            .map(([id]) => id);
+    }
+    return cachedAcceptedFriendIds;
+}
+
+/** Pending fakes not yet reflected in Discord's relationship map (e.g. right after restart). */
+export function getExtraFakePendingCount(): number {
+    if (!origGetRelType) return 0;
+    let extra = 0;
+    for (const [id, s] of fakeState) {
+        if (s === "pending" && origGetRelType.call(RelationshipStore, id) !== RelationshipType.INCOMING_REQUEST) {
+            extra++;
+        }
+    }
+    return extra;
+}
+
 export function bindGetRawRelationshipsMap(fn: () => Map<string, number>) {
     getRawRelationshipsMap = fn;
 }
@@ -24,6 +75,11 @@ export function bindGetRawRelationshipsMap(fn: () => Map<string, number>) {
 const QUERY_DELAY_MS = 400;
 const MAX_LIGHT_QUERIES = 6;
 const CANDIDATE_BUFFER = 1.35;
+
+/** Above this count, skip per-user Flux removes (map clear + one sync is enough). */
+const BULK_FLUX_THRESHOLD = 64;
+const FLUX_BATCH_SIZE = 32;
+const FLUX_BATCH_DELAY_MS = 16;
 
 const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
 
@@ -38,12 +94,23 @@ export async function persistState() {
 export async function loadState() {
     const saved = await DataStore.get<Record<string, FakeFriendState>>(DS_KEY);
     fakeState.clear();
-    if (!saved) return;
+    if (!saved) {
+        bumpFakeStateVersion();
+        return;
+    }
 
+    let migratedAccepted = 0;
     for (const [id, state] of Object.entries(saved)) {
-        if (state === "accepted" || state === "pending") {
+        if (state === "accepted") {
+            fakeState.set(id, "pending");
+            migratedAccepted++;
+        } else if (state === "pending") {
             fakeState.set(id, state);
         }
+    }
+    bumpFakeStateVersion();
+    if (migratedAccepted > 0) {
+        await persistState();
     }
 }
 
@@ -124,6 +191,7 @@ export function applyFakeRelationshipsToStore() {
 /** Push fake entries into RelationshipStore and refresh Friends UI. */
 export function syncFakeRelationships() {
     try {
+        invalidateRelationshipMapCache();
         applyFakeRelationshipsToStore();
         (RelationshipStore as { emitChange?: () => void; }).emitChange?.();
         (FriendsStore as { emitChange?: () => void; })?.emitChange?.();
@@ -132,6 +200,7 @@ export function syncFakeRelationships() {
 
 export async function addDirectFriend(user: any, opts?: { persist?: boolean; sync?: boolean; }) {
     fakeState.set(user.id, "accepted");
+    bumpFakeStateVersion();
     if (opts?.persist !== false) await persistState();
     cacheUserForFriends(user);
     dispatchRelationship(user, RelationshipType.FRIEND);
@@ -140,6 +209,7 @@ export async function addDirectFriend(user: any, opts?: { persist?: boolean; syn
 
 export async function addPendingRequest(user: any, opts?: { persist?: boolean; sync?: boolean; }) {
     fakeState.set(user.id, "pending");
+    bumpFakeStateVersion();
     if (opts?.persist !== false) await persistState();
     cacheUserForFriends(user);
     dispatchPendingRequest(user);
@@ -149,8 +219,26 @@ export async function addPendingRequest(user: any, opts?: { persist?: boolean; s
 async function loadUser(userId: string): Promise<any | null> {
     const cached = UserStore.getUser(userId);
     if (cached) return cached;
-    try { await UserUtils.getUser(userId); } catch { }
+    try {
+        await UserUtils.getUser(userId);
+        await sleep(USER_FETCH_DELAY_MS);
+    } catch { /* rate limit / network */ }
     return UserStore.getUser(userId) ?? null;
+}
+
+function userForReapply(userId: string): any {
+    const cached = UserStore.getUser(userId);
+    if (cached) return cached;
+    return {
+        id: userId,
+        username: `user_${userId.slice(-6)}`,
+        globalName: `user_${userId.slice(-6)}`,
+        avatar: null,
+        discriminator: "0",
+        publicFlags: 0,
+        flags: 0,
+        bot: false,
+    };
 }
 
 function shuffle<T>(items: T[]): T[] {
@@ -237,46 +325,47 @@ async function gatherCandidates(
     return candidates;
 }
 
+/** Hard cap — large imports freeze Discord and worsen API rate limits elsewhere. */
+export const MAX_FAKE_IMPORT = 500;
+
 export async function importFromAllServers(
     count: number,
-    mode: FakeFriendMode,
+    mode: FakeFriendMode = "pending",
     onProgress?: ImportProgress,
 ): Promise<number> {
+    if (mode !== "pending") {
+        throw new Error("Nur Fake-Anfragen (pending) werden unterstützt.");
+    }
+    if (count > MAX_FAKE_IMPORT) {
+        throw new Error(`Maximal ${MAX_FAKE_IMPORT} auf einmal — kleinere Mengen sind stabiler.`);
+    }
     const candidates = await gatherCandidates(count, onProgress);
     const shuffled = shuffle(candidates);
     const selected = shuffled.slice(0, Math.min(count, shuffled.length));
 
-    onProgress?.(`Importiere ${selected.length} ${mode === "accepted" ? "Fake-Freunde" : "Fake-Anfragen"}…`);
+    onProgress?.(`Importiere ${selected.length} Fake-Anfragen…`);
 
     let added = 0;
-    const USER_BATCH = 5;
     const defer = { persist: false as const, sync: false as const };
 
-    for (let i = 0; i < selected.length; i += USER_BATCH) {
-        const batch = selected.slice(i, i + USER_BATCH);
+    for (const id of selected) {
+        const user = await loadUser(id);
+        if (!user || isBot(user)) continue;
 
-        for (const id of batch) {
-            const user = await loadUser(id);
-            if (!user || isBot(user)) continue;
+        await addPendingRequest(user, defer);
+        added++;
 
-            if (mode === "accepted") await addDirectFriend(user, defer);
-            else await addPendingRequest(user, defer);
-            added++;
-
-            if (added % 20 === 0) {
-                onProgress?.(`${added}/${selected.length} hinzugefügt…`);
-                await sleep(32);
-            }
+        if (added % 20 === 0) {
+            onProgress?.(`${added}/${selected.length} hinzugefügt…`);
+            await sleep(32);
         }
-
-        await sleep(120);
     }
 
     await persistState();
     syncFakeRelationships();
 
     Toasts.show({
-        message: `${added} Fake-${mode === "accepted" ? "Freunde" : "Anfragen"} importiert`,
+        message: `${added} Fake-Anfragen importiert`,
         type: Toasts.Type.SUCCESS,
         id: Toasts.genId(),
     });
@@ -292,49 +381,172 @@ export function getFakeFriendEntries() {
     }).sort((a, b) => a.name.localeCompare(b.name));
 }
 
+async function purgeFakeEntriesFromDiscord(ids: string[], onProgress?: ImportProgress) {
+    const map = getRawRelationshipsMap?.()
+        ?? (RelationshipStore as { getMutableRelationships?: () => Map<string, number>; }).getMutableRelationships?.();
+
+    if (map && origGetRelType) {
+        for (const id of ids) {
+            if (origGetRelType.call(RelationshipStore, id) === RelationshipType.NONE) {
+                map.delete(id);
+            }
+        }
+    }
+
+    if (ids.length > BULK_FLUX_THRESHOLD) return;
+
+    let done = 0;
+    for (let i = 0; i < ids.length; i += FLUX_BATCH_SIZE) {
+        const batch = ids.slice(i, i + FLUX_BATCH_SIZE);
+        for (const id of batch) {
+            try {
+                FluxDispatcher.dispatch({ type: "RELATIONSHIP_REMOVE", relationship: { id } });
+            } catch { /* noop */ }
+        }
+        done += batch.length;
+        onProgress?.(`${done}/${ids.length}…`);
+        if (i + FLUX_BATCH_SIZE < ids.length) await sleep(FLUX_BATCH_DELAY_MS);
+    }
+}
+
 export async function removeFakeFriendById(userId: string) {
     if (!fakeState.has(userId)) return;
     fakeState.delete(userId);
+    bumpFakeStateVersion();
+    await purgeFakeEntriesFromDiscord([userId]);
     await persistState();
-    try {
-        FluxDispatcher.dispatch({ type: "RELATIONSHIP_REMOVE", relationship: { id: userId } });
-    } catch { /* noop */ }
     syncFakeRelationships();
 }
 
-export async function removeAllFakeFriends(): Promise<number> {
+export async function removeFakeFriendsByIds(userIds: string[], onProgress?: ImportProgress): Promise<number> {
+    const ids = userIds.filter(id => fakeState.has(id));
+    if (!ids.length) return 0;
+
+    for (const id of ids) fakeState.delete(id);
+    bumpFakeStateVersion();
+    invalidateRelationshipMapCache();
+
+    onProgress?.(`Entferne ${ids.length}…`);
+    await purgeFakeEntriesFromDiscord(ids, onProgress);
+    await persistState();
+    syncFakeRelationships();
+    return ids.length;
+}
+
+/** Clears saved fakes without per-user Flux (recovery if bulk remove still hangs). */
+export async function clearFakeFriendsPersistedOnly(): Promise<number> {
+    const n = fakeState.size;
+    fakeState.clear();
+    bumpFakeStateVersion();
+    invalidateRelationshipMapCache();
+
+    const map = getRawRelationshipsMap?.()
+        ?? (RelationshipStore as { getMutableRelationships?: () => Map<string, number>; }).getMutableRelationships?.();
+    if (map && origGetRelType) {
+        for (const id of [...map.keys()]) {
+            if (origGetRelType.call(RelationshipStore, id) === RelationshipType.NONE) {
+                map.delete(id);
+            }
+        }
+    }
+
+    await DataStore.set(DS_KEY, {});
+    syncFakeRelationships();
+    return n;
+}
+
+export async function removeAllFakeFriends(onProgress?: ImportProgress): Promise<number> {
     const ids = [...fakeState.keys()];
     if (!ids.length) return 0;
 
-    for (const id of ids) {
-        fakeState.delete(id);
-        try {
-            FluxDispatcher.dispatch({ type: "RELATIONSHIP_REMOVE", relationship: { id } });
-        } catch { /* noop */ }
-    }
+    fakeState.clear();
+    bumpFakeStateVersion();
+    invalidateRelationshipMapCache();
+
+    onProgress?.(`Entferne ${ids.length} gespeicherte Einträge…`);
+    await purgeFakeEntriesFromDiscord(ids, onProgress);
 
     await persistState();
     syncFakeRelationships();
     return ids.length;
 }
 
-export async function reapplyFakeStates() {
-    for (const [userId, state] of fakeState) {
-        try {
-            const user = await loadUser(userId);
-            if (!user) continue;
+function reapplyEntry(userId: string, state: FakeFriendState): boolean {
+    try {
+        const user = userForReapply(userId);
+        if (isBot(user)) return false;
 
-            cacheUserForFriends(user);
+        cacheUserForFriends(user);
 
-            if (state === "accepted") {
-                dispatchRelationship(user, RelationshipType.FRIEND);
-            } else if (state === "pending") {
-                dispatchPendingRequest(user);
-            }
+        if (state === "accepted") {
+            dispatchRelationship(user, RelationshipType.FRIEND);
+        } else if (state === "pending") {
+            dispatchPendingRequest(user);
+        }
+        return true;
+    } catch {
+        return false;
+    }
+}
 
-            await sleep(30);
-        } catch { /* noop */ }
+export async function reapplyFakeStates(onProgress?: ImportProgress) {
+    const entries = [...fakeState.entries()];
+    if (!entries.length) return;
+
+    applyFakeRelationshipsToStore();
+    syncFakeRelationships();
+
+    if (entries.length > BULK_FLUX_THRESHOLD) {
+        onProgress?.(`${entries.length} Einträge — nur Store-Sync (ohne ${entries.length} Flux-Events).`);
+        return;
     }
 
+    const batchSize = entries.length > BULK_FLUX_THRESHOLD ? 40 : entries.length;
+    let done = 0;
+
+    for (let i = 0; i < entries.length; i += batchSize) {
+        const batch = entries.slice(i, i + batchSize);
+        for (const [userId, state] of batch) {
+            reapplyEntry(userId, state);
+        }
+        done += batch.length;
+        if (entries.length > BULK_FLUX_THRESHOLD) {
+            onProgress?.(`Stelle wieder her (${done}/${entries.length})…`);
+            await sleep(FLUX_BATCH_DELAY_MS);
+        }
+    }
+
+    invalidateRelationshipMapCache();
+    applyFakeRelationshipsToStore();
     syncFakeRelationships();
+}
+
+let reapplyDone = false;
+let connectionHandler: (() => void) | null = null;
+
+export function teardownReapplySchedule() {
+    if (connectionHandler) {
+        FluxDispatcher.unsubscribe("CONNECTION_OPEN", connectionHandler);
+        connectionHandler = null;
+    }
+}
+
+/** Re-apply saved fakes once Discord is connected (no manual re-import needed). */
+export function scheduleReapplyOnConnect() {
+    if (fakeState.size === 0) return;
+
+    const runOnce = () => {
+        if (reapplyDone) return;
+        reapplyDone = true;
+        void reapplyFakeStates();
+    };
+
+    connectionHandler = () => {
+        teardownReapplySchedule();
+        setTimeout(runOnce, 1200);
+    };
+
+    FluxDispatcher.subscribe("CONNECTION_OPEN", connectionHandler);
+    // Fallback if CONNECTION_OPEN already fired before we subscribed
+    setTimeout(() => runOnce(), 45_000);
 }

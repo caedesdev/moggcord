@@ -3,25 +3,28 @@
  */
 
 import { Button } from "@components/Button";
-import { classes } from "@utils/misc";
 import { React, useReducer, useState } from "@webpack/common";
 
 import {
+    clearFakeFriendsPersistedOnly,
     getFakeFriendEntries,
     importFromAllServers,
+    reapplyFakeStates,
     removeAllFakeFriends,
     removeFakeFriendById,
-    type FakeFriendMode,
+    MAX_FAKE_IMPORT,
 } from "./state";
 
 export function FakeFriendsSettings() {
     const [, refresh] = useReducer((n: number) => n + 1, 0);
     const [count, setCount] = useState("25");
-    const [mode, setMode] = useState<FakeFriendMode>("pending");
     const [busy, setBusy] = useState(false);
     const [status, setStatus] = useState<string | null>(null);
 
+    const LIST_CAP = 80;
     const entries = getFakeFriendEntries();
+    const listOverflow = entries.length > LIST_CAP;
+    const visibleEntries = listOverflow ? entries.slice(0, LIST_CAP) : entries;
 
     async function runImport() {
         const n = parseInt(count, 10);
@@ -29,12 +32,16 @@ export function FakeFriendsSettings() {
             setStatus("Bitte eine gültige Anzahl eingeben.");
             return;
         }
+        if (n > MAX_FAKE_IMPORT) {
+            setStatus(`Maximal ${MAX_FAKE_IMPORT} pro Import.`);
+            return;
+        }
 
         setBusy(true);
         setStatus("Starte Import…");
         try {
-            const added = await importFromAllServers(n, mode, setStatus);
-            setStatus(`${added} Fake-${mode === "accepted" ? "Freunde" : "Anfragen"} hinzugefügt.`);
+            const added = await importFromAllServers(n, "pending", setStatus);
+            setStatus(`${added} Fake-Anfragen hinzugefügt.`);
             refresh();
         } catch (e: any) {
             setStatus(e?.message ?? "Import fehlgeschlagen.");
@@ -49,19 +56,51 @@ export function FakeFriendsSettings() {
     }
 
     async function removeAll() {
+        if (entries.length > 200 && !confirm(`${entries.length} Fake-Einträge wirklich alle entfernen? Das kann einige Sekunden dauern.`)) {
+            return;
+        }
         setBusy(true);
-        const n = await removeAllFakeFriends();
-        setStatus(n ? `${n} Fake-Einträge entfernt.` : "Keine Fake-Einträge vorhanden.");
-        refresh();
-        setBusy(false);
+        setStatus("Entferne gespeicherte Einträge…");
+        try {
+            const n = await removeAllFakeFriends(setStatus);
+            setStatus(n ? `${n} Fake-Einträge entfernt.` : "Keine Fake-Einträge vorhanden.");
+            refresh();
+        } catch (e: any) {
+            setStatus(e?.message ?? "Entfernen fehlgeschlagen — Discord neu laden (Ctrl+R).");
+        } finally {
+            setBusy(false);
+        }
     }
 
     return (
         <div className="ff-settings">
             <p className="ff-settings-desc">
-                Fake-Freunde bleiben nach einem Neustart erhalten. Importiere Mitglieder von allen Servern
-                oder verwalte deine Liste hier.
+                Nur eingehende Fake-Anfragen (pending) — keine Fake-Freundesliste. Max. {MAX_FAKE_IMPORT} pro Import.
+                Nach Neustart: große Listen werden nur im Store synchronisiert (kein Flux-Sturm).
             </p>
+
+            <div className="ff-settings-card">
+                <h3>Nach Neustart</h3>
+                <Button
+                    size="small"
+                    disabled={busy || !entries.length}
+                    onClick={async () => {
+                        setBusy(true);
+                        setStatus("Stelle Fake-Anfragen wieder her…");
+                        try {
+                            await reapplyFakeStates(setStatus);
+                            setStatus("Anzeige aktualisiert.");
+                            refresh();
+                        } catch {
+                            setStatus("Aktualisierung fehlgeschlagen.");
+                        } finally {
+                            setBusy(false);
+                        }
+                    }}
+                >
+                    Anzeige aktualisieren
+                </Button>
+            </div>
 
             <div className="ff-settings-card">
                 <h3>Von allen Servern importieren</h3>
@@ -71,22 +110,11 @@ export function FakeFriendsSettings() {
                         <input
                             type="number"
                             min={1}
-                            max={99999}
+                            max={MAX_FAKE_IMPORT}
                             value={count}
                             disabled={busy}
                             onChange={e => setCount(e.currentTarget.value)}
                         />
-                    </label>
-                    <label className="ff-settings-field">
-                        <span>Typ</span>
-                        <select
-                            value={mode}
-                            disabled={busy}
-                            onChange={e => setMode(e.currentTarget.value as FakeFriendMode)}
-                        >
-                            <option value="accepted">Fake-Freunde</option>
-                            <option value="pending">Fake-Anfragen</option>
-                        </select>
                     </label>
                 </div>
                 <Button size="small" disabled={busy} onClick={runImport}>
@@ -97,21 +125,50 @@ export function FakeFriendsSettings() {
             <div className="ff-settings-card">
                 <div className="ff-settings-list-head">
                     <h3>Gespeicherte Einträge ({entries.length})</h3>
-                    <Button size="small" variant="dangerPrimary" disabled={busy || !entries.length} onClick={removeAll}>
-                        Alle entfernen
-                    </Button>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                        <Button size="small" variant="dangerPrimary" disabled={busy || !entries.length} onClick={removeAll}>
+                            Alle entfernen
+                        </Button>
+                        {entries.length > 200 && (
+                            <Button
+                                size="small"
+                                variant="dangerSecondary"
+                                disabled={busy || !entries.length}
+                                onClick={async () => {
+                                    if (!confirm("Notfall-Löschen: nur gespeicherter Speicher, ohne 1500 Discord-Events. Fortfahren?")) return;
+                                    setBusy(true);
+                                    setStatus("Notfall-Löschen…");
+                                    try {
+                                        const n = await clearFakeFriendsPersistedOnly();
+                                        setStatus(`${n} Einträge aus dem Speicher entfernt. Bei Bedarf Ctrl+R.`);
+                                        refresh();
+                                    } finally {
+                                        setBusy(false);
+                                    }
+                                }}
+                            >
+                                Notfall (nur Speicher)
+                            </Button>
+                        )}
+                    </div>
                 </div>
+
+                {listOverflow && (
+                    <p className="ff-settings-empty">
+                        Liste zeigt die ersten {LIST_CAP} von {entries.length} — „Alle entfernen“ löscht trotzdem alles.
+                    </p>
+                )}
 
                 {entries.length === 0 ? (
                     <p className="ff-settings-empty">Noch keine Fake-Freunde gespeichert.</p>
                 ) : (
                     <ul className="ff-settings-list">
-                        {entries.map(entry => (
+                        {visibleEntries.map(entry => (
                             <li key={entry.id} className="ff-settings-list-item">
                                 <div className="ff-settings-list-main">
                                     <span className="ff-settings-name">{entry.name}</span>
-                                    <span className={classes("ff-settings-badge", entry.state === "accepted" && "ff-settings-badge-friend")}>
-                                        {entry.state === "accepted" ? "Freund" : "Anfrage"}
+                                    <span className="ff-settings-badge">
+                                        Anfrage
                                     </span>
                                 </div>
                                 <button

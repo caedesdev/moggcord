@@ -1,9 +1,10 @@
 /*
  * Moggcord — Local injector for Discord Desktop (dev / safe re-inject)
  *
- * Usage: pnpm inject:dev   (or: node scripts/inject.mjs)
- *
- * Re-running is safe: refreshes the loader without touching _app.asar again.
+ * Usage:
+ *   pnpm inject:dev              → same patch method as `pnpm inject` (Equilotl, recommended)
+ *   pnpm inject:dev --manual     → legacy resources/app loader (can break newUpdater Discord)
+ *   pnpm inject:dev --all        → inject every installed Discord channel (manual only)
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
@@ -12,19 +13,30 @@ import "./checkNodeVersion.js";
 
 import { existsSync, renameSync, statSync } from "fs";
 import { dirname, join, resolve } from "path";
+import { spawnSync } from "child_process";
 import { fileURLToPath } from "url";
 
 import {
+    clearPendingRelaunchMarker,
     findAllDiscordResources,
+    findLatestStableResources,
+    hasNewUpdaterLayout,
     isMoggcordDevInjection,
+    isModInjection,
+    isNewUpdaterStubAsar,
     isValidAsarFile,
     prepareForReinject,
+    startDiscordStable,
+    stopDiscordProcesses,
+    syncMoggcordDistToLocal,
     warnIfCorruptAppAsar,
     writeMoggcordLoader,
 } from "./discordResources.mjs";
 
 const BASE_DIR = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const DIST_DIR = join(BASE_DIR, "dist", "desktop");
+const INJECT_ALL = process.argv.includes("--all");
+const USE_MANUAL = process.argv.includes("--manual");
 
 function checkBuild() {
     const patcherPath = join(DIST_DIR, "patcher.js");
@@ -35,28 +47,92 @@ function checkBuild() {
     }
 }
 
+function injectViaEquilotl(appRootDir) {
+    console.log("\x1b[36m[Moggcord] inject:dev uses Equilotl (same as pnpm inject) — stable only.\x1b[0m");
+    console.log("\x1b[2m           Use --manual only if you know you need the legacy app/ loader.\x1b[0m\n");
+
+    syncMoggcordDistToLocal(join(DIST_DIR, "patcher.js"));
+
+    const result = spawnSync(
+        process.execPath,
+        [
+            join(BASE_DIR, "scripts/runInstaller.mjs"),
+            "--",
+            "--install",
+            "-branch",
+            "stable",
+            "-location",
+            appRootDir,
+        ],
+        {
+            cwd: BASE_DIR,
+            stdio: "inherit",
+            env: {
+                ...process.env,
+                EQUICORD_USER_DATA_DIR: BASE_DIR,
+                EQUICORD_DIRECTORY: DIST_DIR,
+                EQUICORD_DEV_INSTALL: "1",
+                MOGGCORD_DIRECTORY: DIST_DIR,
+            },
+        }
+    );
+
+    return result.status === 0;
+}
+
 function refreshInjection(resourcesDir) {
-    writeMoggcordLoader(resourcesDir, join(DIST_DIR, "patcher.js"));
-    console.log(`\x1b[32m[Moggcord] Refreshed injection (no backup touched): ${resourcesDir}\x1b[0m`);
+    return writeMoggcordLoader(resourcesDir, join(DIST_DIR, "patcher.js")).then(() => {
+        console.log(`\x1b[32m[Moggcord] Refreshed dev injection (loader only): ${resourcesDir}\x1b[0m`);
+        return true;
+    });
+}
+
+async function injectNewUpdater(resourcesDir) {
+    const backupPath = join(resourcesDir, "_app.asar");
+    if (!isValidAsarFile(backupPath)) {
+        console.error("\x1b[31m[Moggcord] _app.asar missing or invalid — cannot inject newUpdater Discord.\x1b[0m");
+        console.error("\x1b[33m           Run 'pnpm inject' once, or reinstall Discord Stable.\x1b[0m");
+        return false;
+    }
+
+    await writeMoggcordLoader(resourcesDir, join(DIST_DIR, "patcher.js"));
+
+    console.log(`\x1b[32m[Moggcord] Successfully injected (newUpdater, manual loader): ${resourcesDir}\x1b[0m`);
+    console.log(`\x1b[33m[Moggcord] If Discord fails to start, run: pnpm inject:dev  (without --manual)\x1b[0m`);
     return true;
 }
 
-function inject(resourcesDir) {
+async function injectManual(resourcesDir) {
     const appAsarPath = join(resourcesDir, "app.asar");
     const backupPath = join(resourcesDir, "_app.asar");
+    const appDirPath = join(resourcesDir, "app");
 
-    if (isMoggcordDevInjection(resourcesDir) && existsSync(backupPath) && isValidAsarFile(backupPath)) {
-        return refreshInjection(resourcesDir);
+    if (isMoggcordDevInjection(resourcesDir)) {
+        return await refreshInjection(resourcesDir);
     }
 
-    if (isMoggcordDevInjection(resourcesDir) || existsSync(join(resourcesDir, "app"))) {
+    if (existsSync(appDirPath) && isModInjection(resourcesDir)) {
+        console.log("[Moggcord] Replacing existing mod loader with Moggcord dev loader...");
+        prepareForReinject(resourcesDir);
+    }
+
+    if (hasNewUpdaterLayout(resourcesDir) || (isNewUpdaterStubAsar(appAsarPath) && isValidAsarFile(backupPath))) {
+        return await injectNewUpdater(resourcesDir);
+    }
+
+    if (isNewUpdaterStubAsar(appAsarPath) && !isValidAsarFile(backupPath)) {
+        console.error("\x1b[31m[Moggcord] Discord newUpdater layout detected but _app.asar is missing.\x1b[0m");
+        console.error("\x1b[33m           Use 'pnpm inject' (full installer) or reinstall Discord Stable.\x1b[0m");
+        return false;
+    }
+
+    if (existsSync(appDirPath)) {
         console.log("[Moggcord] Cleaning previous injection before reinstall...");
         prepareForReinject(resourcesDir);
     }
 
     if (!existsSync(appAsarPath)) {
         console.error("\x1b[31m[Moggcord] No app.asar found — cannot inject.\x1b[0m");
-        console.error("\x1b[33m           If Discord is broken, reinstall Discord Stable, then inject once.\x1b[0m");
         warnIfCorruptAppAsar(resourcesDir);
         return false;
     }
@@ -65,7 +141,6 @@ function inject(resourcesDir) {
     try { isDir = statSync(appAsarPath).isDirectory(); } catch { }
     if (isDir) {
         console.error("\x1b[31m[Moggcord] app.asar is a folder — another mod may be installed.\x1b[0m");
-        console.error("\x1b[33m           Run 'pnpm uninject:dev' or reinstall Discord.\x1b[0m");
         return false;
     }
 
@@ -78,31 +153,63 @@ function inject(resourcesDir) {
     if (!existsSync(backupPath)) {
         console.log("[Moggcord] Backing up app.asar → _app.asar...");
         renameSync(appAsarPath, backupPath);
-    } else if (existsSync(appAsarPath)) {
-        console.log("\x1b[33m[Moggcord] app.asar + _app.asar both present — keeping existing backup.\x1b[0m");
     }
 
-    writeMoggcordLoader(resourcesDir, join(DIST_DIR, "patcher.js"));
+    await writeMoggcordLoader(resourcesDir, join(DIST_DIR, "patcher.js"));
 
-    console.log(`\x1b[32m[Moggcord] Successfully injected into: ${resourcesDir}\x1b[0m`);
-    console.log(`\x1b[32m[Moggcord] Moggcord dist directory: ${DIST_DIR}\x1b[0m`);
-    console.log("\x1b[36m[Moggcord] Restart Discord to apply changes.\x1b[0m");
+    console.log(`\x1b[32m[Moggcord] Successfully injected (manual loader): ${resourcesDir}\x1b[0m`);
     return true;
 }
 
-checkBuild();
+function resolveManualTargets() {
+    if (INJECT_ALL) return findAllDiscordResources();
+    const stable = findLatestStableResources();
+    return stable ? [stable] : findAllDiscordResources();
+}
 
-const allResources = findAllDiscordResources();
-if (allResources.length === 0) {
+checkBuild();
+clearPendingRelaunchMarker();
+
+if (!USE_MANUAL && !INJECT_ALL && process.platform === "win32") {
+    const stableResources = findLatestStableResources();
+    if (stableResources) {
+        const appRoot = dirname(stableResources);
+        console.log("\x1b[36m[Moggcord] Closing Discord before injection...\x1b[0m");
+        stopDiscordProcesses();
+
+        if (injectViaEquilotl(appRoot)) {
+            console.log("\n\x1b[32m[Moggcord] inject:dev succeeded (Equilotl).\x1b[0m");
+            console.log("\x1b[36m[Moggcord] Restarting Discord Stable...\x1b[0m");
+            if (startDiscordStable()) {
+                console.log("\x1b[32m[Moggcord] Discord started.\x1b[0m");
+            }
+            process.exit(0);
+        }
+
+        console.warn("\x1b[33m[Moggcord] Equilotl inject failed — try: pnpm inject\x1b[0m");
+        process.exit(1);
+    }
+}
+
+if (!USE_MANUAL && INJECT_ALL) {
+    console.warn("\x1b[33m[Moggcord] --all requires --manual (Equilotl path is stable-only).\x1b[0m");
+}
+
+console.log("\x1b[33m[Moggcord] Using legacy manual loader (--manual).\x1b[0m");
+
+const targets = resolveManualTargets();
+if (targets.length === 0) {
     console.error("\x1b[31m[Moggcord] No Discord installation found!\x1b[0m");
-    console.error("\x1b[33m           Make sure Discord (Stable, PTB, or Canary) is installed.\x1b[0m");
     process.exit(1);
 }
 
+console.log("\x1b[36m[Moggcord] Closing Discord before injection...\x1b[0m");
+stopDiscordProcesses({ allChannels: INJECT_ALL });
+
 let injectedCount = 0;
-for (const res of allResources) {
+for (const res of targets) {
     console.log(`\n[Moggcord] Discord resources: ${res}`);
-    if (inject(res)) injectedCount++;
+    if (await injectManual(res)) injectedCount++;
 }
 
 if (injectedCount === 0) {
@@ -110,4 +217,11 @@ if (injectedCount === 0) {
     process.exit(1);
 }
 
-console.log(`\n\x1b[32m[Moggcord] ${injectedCount}/${allResources.length} injection(s) succeeded.\x1b[0m`);
+console.log(`\n\x1b[32m[Moggcord] ${injectedCount}/${targets.length} injection(s) succeeded.\x1b[0m`);
+
+if (!INJECT_ALL) {
+    console.log("\x1b[36m[Moggcord] Restarting Discord Stable...\x1b[0m");
+    if (startDiscordStable()) {
+        console.log("\x1b[32m[Moggcord] Discord started.\x1b[0m");
+    }
+}

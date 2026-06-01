@@ -3,51 +3,66 @@
  */
 
 import { NO_DRAG_GUARD_CSS, NO_DRAG_GUARD_STYLE_ID } from "@shared/noDragGuard";
-import definePlugin from "@utils/types";
+import definePlugin, { StartAt } from "@utils/types";
+import { onFluxDispatcherReady } from "@webpack/common";
 
-// On a slow cold start Discord can leave `-webkit-app-region: drag` on <body>,
-// turning the entire window into a title-bar drag zone. The sidebar (servers/DMs)
-// then stops reacting to clicks and double-clicking maximizes/restores the window,
-// while the Friends list above it still works. A renderer reload clears it.
-//
-// The same drag region also breaks checkboxes in OAuth / bot verification modals.
-// We enforce `no-drag` on structural roots and all interactive controls.
-// Discord's real title bar keeps its own (deeper) drag region, so window dragging
-// still works. This is non-destructive: it matches the healthy post-reload DOM.
-
-const GUARD_CSS = NO_DRAG_GUARD_CSS;
+const LOADING_OVERLAY_ID = "moggcord-loading-screen";
+const STUCK_OVERLAY_MS = 20_000;
 
 function injectStyle() {
     if (document.getElementById(NO_DRAG_GUARD_STYLE_ID)) return;
     const style = document.createElement("style");
     style.id = NO_DRAG_GUARD_STYLE_ID;
-    style.textContent = GUARD_CSS;
+    style.textContent = NO_DRAG_GUARD_CSS;
     (document.head ?? document.documentElement).appendChild(style);
 }
 
-function bodyIsDraggable(): boolean {
-    const b = document.body;
-    if (!b) return false;
-    const style = getComputedStyle(b) as CSSStyleDeclaration & { appRegion?: string; };
-    const region = style.webkitAppRegion || style.appRegion;
-    return region === "drag";
+function nodeIsDraggable(el: Element | null): boolean {
+    if (!el) return false;
+    const style = getComputedStyle(el) as CSSStyleDeclaration & { appRegion?: string; };
+    return (style.webkitAppRegion || style.appRegion) === "drag";
 }
 
-function enforceNoDrag() {
-    const b = document.body;
-    if (!b) return;
-    if (bodyIsDraggable()) {
-        b.style.setProperty("-webkit-app-region", "no-drag", "important");
+/** Only remove the splash if bootstrap finished or the overlay is stuck too long. */
+function clearStuckLoadingOverlay() {
+    const el = document.getElementById(LOADING_OVERLAY_ID);
+    if (!el) return;
+
+    if ((window as any).__mgLoadingDone) {
+        el.remove();
+        return;
+    }
+
+    const bootAt = (window as any).__mgLoadingBootAt as number | undefined;
+    if (bootAt && Date.now() - bootAt > STUCK_OVERLAY_MS) {
+        (window as any).__mgLoadingDone = true;
+        el.remove();
     }
 }
 
-let observer: MutationObserver | null = null;
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+function enforceNoDrag() {
+    clearStuckLoadingOverlay();
+
+    for (const el of [document.documentElement, document.body, document.querySelector("#app-mount")]) {
+        if (el && nodeIsDraggable(el)) {
+            (el as HTMLElement).style.setProperty("-webkit-app-region", "no-drag", "important");
+        }
+    }
+}
+
+let fastPollTimer: ReturnType<typeof setInterval> | null = null;
+let slowPollTimer: ReturnType<typeof setInterval> | null = null;
+
+function burstEnforceNoDrag() {
+    enforceNoDrag();
+    for (let i = 1; i <= 8; i++) setTimeout(enforceNoDrag, i * 400);
+}
 
 export default definePlugin({
     name: "UiRelaunchFix",
     enabledByDefault: true,
     required: true,
+    startAt: StartAt.Init,
     description: "Keeps the UI clickable after launch by clearing stuck title-bar drag regions (sidebar, modals, bot verification checkboxes).",
     authors: [{ name: "Moggcord", id: 0n }],
 
@@ -55,39 +70,37 @@ export default definePlugin({
         if (typeof window === "undefined") return;
 
         injectStyle();
-        enforceNoDrag();
+        burstEnforceNoDrag();
 
-        observer = new MutationObserver(() => enforceNoDrag());
-        const observeTarget = document.body ?? document.documentElement;
-        if (observeTarget) {
-            observer.observe(observeTarget, {
-                attributes: true,
-                attributeFilter: ["style", "class"]
-            });
-        } else {
-            window.addEventListener("DOMContentLoaded", () => {
-                injectStyle();
-                enforceNoDrag();
-                if (document.body) observer?.observe(document.body, { attributes: true, attributeFilter: ["style", "class"] });
-            }, { once: true });
-        }
-
-        // The drag region can appear late during a slow first load; poll briefly to catch it.
-        let ticks = 0;
-        pollTimer = setInterval(() => {
-            enforceNoDrag();
-            if (++ticks >= 30) {
-                if (pollTimer) clearInterval(pollTimer);
-                pollTimer = null;
+        onFluxDispatcherReady(flux => {
+            flux.subscribe("CONNECTION_OPEN", () => burstEnforceNoDrag());
+            if (document.querySelector("#app-mount")?.children?.length) {
+                burstEnforceNoDrag();
             }
-        }, 1_000);
+        });
+
+        // Discord often flips body to drag ~1–3s after open — short poll only.
+        fastPollTimer = setInterval(enforceNoDrag, 1000);
+        setTimeout(() => {
+            if (fastPollTimer) clearInterval(fastPollTimer);
+            fastPollTimer = null;
+        }, 12_000);
+
+        slowPollTimer = setInterval(enforceNoDrag, 60_000);
+
+        window.addEventListener("keydown", (e) => {
+            if (!e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return;
+            if (e.key.toLowerCase() !== "r") return;
+            e.preventDefault();
+            location.reload();
+        }, { capture: true });
     },
 
     stop() {
-        observer?.disconnect();
-        observer = null;
-        if (pollTimer) clearInterval(pollTimer);
-        pollTimer = null;
+        if (fastPollTimer) clearInterval(fastPollTimer);
+        if (slowPollTimer) clearInterval(slowPollTimer);
+        fastPollTimer = null;
+        slowPollTimer = null;
         document.getElementById(NO_DRAG_GUARD_STYLE_ID)?.remove();
     }
 });

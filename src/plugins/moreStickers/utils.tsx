@@ -6,7 +6,7 @@
 
 import type { FFmpeg } from "@ffmpeg/ffmpeg";
 import { classNameFactory } from "@utils/css";
-import { waitFor } from "@webpack";
+import { proxyLazyWebpack } from "@webpack";
 import { React } from "@webpack/common";
 
 import { FFmpegState } from "./types";
@@ -41,10 +41,9 @@ export class Mutex {
     }
 }
 
-export let FFmpegStateContext: React.Context<FFmpegState | undefined> | undefined;
-waitFor("createContext", () => {
-    FFmpegStateContext = React.createContext<FFmpegState | undefined>(undefined);
-});
+export const FFmpegStateContext = proxyLazyWebpack(() =>
+    React.createContext<FFmpegState | undefined>(undefined)
+);
 
 export async function loadFFmpeg(ffmpeg: FFmpeg, setLoaded: () => void) {
     console.log("Loading FFmpeg...");

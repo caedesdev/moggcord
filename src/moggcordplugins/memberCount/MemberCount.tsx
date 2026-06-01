@@ -6,7 +6,7 @@
 
 import { getCurrentChannel } from "@utils/discord";
 import { isObjectEmpty } from "@utils/misc";
-import { ChannelStore, GuildMemberCountStore, PermissionsBits, PermissionStore, SelectedChannelStore, Tooltip, useEffect, useStateFromStores, VoiceStateStore } from "@webpack/common";
+import { ChannelStore, GuildMemberCountStore, PermissionsBits, PermissionStore, SelectedChannelStore, Tooltip, useStateFromStores, VoiceStateStore } from "@webpack/common";
 
 import { ChannelMemberStore, cl, numberFormat, settings, ThreadMemberListStore } from ".";
 import { CircleIcon } from "./CircleIcon";
@@ -65,10 +65,6 @@ export function MemberCount({ isTooltip, tooltipGuildId }: { isTooltip?: true; t
     if (!isTooltip && threadGroups && !isObjectEmpty(threadGroups)) {
         onlineCount = Object.values(threadGroups).reduce((total, curr) => total + (curr.sectionId === "offline" ? 0 : curr.userIds.length), 0);
     }
-
-    useEffect(() => {
-        OnlineMemberCountStore.ensureCount(guildId);
-    }, [guildId]);
 
     if (totalCount == null)
         return null;

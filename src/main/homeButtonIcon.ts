@@ -2,8 +2,9 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import type { BrowserWindow } from "electron";
+import type { BrowserWindow, WebContents } from "electron";
 
+import { bindWindowInject, isLiveWindow } from "./safeWebContents";
 import { MOGGCORD_AVATAR_DATA_URL as DATA_URL } from "./splashAssets";
 
 // `data-list-item-id="guildsnav___home"` is Discord's stable hook for the
@@ -22,18 +23,23 @@ div[data-list-item-id="guildsnav___home"] > [class*="childWrapper"] {
 }
 `;
 
+const installed = new WeakSet<BrowserWindow>();
+const cssInjected = new WeakSet<WebContents>();
+
 function inject(win: BrowserWindow) {
-    if (win.isDestroyed()) return;
-    win.webContents.insertCSS(CSS).catch(() => { });
+    if (!isLiveWindow(win)) return;
+    const wc = win.webContents;
+    if (cssInjected.has(wc)) return;
+    cssInjected.add(wc);
+    wc.insertCSS(CSS).catch(() => { });
 }
 
 /**
  * Replaces the Discord logo on the server-list home button with the Moggcord
- * avatar. Injected as a user stylesheet so it applies whenever the button
- * (re)mounts during the session.
+ * avatar. Injected once as a user stylesheet (persists across SPA navigations).
  */
 export function installMoggcordHomeIcon(win: BrowserWindow) {
-    const wc = win.webContents;
-    wc.on("dom-ready", () => inject(win));
-    if (!wc.isLoadingMainFrame()) inject(win);
+    if (installed.has(win)) return;
+    installed.add(win);
+    bindWindowInject(win, () => inject(win));
 }

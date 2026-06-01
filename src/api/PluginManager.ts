@@ -26,14 +26,14 @@ import { addMessageDecoration, removeMessageDecoration } from "@api/MessageDecor
 import { addMessageClickListener, addMessagePreEditListener, addMessagePreSendListener, removeMessageClickListener, removeMessagePreEditListener, removeMessagePreSendListener } from "@api/MessageEvents";
 import { addMessagePopoverButton, removeMessagePopoverButton } from "@api/MessagePopover";
 import { addNicknameIcon, removeNicknameIcon } from "@api/NicknameIcons";
-import { Settings, SettingsStore } from "@api/Settings";
+import { FORCE_DISABLED_DEFAULT_PLUGIN_KEYS, Settings, SettingsStore } from "@api/Settings";
 import { disableStyle, enableStyle } from "@api/Styles";
 import { Logger } from "@utils/Logger";
 import { onlyOnce } from "@utils/onlyOnce";
 import { canonicalizeFind, canonicalizeReplacement } from "@utils/patches";
 import { DefinedSettings, Patch, Plugin, PluginDef, PluginSettingDef, ReporterTestable, StartAt } from "@utils/types";
 import { FluxEvents } from "@vencord/discord-types";
-import { FluxDispatcher } from "@webpack/common";
+import { FluxDispatcher, onFluxDispatcherReady } from "@webpack/common";
 import { patches } from "@webpack/patcher";
 
 import Plugins from "~plugins";
@@ -380,18 +380,41 @@ export const initPluginManager = onlyOnce(function init() {
 
     const neededApiPlugins = new Set<string>();
 
-    // Migration: force tous les plugins a OFF sauf required/enabledByDefault
-    const MIGRATION_FLAG = "__moggcord_default_off_v1__";
-    if (!(SettingsStore.plain as any)[MIGRATION_FLAG]) {
-        for (const p of pluginsValues) {
-            const shouldBeOn = p.required || p.enabledByDefault;
-            if (!shouldBeOn) {
-                const s = SettingsStore.plain.plugins[p.name];
-                if (s) s.enabled = false;
+    // One-time: undo earlier Moggcord migrations that bulk-disabled plugins.
+    const RESTORE_FLAG = "__moggcord_restore_plugins_v1__";
+    const plain = SettingsStore.plain as Record<string, unknown>;
+    if (!plain[RESTORE_FLAG]) {
+        let restored = 0;
+
+        if (plain.__moggcord_discord_553187_incompat_v1__) {
+            const shc = SettingsStore.plain.plugins.ShowHiddenChannels;
+            if (!shc) SettingsStore.plain.plugins.ShowHiddenChannels = { enabled: true };
+            else shc.enabled = true;
+            restored++;
+        }
+
+        if (plain.__moggcord_default_off_v1__) {
+            for (const p of pluginsValues) {
+                if (p.required) continue;
+                const key = p.name;
+                if (FORCE_DISABLED_DEFAULT_PLUGIN_KEYS.has(key.toLowerCase())) continue;
+
+                const s = SettingsStore.plain.plugins[key];
+                if (!s) {
+                    SettingsStore.plain.plugins[key] = { enabled: true };
+                    restored++;
+                } else if (!s.enabled) {
+                    s.enabled = true;
+                    restored++;
+                }
             }
         }
-        (SettingsStore.plain as any)[MIGRATION_FLAG] = true;
-        SettingsStore.markAsChanged();
+
+        plain[RESTORE_FLAG] = true;
+        if (restored) {
+            SettingsStore.markAsChanged();
+            logger.info(`Re-enabled ${restored} plugin(s) after removing auto-disable migrations.`);
+        }
     }
 
     // First round-trip to mark and force enable dependencies
@@ -471,4 +494,6 @@ export const initPluginManager = onlyOnce(function init() {
             }
         }
     }
+
+    onFluxDispatcherReady(subscribeAllPluginsFluxEvents);
 });

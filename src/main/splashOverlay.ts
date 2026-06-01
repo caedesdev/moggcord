@@ -4,6 +4,7 @@
 
 import type { BrowserWindow } from "electron";
 
+import { bindWindowInject, isLiveWindow } from "./safeWebContents";
 import { MOGGCORD_AVATAR_DATA_URL as DATA_URL } from "./splashAssets";
 
 const OVERLAY_ID = "moggcord-splash-overlay";
@@ -21,6 +22,7 @@ const CSS = `
     background: radial-gradient(circle at 50% 38%, #1d1b2e 0%, #0c0b14 72%);
     font-family: "gg sans", "Segoe UI", system-ui, sans-serif;
     user-select: none;
+    pointer-events: none;
     animation: mgSplashFade .35s ease both;
 }
 #${OVERLAY_ID} .mg-ring {
@@ -79,13 +81,16 @@ const BUILD_DOM = `(function () {
     if (document.getElementById(${JSON.stringify(OVERLAY_ID)})) return;
     var o = document.createElement("div");
     o.id = ${JSON.stringify(OVERLAY_ID)};
+    o.style.pointerEvents = "none";
     o.innerHTML = '<div class="mg-ring"><div class="mg-avatar"></div></div>'
         + '<div class="mg-title">Loading <b>Moggcord</b><span class="mg-dots"></span></div>';
     (document.body || document.documentElement).appendChild(o);
 })();`;
 
+const installed = new WeakSet<BrowserWindow>();
+
 function inject(win: BrowserWindow) {
-    if (win.isDestroyed()) return;
+    if (!isLiveWindow(win)) return;
     const wc = win.webContents;
     wc.insertCSS(CSS).catch(() => { });
     wc.executeJavaScript(BUILD_DOM, true).catch(() => { });
@@ -97,8 +102,7 @@ function inject(win: BrowserWindow) {
  * Discord's startup IPC intact so the main window still opens normally.
  */
 export function installMoggcordSplashOverlay(win: BrowserWindow) {
-    const wc = win.webContents;
-    wc.on("dom-ready", () => inject(win));
-    wc.on("did-finish-load", () => inject(win));
-    if (!wc.isLoadingMainFrame()) inject(win);
+    if (installed.has(win)) return;
+    installed.add(win);
+    bindWindowInject(win, () => inject(win));
 }

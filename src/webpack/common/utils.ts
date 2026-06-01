@@ -21,11 +21,18 @@ import { _resolveReady, filters, findByCodeLazy, findByPropsLazy, findLazy, mapM
 import type * as TSPattern from "ts-pattern";
 
 export let FluxDispatcher: t.FluxDispatcher;
+
+const fluxDispatcherListeners = new Set<(m: t.FluxDispatcher) => void>();
+
+/** Register a callback for when FluxDispatcher becomes available (may fire during plugin load). */
+export function onFluxDispatcherReady(listener: (m: t.FluxDispatcher) => void) {
+    fluxDispatcherListeners.add(listener);
+    if (FluxDispatcher) listener(FluxDispatcher);
+}
+
 waitFor(["dispatch", "subscribe"], m => {
     FluxDispatcher = m;
-    // Importing this directly causes all webpack commons to be imported, which can easily cause circular dependencies.
-    // For this reason, use a non import access here.
-    Vencord.Api.PluginManager.subscribeAllPluginsFluxEvents(m);
+    for (const listener of fluxDispatcherListeners) listener(m);
 
     const cb = () => {
         m.unsubscribe("CONNECTION_OPEN", cb);
