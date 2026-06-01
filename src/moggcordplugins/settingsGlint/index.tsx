@@ -37,6 +37,7 @@ const CSS = `
 `;
 
 const CANDIDATE_SELECTOR = 'h1,h2,h3,[class*="title"],[class*="header"],[class*="eyebrow"]';
+const EDITOR_SELECTOR = "[data-slate-editor], textarea, input, [contenteditable=\"true\"], [role=\"textbox\"]";
 
 function injectStyle() {
     if (document.getElementById(STYLE_ID)) return;
@@ -46,11 +47,10 @@ function injectStyle() {
     (document.head ?? document.documentElement).appendChild(style);
 }
 
-function scan() {
-    const candidates = document.querySelectorAll<HTMLElement>(CANDIDATE_SELECTOR);
+function scan(root: ParentNode = document) {
+    const candidates = root.querySelectorAll<HTMLElement>(CANDIDATE_SELECTOR);
     for (const el of candidates) {
         if (el.classList.contains(CLASS)) continue;
-        // Only the leaf element that directly holds the heading text.
         if (el.childElementCount !== 0) continue;
         if (el.textContent?.trim() === TARGET_TEXT) {
             el.classList.add(CLASS);
@@ -61,7 +61,37 @@ function scan() {
 let observer: MutationObserver | null = null;
 let scheduled = false;
 
-function scheduleScan() {
+function isEditorNode(node: Node) {
+    const element = node.nodeType === Node.TEXT_NODE
+        ? node.parentElement
+        : node instanceof Element ? node : null;
+    return Boolean(element?.closest(EDITOR_SELECTOR));
+}
+
+function hasTargetText(node: Node) {
+    if (isEditorNode(node)) return false;
+    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue?.trim() === TARGET_TEXT;
+
+    const element = node.nodeType === Node.TEXT_NODE
+        ? node.parentElement
+        : node instanceof Element ? node : null;
+    if (!element) return false;
+    if (element.matches(CANDIDATE_SELECTOR) && element.childElementCount === 0) {
+        return element.textContent?.trim() === TARGET_TEXT;
+    }
+    return Boolean(Array.from(element.querySelectorAll<HTMLElement>(CANDIDATE_SELECTOR)).some(el =>
+        el.childElementCount === 0 && el.textContent?.trim() === TARGET_TEXT
+    ));
+}
+
+function shouldScanMutation(mutation: MutationRecord) {
+    if (isEditorNode(mutation.target)) return false;
+    if (mutation.target instanceof Element && mutation.target !== document.body && hasTargetText(mutation.target)) return true;
+    return Array.from(mutation.addedNodes).some(hasTargetText);
+}
+
+function scheduleScan(mutations?: MutationRecord[]) {
+    if (mutations?.length && !mutations.some(shouldScanMutation)) return;
     if (scheduled) return;
     scheduled = true;
     setTimeout(() => {

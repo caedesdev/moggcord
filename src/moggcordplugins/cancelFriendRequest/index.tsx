@@ -38,6 +38,7 @@ function getUserIdFromOutgoingRelationships(): string | null {
 
 let observer: MutationObserver | null = null;
 let scanQueued = false;
+const EDITOR_SELECTOR = "[data-slate-editor], textarea, input, [contenteditable=\"true\"], [role=\"textbox\"]";
 
 function queueScan(root?: HTMLElement) {
     if (root instanceof HTMLElement) {
@@ -54,6 +55,7 @@ function queueScan(root?: HTMLElement) {
 
 function scanAddedNode(node: Node) {
     if (!(node instanceof HTMLElement)) return;
+    if (node.closest(EDITOR_SELECTOR)) return;
     if (node.matches?.('button[aria-label="Outgoing Friend Request"], button[disabled][class*="secondary"]')) {
         scan(node);
         return;

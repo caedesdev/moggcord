@@ -76,16 +76,27 @@ function parseDuration(str: string): number {
     }
 }
 
+let cachedSharedUsersRaw = "";
+let cachedSharedUsers: SharedUser[] = [];
+
 function getSharedUsers(): SharedUser[] {
+    const raw = settings.store.sharedUsers || "[]";
+    if (raw === cachedSharedUsersRaw) return cachedSharedUsers;
+
     try {
-        return JSON.parse(settings.store.sharedUsers);
+        cachedSharedUsers = JSON.parse(raw);
     } catch {
-        return [];
+        cachedSharedUsers = [];
     }
+
+    cachedSharedUsersRaw = raw;
+    return cachedSharedUsers;
 }
 
 function saveSharedUsers(users: SharedUser[]) {
-    settings.store.sharedUsers = JSON.stringify(users);
+    cachedSharedUsers = users;
+    cachedSharedUsersRaw = JSON.stringify(users);
+    settings.store.sharedUsers = cachedSharedUsersRaw;
 }
 
 function getLogs(): ShareLog[] {

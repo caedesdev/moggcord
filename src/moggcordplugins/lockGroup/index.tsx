@@ -200,40 +200,39 @@ export default definePlugin({
     flux: {
         MESSAGE_CREATE(event: { message: any; }) {
             const { message } = event;
+            if (!message || message.type !== 1) return;
+
+            const channelId = message.channel_id;
+            if (!lockedGroups.has(channelId)) return;
+
             const currentUserId = UserStore.getCurrentUser()?.id;
+            const channel = ChannelStore.getChannel(channelId);
+            if (channel && channel.type === 3 && channel.ownerId === currentUserId) {
+                const channelName = channel.name || "Unnamed group";
+                const addedUserId = message.mentions?.[0]?.id;
+                const addedByUserId = message.author?.id;
 
-            if (message && message.type === 1) {
-                const channelId = message.channel_id;
-                if (lockedGroups.has(channelId)) {
-                    const channel = ChannelStore.getChannel(channelId);
-                    if (channel && channel.type === 3 && channel.ownerId === currentUserId) {
-                        const channelName = channel.name || "Unnamed group";
-                        const addedUserId = message.mentions?.[0]?.id;
-                        const addedByUserId = message.author?.id;
+                if (addedByUserId === currentUserId) {
+                    debugLog("\u2705 Add made by the owner - Allowed");
+                    return;
+                }
 
-                        if (addedByUserId === currentUserId) {
-                            debugLog(`\u2705 Add made by the owner - Allowed`);
-                            return;
+                if (addedUserId && addedByUserId !== currentUserId) {
+                    setTimeout(async () => {
+                        try {
+                            await RestAPI.del({ url: `/channels/${channelId}/recipients/${addedUserId}` });
+                            log(`\uD83D\uDD12 Security kick completed for ${addedUserId}`);
+                        } catch (error) {
+                            debugLog(`Error kick de s\u00e9curit\u00e9: ${error}`);
                         }
+                    }, 150);
 
-                        if (addedUserId && addedByUserId !== currentUserId) {
-                            setTimeout(async () => {
-                                try {
-                                    await RestAPI.del({ url: `/channels/${channelId}/recipients/${addedUserId}` });
-                                    log(`\uD83D\uDD12 Security kick completed for ${addedUserId}`);
-                                } catch (error) {
-                                    debugLog(`Error kick de s\u00e9curit\u00e9: ${error}`);
-                                }
-                            }, 150);
-
-                            if (settings.store.showNotifications) {
-                                showNotification({
-                                    title: "\uD83D\uDD12 LockGroup - Unauthorized add",
-                                    body: `Member added without permission in "${channelName}" and then removed`,
-                                    icon: undefined
-                                });
-                            }
-                        }
+                    if (settings.store.showNotifications) {
+                        showNotification({
+                            title: "\uD83D\uDD12 LockGroup - Unauthorized add",
+                            body: `Member added without permission in "${channelName}" and then removed`,
+                            icon: undefined
+                        });
                     }
                 }
             }

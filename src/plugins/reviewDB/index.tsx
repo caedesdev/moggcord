@@ -41,6 +41,32 @@ const DMSideBarClasses = findCssClassesLazy("widgetPreviews");
 const ProfileCardClasses = findCssClassesLazy("cardsList", "firstCardContainer", "card", "container");
 const ProfileCardContainerClasses = findCssClassesLazy("innerContainer", "icons", "icon", "displayCount", "displayCountText", "displayCountTextColor", "breadcrumb");
 const ProfileCardOverlayClasses = findCssClassesLazy("overlay", "isPrivate", "outer");
+const REVIEW_CACHE_TTL_MS = 60000;
+
+type ReviewData = Awaited<ReturnType<typeof getReviews>>;
+
+const reviewCache = new Map<string, {
+    expiresAt: number;
+    promise?: Promise<ReviewData>;
+    value?: ReviewData;
+}>();
+
+function getCachedReviews(userId: string) {
+    const now = Date.now();
+    const cached = reviewCache.get(userId);
+    if (cached?.value && cached.expiresAt > now) return Promise.resolve(cached.value);
+    if (cached?.promise && cached.expiresAt > now) return cached.promise;
+
+    const promise = getReviews(userId, { limit: 4 }).then(value => {
+        reviewCache.set(userId, { value, expiresAt: Date.now() + REVIEW_CACHE_TTL_MS });
+        return value;
+    }, error => {
+        reviewCache.delete(userId);
+        throw error;
+    });
+    reviewCache.set(userId, { promise, expiresAt: now + REVIEW_CACHE_TTL_MS });
+    return promise;
+}
 
 const guildPopoutPatch: NavContextMenuPatchCallback = (children, { guild }: { guild: Guild, onClose(): void; }) => {
     if (!guild) return;
@@ -146,7 +172,7 @@ export default definePlugin({
     renderProfileCollection: {
         priority: 0,
         render: ({ user, isSideBar = false }: { user: User; isSideBar?: boolean; }) => {
-        const [reviewData] = useAwaiter(() => getReviews(user.id, { limit: 4 }), { deps: [user.id], fallbackValue: null });
+        const [reviewData] = useAwaiter(() => getCachedReviews(user.id), { deps: [user.id], fallbackValue: null });
 
         // Discord are masters at using a crap ton of html elements and css classes to create a simple ui that could have
         // been made with less than half of the number of elements, so we have to do this insanity to replicate their ui

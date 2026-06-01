@@ -22,10 +22,16 @@ import { Parser, useEffect, useState } from "@webpack/common";
 import { TranslateIcon } from "./TranslateIcon";
 import { cl, TranslationValue } from "./utils";
 
-const TranslationSetters = new Map<string,(v: TranslationValue) => void>();
+const TranslationSetters = new Map<string, (v: TranslationValue | undefined) => void>();
+const TranslationValues = new Map<string, TranslationValue>();
+
+export function hasTranslation(messageId: string) {
+    return TranslationValues.has(messageId);
+}
 
 export function handleTranslate(messageId: string, data: TranslationValue) {
-    TranslationSetters.get(messageId)!(data);
+    TranslationValues.set(messageId, data);
+    TranslationSetters.get(messageId)?.(data);
 }
 
 function Dismiss({ onDismiss }: { onDismiss: () => void; }) {
@@ -40,16 +46,18 @@ function Dismiss({ onDismiss }: { onDismiss: () => void; }) {
 }
 
 export function TranslationAccessory({ message }: { message: Message; }) {
-    const [translation, setTranslation] = useState<TranslationValue>();
+    const [translation, setTranslation] = useState<TranslationValue | undefined>(() => TranslationValues.get(message.id));
 
     useEffect(() => {
         // Ignore MessageLinkEmbeds messages
-        if ((message as any).vencordEmbeddedBy) return;
+        if ((message as Message & { vencordEmbeddedBy?: unknown; }).vencordEmbeddedBy) return () => { };
 
         TranslationSetters.set(message.id, setTranslation);
+        const existingTranslation = TranslationValues.get(message.id);
+        if (existingTranslation) setTranslation(existingTranslation);
 
         return () => void TranslationSetters.delete(message.id);
-    }, []);
+    }, [message.id]);
 
     if (!translation) return null;
 
@@ -58,7 +66,10 @@ export function TranslationAccessory({ message }: { message: Message; }) {
             <TranslateIcon width={16} height={16} className={cl("accessory-icon")} />
             {Parser.parse(translation.text)}
             <br />
-            (translated from {translation.sourceLanguage} - <Dismiss onDismiss={() => setTranslation(undefined)} />)
+            (translated from {translation.sourceLanguage} - <Dismiss onDismiss={() => {
+                TranslationValues.delete(message.id);
+                setTranslation(undefined);
+            }} />)
         </span>
     );
 }

@@ -49,6 +49,21 @@ export async function clearLogs(showToast = true) {
 let oldGetMessage: typeof MessageStore.getMessage;
 
 const handledMessageIds = new Set();
+
+function hasItems(value?: unknown[] | null) {
+    return Array.isArray(value) && value.length > 0;
+}
+
+function isMediaOnlyMessage(message: MessageCreatePayload["message"] & { stickerItems?: unknown[]; sticker_items?: unknown[]; components?: unknown[]; }) {
+    if (message.content?.trim()) return false;
+
+    return hasItems(message.attachments)
+        || hasItems(message.embeds)
+        || hasItems(message.stickerItems)
+        || hasItems(message.sticker_items)
+        || hasItems(message.components);
+}
+
 async function messageDeleteHandler(payload: MessageDeletePayload & { isBulk: boolean; }) {
     if (payload.mlDeleted) {
         if (settings.store.permanentlyRemoveLogByDefault)
@@ -182,6 +197,10 @@ async function messageUpdateHandler(payload: MessageUpdatePayload) {
 }
 
 function messageCreateHandler(payload: MessageCreatePayload) {
+    if (payload.optimistic) return;
+
+    if (!settings.store.saveImages && isMediaOnlyMessage(payload.message)) return;
+
     // we do this here because cache is limited and to save memory
     if (!settings.store.cacheMessagesFromServers && payload.guildId != null) {
         const ids = [payload.channelId, payload.message?.author?.id, payload.guildId];
@@ -389,7 +408,7 @@ export default definePlugin({
 
         // Cache pour éviter de recréer les classes de messages à chaque appel (très fréquent au scroll)
         const combinedMessageCache = new Map<string, any>();
-        
+
         MessageStore.getMessage = (channelId: string, messageId: string) => {
             const MLMessage = idb.cachedMessages.get(messageId);
             if (!MLMessage)
@@ -414,10 +433,10 @@ export default definePlugin({
                     ...(latestMessage ?? {}),
                 }
             });
-            
+
             // On ne met en cache que si on a un résultat stable
             combinedMessageCache.set(messageId, combined);
-            
+
             // Nettoyage périodique du cache pour éviter les fuites mémoire
             if (combinedMessageCache.size > 1000) {
                 const firstKey = combinedMessageCache.keys().next().value;

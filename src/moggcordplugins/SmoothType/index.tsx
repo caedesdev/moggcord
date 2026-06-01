@@ -134,6 +134,10 @@ function isSlateEditorActive() {
     return Boolean(document.activeElement?.closest("[data-slate-editor]"));
 }
 
+function isSlateEditorEvent(event: Event) {
+    return event.target instanceof Element && Boolean(event.target.closest("[data-slate-editor]"));
+}
+
 function moveInstantlyForTyping() {
     const el = getCaret();
     el.classList.add("is-instant");
@@ -195,7 +199,9 @@ const handlers = {
     sel:   () => scheduleCaretUpdate(),
     focus: () => scheduleCaretUpdate(),
     blur:  () => hideCaret(),
-    key:   () => scheduleCaretUpdate(true),
+    key:   (event: Event) => {
+        if (isSlateEditorEvent(event)) scheduleCaretUpdate(true);
+    },
     click: () => scheduleCaretUpdate(),
 };
 
@@ -204,7 +210,6 @@ function startListeners() {
     document.addEventListener("focusin", handlers.focus);
     document.addEventListener("focusout", handlers.blur);
     document.addEventListener("input", handlers.key, true);
-    document.addEventListener("keyup", handlers.key, true);
     document.addEventListener("click", handlers.click, true);
 }
 
@@ -213,7 +218,6 @@ function stopListeners() {
     document.removeEventListener("focusin", handlers.focus);
     document.removeEventListener("focusout", handlers.blur);
     document.removeEventListener("input", handlers.key, true);
-    document.removeEventListener("keyup", handlers.key, true);
     document.removeEventListener("click", handlers.click, true);
 }
 

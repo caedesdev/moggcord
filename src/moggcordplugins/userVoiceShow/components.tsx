@@ -4,7 +4,6 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { isPluginEnabled } from "@api/PluginManager";
 import { BaseText } from "@components/BaseText";
 import ErrorBoundary from "@components/ErrorBoundary";
 import { classNameFactory } from "@utils/css";
@@ -123,16 +122,30 @@ export type VoiceChannelIndicatorProps = {
 
 const clickTimers = new Map<string, any>();
 
-export const VoiceChannelIndicator = ErrorBoundary.wrap(({ userId, isProfile, isActionButton, shouldHighlight }: VoiceChannelIndicatorProps) => {
-    const channelId = useStateFromStores([VoiceStateStore], () => VoiceStateStore.getVoiceStateForUser(userId)?.channelId);
+function getVoiceInfo(userId: string) {
+    const voiceState = VoiceStateStore.getVoiceStateForUser(userId);
+    return {
+        channelId: voiceState?.channelId,
+        isMuted: voiceState?.mute || voiceState?.selfMute || false,
+        isDeaf: voiceState?.deaf || voiceState?.selfDeaf || false
+    };
+}
 
-    const { isMuted, isDeaf } = useStateFromStores([VoiceStateStore], () => {
-        const voiceState = VoiceStateStore.getVoiceStateForUser(userId);
-        return {
-            isMuted: voiceState?.mute || voiceState?.selfMute || false,
-            isDeaf: voiceState?.deaf || voiceState?.selfDeaf || false
-        };
-    });
+function isSameVoiceInfo(oldInfo: ReturnType<typeof getVoiceInfo>, newInfo: ReturnType<typeof getVoiceInfo>) {
+    return oldInfo.channelId === newInfo.channelId && oldInfo.isMuted === newInfo.isMuted && oldInfo.isDeaf === newInfo.isDeaf;
+}
+
+export function hasVoiceChannel(userId: string) {
+    return VoiceStateStore.getVoiceStateForUser(userId)?.channelId != null;
+}
+
+export const VoiceChannelIndicator = ErrorBoundary.wrap(({ userId, isProfile, isActionButton, shouldHighlight }: VoiceChannelIndicatorProps) => {
+    const { channelId, isMuted, isDeaf } = useStateFromStores(
+        [VoiceStateStore],
+        () => getVoiceInfo(userId),
+        [userId],
+        isSameVoiceInfo
+    );
 
     const channel = channelId == null ? undefined : ChannelStore.getChannel(channelId);
     if (channel == null) return null;

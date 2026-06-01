@@ -291,11 +291,10 @@ export default definePlugin({
     },
 
     flux: {
-        async MESSAGE_CREATE(data: any) {
+        MESSAGE_CREATE(data: any) {
             const msg = data.message || data;
-            if (msg && msg.author) {
-                handleMessage(msg);
-            }
+            if (!settings.store.isActive || data.optimistic || !msg?.content?.trim() || !msg.author) return;
+            void handleMessage(msg);
         }
     },
 
