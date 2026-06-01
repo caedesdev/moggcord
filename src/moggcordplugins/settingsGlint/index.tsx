@@ -37,7 +37,6 @@ const CSS = `
 `;
 
 const CANDIDATE_SELECTOR = 'h1,h2,h3,[class*="title"],[class*="header"],[class*="eyebrow"]';
-const EDITOR_SELECTOR = "[data-slate-editor], textarea, input, [contenteditable=\"true\"], [role=\"textbox\"]";
 
 function injectStyle() {
     if (document.getElementById(STYLE_ID)) return;
@@ -47,58 +46,22 @@ function injectStyle() {
     (document.head ?? document.documentElement).appendChild(style);
 }
 
-function scan(root: ParentNode = document) {
-    const candidates = root.querySelectorAll<HTMLElement>(CANDIDATE_SELECTOR);
+function scan() {
+    if (document.querySelector("." + CLASS)) return true;
+
+    const candidates = document.querySelectorAll<HTMLElement>(CANDIDATE_SELECTOR);
     for (const el of candidates) {
         if (el.classList.contains(CLASS)) continue;
         if (el.childElementCount !== 0) continue;
         if (el.textContent?.trim() === TARGET_TEXT) {
             el.classList.add(CLASS);
+            return true;
         }
     }
+    return false;
 }
 
-let observer: MutationObserver | null = null;
-let scheduled = false;
-
-function isEditorNode(node: Node) {
-    const element = node.nodeType === Node.TEXT_NODE
-        ? node.parentElement
-        : node instanceof Element ? node : null;
-    return Boolean(element?.closest(EDITOR_SELECTOR));
-}
-
-function hasTargetText(node: Node) {
-    if (isEditorNode(node)) return false;
-    if (node.nodeType === Node.TEXT_NODE) return node.nodeValue?.trim() === TARGET_TEXT;
-
-    const element = node.nodeType === Node.TEXT_NODE
-        ? node.parentElement
-        : node instanceof Element ? node : null;
-    if (!element) return false;
-    if (element.matches(CANDIDATE_SELECTOR) && element.childElementCount === 0) {
-        return element.textContent?.trim() === TARGET_TEXT;
-    }
-    return Boolean(Array.from(element.querySelectorAll<HTMLElement>(CANDIDATE_SELECTOR)).some(el =>
-        el.childElementCount === 0 && el.textContent?.trim() === TARGET_TEXT
-    ));
-}
-
-function shouldScanMutation(mutation: MutationRecord) {
-    if (isEditorNode(mutation.target)) return false;
-    if (mutation.target instanceof Element && mutation.target !== document.body && hasTargetText(mutation.target)) return true;
-    return Array.from(mutation.addedNodes).some(hasTargetText);
-}
-
-function scheduleScan(mutations?: MutationRecord[]) {
-    if (mutations?.length && !mutations.some(shouldScanMutation)) return;
-    if (scheduled) return;
-    scheduled = true;
-    setTimeout(() => {
-        scheduled = false;
-        scan();
-    }, 400);
-}
+let scanTimer: ReturnType<typeof setInterval> | null = null;
 
 export default definePlugin({
     name: "SettingsGlint",
@@ -111,16 +74,21 @@ export default definePlugin({
         if (typeof window === "undefined") return;
 
         injectStyle();
-        scan();
+        if (scan()) return;
 
-        observer = new MutationObserver(scheduleScan);
-        const root = document.body ?? document.documentElement;
-        if (root) observer.observe(root, { childList: true, subtree: true });
+        // Settings mount later — light polling only. No body MutationObserver (startup freeze).
+        let attempts = 0;
+        scanTimer = setInterval(() => {
+            if (scan() || ++attempts >= 10) {
+                if (scanTimer) clearInterval(scanTimer);
+                scanTimer = null;
+            }
+        }, 3000);
     },
 
     stop() {
-        observer?.disconnect();
-        observer = null;
+        if (scanTimer) clearInterval(scanTimer);
+        scanTimer = null;
         document.getElementById(STYLE_ID)?.remove();
         document.querySelectorAll("." + CLASS).forEach(el => el.classList.remove(CLASS));
     }

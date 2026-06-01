@@ -22,10 +22,12 @@ import { existsSync as fsExistsSync, statSync as fsStatSync } from "original-fs"
 import { dirname, join } from "path";
 import { registerMediaPermissionsForSession } from "../moggcord/main/mediaPermissions";
 
+import { crashLog, crashLogPath, installCrashLogHandlers } from "./crashLog";
 import { installMoggcordHomeIcon } from "./homeButtonIcon";
 import { installMoggcordLoadingScreen } from "./loadingScreen";
 import { injectNoDragGuard } from "./noDragGuard";
-import { schedulePostInstallRelaunchIfNeeded } from "./postInstallRelaunch";
+import { schedulePostInstallRelaunchIfNeeded, clearPendingRelaunchMarker } from "./postInstallRelaunch";
+import { isLiveWindow } from "./safeWebContents";
 import { MOGGCORD_AVATAR_DATA_URL } from "./splashAssets";
 import { installMoggcordSplashOverlay } from "./splashOverlay";
 import { installPopoutGuard } from "./utils/popoutGuard";
@@ -34,6 +36,9 @@ import { patchTrayMenu } from "./trayMenu";
 import { IS_VANILLA } from "./utils/constants";
 
 console.log("[Moggcord] Starting up...");
+
+installCrashLogHandlers(app);
+console.log("[Moggcord] Crash diagnostics enabled — log:", crashLogPath());
 
 // Our injector file at app/index.js
 const injectorPath = require.main!.filename;
@@ -55,7 +60,9 @@ if (IS_VESKTOP || IS_EQUIBOP) require.main!.filename = join(dirname(injectorPath
 app.setAppPath(asarPath);
 
 if (!IS_VANILLA) {
+    console.log("[Moggcord] Post-install auto-relaunch disabled (no 60s kill timer).");
     schedulePostInstallRelaunchIfNeeded();
+    clearPendingRelaunchMarker();
 
     const settings = RendererSettings.store;
 
@@ -157,6 +164,18 @@ if (!IS_VANILLA) {
                     injectNoDragGuard(this.webContents);
                 }
 
+                this.webContents.on("unresponsive", () => {
+                    const msg = `window unresponsive title=${options.title ?? ""}`;
+                    console.warn("[Moggcord]", msg);
+                    crashLog(msg);
+                });
+                this.webContents.on("responsive", () => {
+                    console.log("[Moggcord] Window responsive again");
+                });
+                this.webContents.on("render-process-gone", (_event, details) => {
+                    console.error("[Moggcord] WebContents render-process-gone:", details);
+                });
+
                 if (isMainWindow) {
                     installMoggcordLoadingScreen(this);
                     installMoggcordHomeIcon(this);
@@ -170,14 +189,6 @@ if (!IS_VANILLA) {
                             });
                         }
                     } catch { /* icon override is best-effort */ }
-
-                    this.webContents.on("before-input-event", (event, input) => {
-                        if (input.type !== "keyDown") return;
-                        if (!input.control || input.alt || input.meta) return;
-                        if (input.key?.toLowerCase() !== "r") return;
-
-                        event.preventDefault();
-                    });
                 }
 
                 const isTransparent = !!options.transparent;
@@ -286,7 +297,9 @@ if (!IS_VANILLA) {
                 const wc = this.webContents;
                 const checkSplash = () => {
                     try {
-                        if (/splash/i.test(wc.getURL())) installMoggcordSplashOverlay(this);
+                        if (!isLiveWindow(this)) return;
+                        const url = wc.getURL();
+                        if (/splash/i.test(url)) installMoggcordSplashOverlay(this);
                     } catch { /* window may be gone */ }
                 };
                 wc.once("dom-ready", checkSplash);

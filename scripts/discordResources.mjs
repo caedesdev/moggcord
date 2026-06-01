@@ -3,8 +3,30 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "fs";
-import { join } from "path";
+import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from "fs";
+import { dirname, join } from "path";
+import { tmpdir } from "os";
+import { execFileSync, execSync } from "child_process";
+import { createPackage, extractFile } from "@electron/asar";
+
+/** Discord newUpdater ships a tiny app.asar stub; real bootstrap is _app.asar. */
+const DISCORD_NEW_UPDATER_STUB_INDEX = 'require(process.resourcesPath+"/_app.asar")';
+const DISCORD_NEW_UPDATER_STUB_PKG = JSON.stringify({ name: "discord", main: "index.js" });
+
+export const POST_INSTALL_RELAUNCH_MARKER = join(
+    process.env.LOCALAPPDATA || "",
+    "Moggcord",
+    ".pending-relaunch"
+);
+
+export function clearPendingRelaunchMarker() {
+    try {
+        if (existsSync(POST_INSTALL_RELAUNCH_MARKER)) {
+            unlinkSync(POST_INSTALL_RELAUNCH_MARKER);
+            console.log("[Moggcord] Cleared post-install relaunch marker.");
+        }
+    } catch { /* noop */ }
+}
 
 /** Real Discord app.asar is usually tens of MB — anything tiny is a broken inject artifact. */
 export const MIN_VALID_ASAR_BYTES = 1_000_000;
@@ -65,8 +87,114 @@ export function asarSize(path) {
     }
 }
 
+/** Discord Stable newUpdater ships a tiny app.asar stub; the real app is _app.asar. */
+export function isNewUpdaterDiscord(resourcesDir) {
+    try {
+        const info = JSON.parse(readFileSync(join(resourcesDir, "build_info.json"), "utf8"));
+        return info.newUpdater === true;
+    } catch {
+        return false;
+    }
+}
+
+export function isNewUpdaterStubAsar(appAsarPath) {
+    if (!existsSync(appAsarPath)) return false;
+    try {
+        if (statSync(appAsarPath).isDirectory()) return false;
+        return asarSize(appAsarPath) < MIN_VALID_ASAR_BYTES;
+    } catch {
+        return false;
+    }
+}
+
 export function isValidAsarFile(path) {
     return asarSize(path) >= MIN_VALID_ASAR_BYTES;
+}
+
+export function findLatestStableResources() {
+    if (process.platform !== "win32") {
+        const all = findAllDiscordResources();
+        return all[0] ?? null;
+    }
+
+    const base = join(process.env.LOCALAPPDATA || "", "Discord");
+    if (!existsSync(base)) return null;
+
+    try {
+        const latest = readdirSync(base)
+            .filter(d => /^app-\d+\.\d+\.\d+$/.test(d))
+            .sort()
+            .reverse()
+            .find(d => existsSync(join(base, d, "resources")));
+
+        return latest ? join(base, latest, "resources") : null;
+    } catch {
+        return null;
+    }
+}
+
+/** Stop Discord processes so resource files are not locked during inject. */
+export function stopDiscordProcesses({ allChannels = false } = {}) {
+    if (process.platform !== "win32") return;
+
+    const processes = allChannels
+        ? ["Discord.exe", "DiscordPTB.exe", "DiscordCanary.exe", "DiscordSystemHelper.exe"]
+        : ["Discord.exe", "DiscordSystemHelper.exe"];
+
+    for (const img of processes) {
+        try {
+            execSync(`taskkill /F /IM ${img} /T`, { stdio: "ignore" });
+        } catch { /* not running */ }
+    }
+
+    try {
+        execSync("timeout /t 2 /nobreak >nul", { stdio: "ignore", shell: true });
+    } catch { /* noop */ }
+}
+
+/** Start Discord Stable after inject. */
+export function startDiscordStable() {
+    if (process.platform !== "win32") return false;
+
+    const discordRoot = join(process.env.LOCALAPPDATA || "", "Discord");
+    const updateExe = join(discordRoot, "Update.exe");
+
+    if (existsSync(updateExe)) {
+        try {
+            execFileSync(updateExe, ["--processStart", "Discord.exe"], {
+                stdio: "ignore",
+                windowsHide: true
+            });
+            return true;
+        } catch { /* fall through */ }
+    }
+
+    try {
+        const latest = readdirSync(discordRoot)
+            .filter(d => /^app-\d+\.\d+\.\d+$/.test(d))
+            .sort()
+            .reverse()
+            .find(d => existsSync(join(discordRoot, d, "Discord.exe")));
+
+        if (latest) {
+            execFileSync(join(discordRoot, latest, "Discord.exe"), [], {
+                stdio: "ignore",
+                detached: true,
+                windowsHide: true
+            });
+            return true;
+        }
+    } catch { /* noop */ }
+
+    return false;
+}
+
+export function hasNewUpdaterLayout(resourcesDir) {
+    const appAsar = join(resourcesDir, "app.asar");
+    const backup = join(resourcesDir, "_app.asar");
+    return isNewUpdaterDiscord(resourcesDir)
+        && isNewUpdaterStubAsar(appAsar)
+        && isValidAsarFile(backup);
 }
 
 export function readInjectorMeta(appDirPath) {
@@ -108,6 +236,7 @@ export function prepareForReinject(resourcesDir) {
     const appDirPath = join(resourcesDir, "app");
     const backupPath = join(resourcesDir, "_app.asar");
     const appAsarPath = join(resourcesDir, "app.asar");
+    const newUpdater = hasNewUpdaterLayout(resourcesDir);
 
     let changed = false;
 
@@ -116,7 +245,7 @@ export function prepareForReinject(resourcesDir) {
         changed = true;
     }
 
-    if (existsSync(appAsarPath)) {
+    if (existsSync(appAsarPath) && !newUpdater) {
         try {
             if (statSync(appAsarPath).isDirectory()) {
                 rmSync(appAsarPath, { recursive: true, force: true });
@@ -128,7 +257,7 @@ export function prepareForReinject(resourcesDir) {
         } catch { /* noop */ }
     }
 
-    if (!existsSync(appAsarPath) && existsSync(backupPath)) {
+    if (!newUpdater && !existsSync(appAsarPath) && existsSync(backupPath)) {
         if (isValidAsarFile(backupPath)) {
             renameSync(backupPath, appAsarPath);
             changed = true;
@@ -136,9 +265,6 @@ export function prepareForReinject(resourcesDir) {
             console.warn(`\x1b[33m[Moggcord] _app.asar backup looks corrupt in ${resourcesDir} — reinstall Discord if inject fails.\x1b[0m`);
         }
     }
-
-    // Keep _app.asar when both exist and are valid — Equilotl may expect this during reinstall.
-    // Never rmSync(backupPath) here; that was breaking double injects.
 
     return changed;
 }
@@ -149,24 +275,86 @@ export function isMoggcordDevInjection(resourcesDir) {
     return meta?.pkg?.name === "moggcord" && meta.isModLoader;
 }
 
-export function writeMoggcordLoader(resourcesDir, patcherPath) {
+/** Copy built dist/desktop into %LOCALAPPDATA%\\Moggcord so inject survives repo moves. */
+export function syncMoggcordDistToLocal(patcherPath) {
+    const srcDir = dirname(patcherPath);
+    const destDir = join(process.env.LOCALAPPDATA || "", "Moggcord", "dist", "desktop");
+    mkdirSync(destDir, { recursive: true });
+    cpSync(srcDir, destDir, { recursive: true, force: true });
+    return join(destDir, "patcher.js");
+}
+
+/** Restore Discord's 195-byte newUpdater stub if a mod wrote into app.asar. */
+export async function restoreDiscordNewUpdaterStub(resourcesDir) {
+    if (!hasNewUpdaterLayout(resourcesDir)) return false;
+
+    const appAsar = join(resourcesDir, "app.asar");
+    if (!existsSync(appAsar) || !isNewUpdaterStubAsar(appAsar)) return false;
+
+    let currentIndex = "";
+    let broken = asarSize(appAsar) < 100;
+    try {
+        currentIndex = extractFile(appAsar, "index.js").toString("utf8");
+    } catch {
+        broken = true;
+    }
+
+    if (!broken && currentIndex === DISCORD_NEW_UPDATER_STUB_INDEX) return false;
+    if (!broken && !/moggcord|vencord|equicord|dist\\desktop|dist\/desktop/i.test(currentIndex)) return false;
+
+    try {
+        const tmp = mkdtempSync(join(tmpdir(), "moggcord-discord-stub-"));
+        writeFileSync(join(tmp, "index.js"), DISCORD_NEW_UPDATER_STUB_INDEX, "utf8");
+        writeFileSync(join(tmp, "package.json"), DISCORD_NEW_UPDATER_STUB_PKG, "utf8");
+        await createPackage(tmp, appAsar);
+        rmSync(tmp, { recursive: true, force: true });
+        console.log("\x1b[33m[Moggcord] Restored Discord newUpdater app.asar stub (was overwritten by a mod).\x1b[0m");
+        return true;
+    } catch (err) {
+        console.warn("\x1b[33m[Moggcord] Could not restore app.asar stub:", err?.message ?? err, "\x1b[0m");
+        return false;
+    }
+}
+
+export async function writeMoggcordLoader(resourcesDir, patcherPath) {
     const appDirPath = join(resourcesDir, "app");
     mkdirSync(appDirPath, { recursive: true });
+
+    const localPatcher = syncMoggcordDistToLocal(patcherPath);
+    await restoreDiscordNewUpdaterStub(resourcesDir);
 
     writeFileSync(join(appDirPath, "package.json"), JSON.stringify({
         name: "moggcord",
         main: "index.js"
     }, null, 2));
 
-    const escaped = patcherPath.replace(/\\/g, "\\\\");
+    const primary = patcherPath.replace(/\\/g, "/");
+    const local = localPatcher.replace(/\\/g, "/");
     writeFileSync(join(appDirPath, "index.js"),
-        `// Moggcord Injector — auto-generated, do not edit\n"use strict";\nrequire("${escaped}");\n`
+        `// Moggcord Injector — auto-generated, do not edit
+"use strict";
+const fs = require("fs");
+const path = require("path");
+const candidates = [
+    ${JSON.stringify(primary)},
+    ${JSON.stringify(local)},
+    path.join(process.env.LOCALAPPDATA || "", "Moggcord", "dist", "desktop", "patcher.js"),
+    path.join(process.env.LOCALAPPDATA || "", "Moggcord", "dist", "patcher.js"),
+];
+const resolved = candidates.find(p => { try { return fs.existsSync(p); } catch { return false; } });
+if (!resolved) {
+    throw new Error("[Moggcord] patcher.js not found. Run: pnpm build && pnpm inject:dev");
+}
+require(resolved);
+`
     );
 }
 
 export function warnIfCorruptAppAsar(resourcesDir) {
     const appAsar = join(resourcesDir, "app.asar");
     const backup = join(resourcesDir, "_app.asar");
+
+    if (hasNewUpdaterLayout(resourcesDir)) return;
 
     if (existsSync(appAsar) && !isValidAsarFile(appAsar)) {
         console.warn(`\x1b[33m[Moggcord] Warning: app.asar in ${resourcesDir} looks corrupt (${asarSize(appAsar)} bytes).\x1b[0m`);

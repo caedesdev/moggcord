@@ -6,11 +6,7 @@
 
 import { definePluginSettings } from "@api/Settings";
 import definePlugin, { OptionType } from "@utils/types";
-import { moment, useEffect, useReducer } from "@webpack/common";
-
-import { subscribeSecondTick } from "@shared/secondTick";
-
-// ─── Settings ────────────────────────────────────────────────────────────────
+import { moment } from "@webpack/common";
 
 const settings = definePluginSettings({
     format: {
@@ -34,79 +30,61 @@ const settings = definePluginSettings({
     },
 });
 
-// ─── Tick hook — forces a re-render every second ─────────────────────────────
+type TimestampType = "cozy" | "compact" | "tooltip";
 
-function useSecondTick() {
-    const [, tick] = useReducer((n: number) => n + 1, 0);
-    useEffect(() => subscribeSecondTick(tick), [tick]);
-}
-
-// ─── Renderers called by the patches ─────────────────────────────────────────
-
-function renderTimestamp(date: Date, type: "cozy" | "compact" | "tooltip"): string {
-    // Hook must be called unconditionally — React requires this
-    useSecondTick();
-
+function formatTimestamp(date: Date, type: TimestampType): string {
     const fmt = settings.store.format ?? "HH:mm:ss";
 
     switch (type) {
         case "cozy":
-            // Cozy mode: replace the default "Today at HH:mm" with seconds
             return moment(date).format(fmt);
         case "compact":
-            // Compact mode (grouped message line): show seconds if enabled
             return settings.store.showInCompact
                 ? moment(date).format(fmt)
                 : moment(date).format("LT");
         case "tooltip":
-            // Tooltip on hover: full date + seconds
             return settings.store.showInTooltip
                 ? moment(date).format(`dddd, MMMM D, YYYY [at] ${fmt}`)
                 : moment(date).format("LLLL");
     }
 }
 
-// ─── Plugin ──────────────────────────────────────────────────────────────────
-
 export default definePlugin({
     name: "RealtimeTimestamps",
-    description: "Replaces Discord timestamps (e.g. 15:31) with live seconds (e.g. 15:34:21), updated every second.",
+    description: "Shows seconds on message timestamps (e.g. 15:34:21). Updates when messages re-render; live ticking is disabled to avoid renderer freezes in busy channels.",
     tags: ["Appearance", "Chat", "Utility"],
     authors: [{ name: "Moggcord", id: 253979869n }],
     enabledByDefault: true,
     settings,
 
-    renderTimestamp,
+    /** Must return a string — Discord calls .match() on the useMemo result. */
+    renderTimestamp(date: Date, type: TimestampType): string {
+        return formatTimestamp(date, type);
+    },
 
     patches: [
-        // ─── Main Timestamp component (cozy + compact messages + hover tooltip) ─
         {
             find: "#{intl::MESSAGE_EDITED_TIMESTAMP_A11Y_LABEL}",
             replacement: [
                 {
-                    // Compact mode: the useMemo that formats with "LT"
                     match: /(\i\.useMemo\(.{0,50}"LT".{0,30}\]\))/,
                     replace: "$self.renderTimestamp(arguments[0].timestamp,'compact')",
                 },
                 {
-                    // Cozy mode: the useMemo that calls the calendar/relative formatter
                     match: /(\i\.useMemo\(.{0,10}\i\.\i\)\(.{0,10}\]\))/,
                     replace: "$self.renderTimestamp(arguments[0].timestamp,'cozy')",
                 },
                 {
-                    // Tooltip shown when hovering a message timestamp
                     match: /(__unsupportedReactNodeAsText:).{0,25}"LLLL"\)/,
                     replace: "$1$self.renderTimestamp(arguments[0].timestamp,'tooltip')",
                 },
             ],
         },
-
-        // ─── Timestamp markdown <t:unix:t> — hover tooltip ────────────────────
         {
             find: /.full,.{0,15}children:/,
             replacement: {
                 match: /(__unsupportedReactNodeAsText:)\i\.full/,
-                replace: "$1$self.renderTimestamp(new Date(arguments[0].node.timestamp*1000),'tooltip')",
+                replace: "$1$self.renderTimestamp(new Date(arguments[0].node.timestamp * 1000),'tooltip')",
             },
         },
     ],

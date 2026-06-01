@@ -87,8 +87,8 @@ function isUncategorized(objChannel: { channel: Channel; comparator: number; }) 
 
 export default definePlugin({
     name: "ShowHiddenChannels",
-    enabledByDefault: true,
-    description: "Show channels that you do not have access to view.",
+    enabledByDefault: false,
+    description: "Show channels that you do not have access to view. (Disabled by default on Discord Stable — patches need updating.)",
     authors: [Devs.BigDuck, Devs.AverageReactEnjoyer, Devs.D3SOX, Devs.Ven, Devs.Nuckyz, Devs.Nickyux, Devs.dzshn, EquicordDevs.Oggetto],
     isModified: true,
     settings,

@@ -4,6 +4,7 @@
 
 import type { BrowserWindow } from "electron";
 
+import { bindWindowInject, isLiveWindow } from "./safeWebContents";
 import { MOGGCORD_AVATAR_DATA_URL as DATA_URL } from "./splashAssets";
 
 const OVERLAY_ID = "moggcord-loading-screen";
@@ -21,6 +22,7 @@ const CSS = `
     background: radial-gradient(circle at 50% 40%, #1d1b2e 0%, #0c0b14 75%);
     font-family: "gg sans", "Segoe UI", system-ui, sans-serif;
     user-select: none;
+    pointer-events: none;
     opacity: 1;
     transition: opacity .45s ease;
     animation: mgLoadFade .4s ease both;
@@ -86,10 +88,11 @@ const CSS = `
 `;
 
 const BOOTSTRAP = `(function () {
-    var ID = ${JSON.stringify(OVERLAY_ID)};
-    if (window.__mgLoadingDone) return;
-    if (document.getElementById(ID)) return;
+    if (window.__mgLoadingDone || window.__mgLoadingBootstrapped) return;
+    window.__mgLoadingBootstrapped = true;
+    window.__mgLoadingBootAt = Date.now();
 
+    var ID = ${JSON.stringify(OVERLAY_ID)};
     var TIPS = [
         "Booting Moggcord\\u2026",
         "Polishing the UI",
@@ -106,13 +109,14 @@ const BOOTSTRAP = `(function () {
         if (el) return el;
         el = document.createElement("div");
         el.id = ID;
+        el.style.pointerEvents = "none";
         el.innerHTML =
             '<div class="mg-ring"><div class="mg-avatar"></div></div>' +
             '<div class="mg-title">Loading <b>Moggcord</b><span class="mg-dots"></span></div>' +
             '<div class="mg-tip"></div>';
         (document.body || document.documentElement).appendChild(el);
         tipEl = el.querySelector(".mg-tip");
-        tipEl.textContent = TIPS[i];
+        if (tipEl) tipEl.textContent = TIPS[i];
         return el;
     }
 
@@ -129,34 +133,43 @@ const BOOTSTRAP = `(function () {
 
     var finished = false;
     var START = Date.now();
-    var MIN_MS = 600;
-    var MAX_MS = 40000;
-    // Signals that only exist once the real app (or login) has mounted, never
-    // during Discord's tips/Wumpus loading screen.
-    var READY = [
-        '[class*="guilds_"]',
-        '[class*="privateChannels"]',
-        '[class*="authBox"]',
-        '[class*="qrCode"]',
-        'input[type="password"]',
-        'input[name="email"]',
-        '[role="dialog"]'
-    ].join(",");
+    var MIN_MS = 400;
+    var FORCE_MS = 6000;
+    var MAX_MS = 9000;
 
-    // Discord may wipe our node while it swaps the loading screen; rebuild it
-    // until we decide we're actually done.
-    var keepAlive = new MutationObserver(function () {
-        if (finished) return;
-        if (!document.getElementById(ID)) build();
-    });
-    if (document.body) keepAlive.observe(document.body, { childList: true });
+    function isAppReady() {
+        var elapsed = Date.now() - START;
+        // Mod loads before Discord paints UI — do not hide overlay on Vencord alone.
+        if (elapsed < 1200) return false;
+
+        var mount = document.querySelector("#app-mount");
+        if (!mount || !mount.children.length) return false;
+
+        var selectors = [
+            '[data-list-item-id="guildsnav___home"]',
+            '[class*="guilds_"]',
+            '[class*="privateChannels"]',
+            '[class*="authBox"]',
+            '[class*="qrCode"]',
+            'input[type="password"]',
+            'input[name="email"]',
+            '[role="dialog"]',
+            '[class*="sidebar"]',
+            '[class*="chatContent"]',
+            'nav[aria-label]'
+        ];
+        for (var s = 0; s < selectors.length; s++) {
+            if (document.querySelector(selectors[s])) return true;
+        }
+
+        return elapsed >= FORCE_MS && mount.children.length > 0;
+    }
 
     function done() {
         if (finished) return;
         finished = true;
         window.__mgLoadingDone = true;
         clearInterval(tipTimer);
-        keepAlive.disconnect();
         var el = document.getElementById(ID);
         if (!el) return;
         el.style.pointerEvents = "none";
@@ -167,27 +180,28 @@ const BOOTSTRAP = `(function () {
     function tick() {
         var elapsed = Date.now() - START;
         if (elapsed < MIN_MS) return setTimeout(tick, 120);
-        if (document.querySelector(READY) || elapsed > MAX_MS) return done();
+        if (isAppReady() || elapsed > MAX_MS) return done();
         setTimeout(tick, 160);
     }
     tick();
 })();`;
 
+const installed = new WeakSet<BrowserWindow>();
+
 function inject(win: BrowserWindow) {
-    if (win.isDestroyed()) return;
+    if (!isLiveWindow(win)) return;
     const wc = win.webContents;
     wc.insertCSS(CSS).catch(() => { });
     wc.executeJavaScript(BOOTSTRAP, true).catch(() => { });
 }
 
 /**
- * Overlays Moggcord branding on top of Discord's in-app loading screen
- * (the tips + Wumpus screen shown while the client boots). The overlay paints
- * full-screen and removes itself once the app (or login) is ready.
+ * Overlays Moggcord branding on top of Discord's in-app loading screen.
+ * The overlay is cosmetic only (pointer-events: none) and removes itself
+ * once the app is ready or after a short timeout.
  */
 export function installMoggcordLoadingScreen(win: BrowserWindow) {
-    const wc = win.webContents;
-    wc.on("dom-ready", () => inject(win));
-    wc.on("did-finish-load", () => inject(win));
-    if (!wc.isLoadingMainFrame()) inject(win);
+    if (installed.has(win)) return;
+    installed.add(win);
+    bindWindowInject(win, () => inject(win));
 }

@@ -1,37 +1,37 @@
+import { find, filters } from "@webpack";
 import definePlugin from "@utils/types";
-import { findByPropsLazy } from "@webpack";
 
-const MediaEngineStore = findByPropsLazy("getMediaEngine", "isKrispAvailable");
-const NativeModuleStore = findByPropsLazy("requireModule");
+function getMediaSettingsStore(): Record<string, unknown> | null {
+    return find(filters.byProps("setNoiseSuppressionLevel", "getNoiseSuppression"), { isIndirect: true }) as Record<string, unknown> | null
+        ?? find(filters.byProps("setNoiseSuppression"), { isIndirect: true }) as Record<string, unknown> | null;
+}
+
+function getFluxDispatcher(): { subscribe?: (t: string, h: (e: unknown) => void) => void; unsubscribe?: (t: string, h: (e: unknown) => void) => void; } | null {
+    return find(filters.byProps("dispatch", "subscribe"), { isIndirect: true }) as ReturnType<typeof getFluxDispatcher>;
+}
 
 /**
  * Simulate the Studio → Voice Isolation cycle that users discovered as a
  * workaround. This resets the WebRTC audio pipeline and makes Krisp process
  * only background noise instead of muting the whole microphone signal.
- *
- * Timeline:
- *   t=0   → set noiseSuppression to 'studio'   (reset pipeline)
- *   t=400 → set noiseSuppression to 'krisp'    (activate isolation)
- *   t=800 → done — Krisp is properly initialised
  */
 function resetKrispPipeline() {
     try {
-        const MediaSettingsStore = (window as any).Vencord?.Webpack?.findByProps?.("setNoiseSuppressionLevel", "getNoiseSuppression");
+        const MediaSettingsStore = getMediaSettingsStore();
         if (!MediaSettingsStore) return;
 
-        const original = MediaSettingsStore.getNoiseSuppression?.();
+        const setLevel = MediaSettingsStore.setNoiseSuppressionLevel as ((level: string) => void) | undefined;
+        if (typeof setLevel !== "function") return;
 
-        // Step 1: switch to Studio (full noise suppression — resets the pipeline)
-        MediaSettingsStore.setNoiseSuppressionLevel?.("studio");
+        setLevel("studio");
 
-        // Step 2: switch back to Voice Isolation (Krisp) — now correctly initialised
         setTimeout(() => {
             try {
-                MediaSettingsStore.setNoiseSuppressionLevel?.("krisp");
+                setLevel("krisp");
                 console.log("[FixKrisp] Pipeline reset complete — Krisp correctly initialised.");
-            } catch { }
+            } catch { /* ignore */ }
         }, 400);
-    } catch { }
+    } catch { /* ignore */ }
 }
 
 export default definePlugin({
@@ -39,80 +39,25 @@ export default definePlugin({
     description: "Forces Krisp (Noise Suppression) to be available and auto-resets the audio pipeline so only background noise is suppressed (not the whole voice).",
     authors: [{ name: "Moggcord", id: 0n }],
     enabledByDefault: true,
-    required: true,
 
     _callCleanup: null as (() => void) | null,
 
     start() {
         console.log("[FixKrisp] Forcing Krisp eligibility...");
+        // Inline <script> is blocked by Discord CSP — native hook runs via webpack patches only.
 
-        // Patch DiscordNative at the native level (one-shot, no interval)
-        const script = document.createElement("script");
-        script.textContent = `
-            (function() {
-                const patchNative = () => {
-                    if (!window.DiscordNative?.nativeModules?.requireModule) return;
-                    if (window.DiscordNative.nativeModules._krispPatched) return;
-                    
-                    const originalRequire = window.DiscordNative.nativeModules.requireModule;
-                    window.DiscordNative.nativeModules.requireModule = function(name) {
-                        const module = originalRequire.apply(this, arguments);
-                        if (name === "discord_voice" && module && !module._krispPatched) {
-                            module.getSupportsKrisp = () => true;
-                            if (module.getKrispModelPath) {
-                                module.getKrispModelPath = (cb) => {
-                                    if (typeof cb === 'function') cb("found");
-                                    return "found";
-                                };
-                            }
-                            module._krispPatched = true;
-                        }
-                        return module;
-                    };
-                    window.DiscordNative.nativeModules._krispPatched = true;
-                    console.log("[FixKrisp] Native Voice Module Hooked (one-shot)");
-                };
-
-                // One-shot availability patch (no interval)
-                const forceKrisp = () => {
-                    try {
-                        const stores = window.Vencord?.Webpack?.findByProps("getMediaEngine", "isKrispAvailable");
-                        if (stores) {
-                            Object.defineProperty(stores, 'isKrispAvailable', { get: () => true, configurable: true });
-                            Object.defineProperty(stores, 'isKrispSupported', { get: () => true, configurable: true });
-                        }
-                        const experiments = window.Vencord?.Webpack?.findByProps("getKrispExperiment");
-                        if (experiments?.getKrispExperiment) {
-                            const res = experiments.getKrispExperiment();
-                            if (res) res.eligible = true;
-                        }
-                    } catch (e) {}
-                };
-                
-                patchNative();
-                forceKrisp(); // run once, no interval
-            })();
-        `;
-        document.head.appendChild(script);
-
-        // Auto-reset pipeline when user joins a voice channel
-        // This replaces the manual Studio → Isolation cycle
-        const handler = (event: any) => {
+        const handler = (event: { type?: string; channelId?: string; }) => {
             if (event?.type === "VOICE_CHANNEL_SELECT" && event.channelId) {
-                // Small delay to let Discord connect the audio engine first
                 setTimeout(() => resetKrispPipeline(), 1200);
             }
         };
-        try {
-            const FD = (window as any).Vencord?.Webpack?.findByProps?.("dispatch", "subscribe");
-            FD?.subscribe?.("VOICE_CHANNEL_SELECT", handler);
-            this._callCleanup = () => FD?.unsubscribe?.("VOICE_CHANNEL_SELECT", handler);
-        } catch { }
 
-        // Also run once on startup for users already in a call (e.g. after a reload)
+        const FD = getFluxDispatcher();
+        FD?.subscribe?.("VOICE_CHANNEL_SELECT", handler);
+        this._callCleanup = () => FD?.unsubscribe?.("VOICE_CHANNEL_SELECT", handler);
+
         setTimeout(() => resetKrispPipeline(), 2000);
 
-        // Ensure UI displays it
         const style = document.createElement("style");
         style.textContent = `
             [aria-label*="Krisp"], [aria-label*="Noise"], [aria-label*="Bruit"], [aria-label*="Réduction"],
@@ -129,33 +74,27 @@ export default definePlugin({
 
     patches: [
         {
-            // Force MediaEngine to report Krisp as available and supported
             find: "MediaEngineStore",
             replacement: [
                 {
-                    // Force isKrispAvailable() to return true
                     match: /isKrispAvailable\(\){return !?1}/,
                     replace: "isKrispAvailable(){return true}"
                 },
                 {
-                    // Force isKrispSupported() to return true
                     match: /isKrispSupported\(\){return !?1}/,
                     replace: "isKrispSupported(){return true}"
                 },
                 {
-                    // Bypass the "is eligible" check for the Krisp experiment
                     match: /getIsEligible\(\){return !?1}/,
                     replace: "getIsEligible(){return true}"
                 },
                 {
-                    // Force setKrispEnabled to always succeed
                     match: /setKrispEnabled\(\i\){/,
                     replace: "$&return Promise.resolve({ok:true});"
                 }
             ]
         },
         {
-            // Force Experiment eligibility
             find: "getKrispExperiment",
             replacement: {
                 match: /eligible:!?1/g,
@@ -163,7 +102,6 @@ export default definePlugin({
             }
         },
         {
-            // Patch the UI component for Noise Suppression to include Krisp
             find: "NoiseCancellationLocations",
             replacement: [
                 {

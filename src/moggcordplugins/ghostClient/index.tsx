@@ -23,6 +23,18 @@ const DS_KEY_AUTO_FOLLOW = "moggcord-ghost-autofollow";
 const DS_KEY_MIC_DEVICE = "moggcord-ghost-mic-device-label";
 const DS_KEY_SELECTED = "moggcord-ghost-selected";
 
+/** Discord RPC IPC allows ~100 connections — avoid mass preconnect/inject. */
+const MAX_GHOST_TARGETS = 5;
+
+let ghostServerInit: Promise<void> | null = null;
+
+function ensureGhostServer(): Promise<void> {
+    if (!ghostServerInit) {
+        ghostServerInit = Native.init().catch(() => { });
+    }
+    return ghostServerInit;
+}
+
 const MI_TOKEN_CACHE_KEY = "moggcord-mi-token-cache";
 const TI_ACCOUNTS_KEY = "TokenImporter_accounts";
 
@@ -672,14 +684,24 @@ const GhostUserAreaButton: UserAreaButtonFactory = ({ iconForeground, hideToolti
     }, [showPopover]);
 
     async function handleLeftClick() {
-        // On récupère TOUS les comptes (Native + Imported) pour le clic gauche
+        await ensureGhostServer();
+
         const storedAccounts = await getAllSavedAccounts();
         const storedSelected = await DataStore.get(DS_KEY_SELECTED) as string | null ?? "all";
         const myId = getMyId();
 
         // On filtre TOUJOURS notre propre compte pour éviter les déconnexions
         const filteredAccounts = storedAccounts.filter(a => a.userId !== myId);
-        const targets = storedSelected === "all" ? filteredAccounts : filteredAccounts.filter(a => a.userId === storedSelected);
+        let targets = storedSelected === "all" ? filteredAccounts : filteredAccounts.filter(a => a.userId === storedSelected);
+
+        if (targets.length > MAX_GHOST_TARGETS) {
+            Toasts.show({
+                message: `Max ${MAX_GHOST_TARGETS} Ghost-Accounts gleichzeitig — nur die ersten ${MAX_GHOST_TARGETS} werden verbunden.`,
+                type: Toasts.Type.MESSAGE,
+                id: Toasts.genId(),
+            });
+            targets = targets.slice(0, MAX_GHOST_TARGETS);
+        }
 
         if (targets.length === 0) {
             if (storedSelected !== "all" && storedSelected === myId) {
@@ -719,6 +741,7 @@ const GhostUserAreaButton: UserAreaButtonFactory = ({ iconForeground, hideToolti
     }
 
     function openPopover() {
+        void ensureGhostServer();
         const rect = btnRef.current?.getBoundingClientRect() ?? null;
         setAnchorRect(rect);
         setShowPopover(v => !v);
@@ -759,21 +782,6 @@ export default definePlugin({
         if (mic) ghostMicLabel = mic;
         const allAccs = await getAllSavedAccounts();
         if (allAccs.length > 0) savedAccounts = allAccs;
-
-        setTimeout(() => {
-            Native.init().catch(() => { });
-
-            (async () => {
-                if (savedAccounts.length === 0) return;
-                console.log("[GhostClient] Pré-connexion de", savedAccounts.length, "account(s)...");
-                for (const acc of savedAccounts) {
-                    Native.preConnectGhost(acc.userId, acc.token, ghostMicLabel)
-                        .then(r => console.log("[GhostClient] Pré-connecté:", acc.username, r?.ok))
-                        .catch(() => { });
-                    await new Promise(r => setTimeout(r, 800));
-                }
-            })();
-        }, 10000);
 
         try {
             if (typeof (VencordNative as any)?.ipc?.on === "function") {

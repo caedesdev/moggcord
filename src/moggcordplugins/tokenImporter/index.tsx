@@ -5,6 +5,7 @@
  */
 
 import { addHeaderBarButton, HeaderBarButton, removeHeaderBarButton } from "@api/HeaderBar";
+import { showToast, Toasts } from "@webpack/common";
 import { PluginNative } from "@utils/types";
 import definePlugin from "@utils/types";
 import { t } from "../autoTranslateMoggcord";
@@ -12,10 +13,28 @@ import { openModal, ModalRoot, ModalHeader, ModalContent, ModalCloseButton } fro
 import { React, useState, useRef, useEffect, useCallback, useMemo } from "@webpack/common";
 import { Forms } from "@webpack/common";
 import { DataStore } from "@api/index";
-import { findByProps } from "@webpack";
+import { find, filters } from "@webpack";
 import "./styles.css";
 
-const Native = VencordNative.pluginHelpers.TokenImporter as PluginNative<typeof import("./native")>;
+const Native = VencordNative.pluginHelpers.TokenImporter as PluginNative<typeof import("./native")> | undefined;
+
+function toast(msg: string, type = Toasts.Type.MESSAGE) {
+    try {
+        showToast(msg, type);
+        return;
+    } catch { /* webpack toast module may be missing on this Discord build */ }
+    try {
+        Toasts.show(Toasts.create(msg, type));
+        return;
+    } catch { /* noop */ }
+    console.warn("[TokenImporter]", msg);
+}
+
+function assertNative(): Native is PluginNative<typeof import("./native")> {
+    if (Native?.checkToken) return true;
+    toast("Token Importer native module missing — run pnpm build && pnpm inject:dev, then restart Discord.", Toasts.Type.FAILURE);
+    return false;
+}
 const STORE_KEY = "TokenImporter_accounts";
 
 interface SavedAccount { id: string; token: string; username: string; discriminator: string; avatar: string; }
@@ -45,26 +64,6 @@ async function saveAccounts(accounts: SavedAccount[]): Promise<void> {
     await DataStore.set(STORE_KEY, deduplicated);
 }
 
-let tokenModulePatched = false;
-let originalEncryptAndStoreTokens: any = null;
-
-async function patchTokenStore() {
-    if (tokenModulePatched) return;
-    try {
-        const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
-        if (!tokenMod?.encryptAndStoreTokens) return;
-        originalEncryptAndStoreTokens = tokenMod.encryptAndStoreTokens;
-        const orig = tokenMod.encryptAndStoreTokens.bind(tokenMod);
-        tokenMod.encryptAndStoreTokens = async function (tokens: Record<string, string>) {
-            try { const saved = await getAccounts(); for (const acc of saved) { if (!tokens[acc.id]) tokens[acc.id] = acc.token; } } catch { }
-            return orig(tokens);
-        };
-        tokenModulePatched = true;
-    } catch (e) {
-        console.warn("[TokenImporter] patchTokenStore failed", e);
-    }
-}
-
 function switchToAccount(token: string, userId?: string) {
     try {
         const isMultiInstance = window.location.href.includes("multi-instance=true") || (window as any).IS_MULTI_INSTANCE;
@@ -76,32 +75,8 @@ function switchToAccount(token: string, userId?: string) {
             }
         }
 
-        const TokenStore = findByProps("getToken", "setToken");
-        const FluxDispatcher = findByProps("dispatch", "subscribe", "register");
-
-        if (TokenStore && typeof (TokenStore as any).setToken === "function") {
-            (TokenStore as any).setToken(token);
-        }
-
-        if (FluxDispatcher) {
-            FluxDispatcher.dispatch({
-                type: "CONNECTION_OPEN",
-                user: {},
-                experiments: [],
-                guilds: [],
-                relationships: [],
-                private_channels: [],
-                users: [],
-                analytics_token: "",
-                session_id: ""
-            });
-
-            FluxDispatcher.dispatch({
-                type: "LOGIN_SUCCESS",
-                token: token
-            });
-        }
-
+        // Do not dispatch fake CONNECTION_OPEN / LOGIN_SUCCESS — that leaves Discord in a
+        // half-connected state where stores request guild members on a closing WebSocket.
         window.localStorage.setItem("token", `"${token}"`);
         const iframe = document.createElement("iframe");
         iframe.style.display = "none";
@@ -111,9 +86,7 @@ function switchToAccount(token: string, userId?: string) {
         } catch { }
         document.body.removeChild(iframe);
 
-        setTimeout(() => {
-            location.reload();
-        }, 350);
+        location.reload();
     } catch (err) {
         console.error("[TokenImporter] Switch failed:", err);
         location.reload();
@@ -122,15 +95,17 @@ function switchToAccount(token: string, userId?: string) {
 
 function copyMyToken() {
     try {
-        const token = findByProps("getToken")?.getToken?.();
+        const tokenModule = find(filters.byProps("getToken"), { isIndirect: true }) as { getToken?: () => string; } | null;
+        const token = tokenModule?.getToken?.();
         if (token) {
             if (typeof window.DiscordNative?.clipboard?.copy === "function") {
                 window.DiscordNative.clipboard.copy(token);
             } else {
                 navigator.clipboard.writeText(token);
             }
+            toast("Token copied!", Toasts.Type.SUCCESS);
         }
-    } catch { }
+    } catch { /* noop */ }
 }
 
 function FolderIcon({ width = 20, height = 20, style }: { width?: number; height?: number; style?: React.CSSProperties; }) {
@@ -150,7 +125,7 @@ function CheckIcon() {
 }
 
 function CrossIcon() {
-    return <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 17.59 13.41 12 19 6.41z" /></svg>;
+    return <svg width="12" height="12" viewBox="0 0 24 24" fill="currentColor"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z" /></svg>;
 }
 
 const TOKEN_REGEX = /(?:mfa\.[\w-]{84}|[\w-]{24,26}\.[\w-]{4,7}\.[\w-]{27,40})/g;
@@ -163,7 +138,117 @@ function extractTokens(raw: string): string[] {
     return Array.from(found);
 }
 
-interface TokenResult { token: string; status: "pending" | "checking" | "valid" | "invalid" | "error" | "rate_limited"; username?: string; avatar?: string; id?: string; }
+interface TokenResult { token: string; status: "pending" | "checking" | "valid" | "invalid" | "error" | "rate_limited"; username?: string; avatar?: string; id?: string; errorHint?: string; }
+
+const TOKEN_CHECK_DELAY_MS = 2200;
+const TOKEN_CHECK_MAX_ATTEMPTS = 5;
+const sleep = (ms: number) => new Promise<void>(r => setTimeout(r, ms));
+
+let verifyQueue: Promise<void> = Promise.resolve();
+
+function enqueueTokenCheck<T>(fn: () => Promise<T>): Promise<T> {
+    const run = verifyQueue.then(fn, fn);
+    verifyQueue = run.then(() => { }, () => { });
+    return run;
+}
+
+function decodeUserIdInRenderer(token: string): string | null {
+    if (token.startsWith("mfa.")) return null;
+    const part = token.split(".")[0];
+    if (!part) return null;
+
+    try {
+        const fromNative = Native?.decodeTokenUserId?.(token);
+        if (fromNative && /^\d{17,20}$/.test(fromNative)) return fromNative;
+    } catch { /* noop */ }
+
+    try {
+        const b64 = part.replace(/-/g, "+").replace(/_/g, "/");
+        const padded = b64 + "=".repeat((4 - (b64.length % 4)) % 4);
+        const decoded = atob(padded);
+        if (/^\d{17,20}$/.test(decoded)) return decoded;
+    } catch { /* noop */ }
+
+    return null;
+}
+
+function storageKeyForToken(token: string): string {
+    const userId = decodeUserIdInRenderer(token);
+    if (userId) return userId;
+    let h = 0;
+    for (let i = 0; i < token.length; i++) h = ((h << 5) - h + token.charCodeAt(i)) | 0;
+    return token.startsWith("mfa.") ? `mfa_${Math.abs(h)}` : `tok_${Math.abs(h)}`;
+}
+
+function defaultAvatarForStorageId(id: string): string {
+    try {
+        const idx = Number(BigInt(id) >> 22n) % 6n;
+        return `https://cdn.discordapp.com/embed/avatars/${idx}.png`;
+    } catch {
+        let h = 0;
+        for (let i = 0; i < id.length; i++) h = ((h << 5) - h + id.charCodeAt(i)) | 0;
+        return `https://cdn.discordapp.com/embed/avatars/${Math.abs(h) % 6}.png`;
+    }
+}
+
+type SaveWithoutVerifyResult = "added" | "duplicate" | "invalid";
+
+async function addTokenWithoutVerify(token: string): Promise<SaveWithoutVerifyResult> {
+    const trimmed = token.trim();
+    if (!trimmed || extractTokens(trimmed).length !== 1) return "invalid";
+
+    const id = storageKeyForToken(trimmed);
+    const existing = await getAccounts();
+    if (existing.some(a => a.token === trimmed || a.id === id)) return "duplicate";
+
+    const userId = decodeUserIdInRenderer(trimmed);
+    existing.push({
+        id,
+        token: trimmed,
+        username: userId ? `User ${userId.slice(-4)}` : (trimmed.startsWith("mfa.") ? "MFA account" : "Imported token"),
+        discriminator: "0",
+        avatar: defaultAvatarForStorageId(userId ?? id),
+    });
+    await saveAccounts(existing);
+    return "added";
+}
+
+function statusLabel(status: TokenResult["status"], errorHint?: string) {
+    switch (status) {
+        case "valid": return "OK";
+        case "checking": return "...";
+        case "rate_limited": return "Rate limit";
+        case "error": return errorHint === "timeout" ? "Timeout" : errorHint === "network_error" ? "Network error" : errorHint ?? "Error";
+        case "invalid": return "Invalid token";
+        default: return "Unknown";
+    }
+}
+
+function statusBadgeText(status: TokenResult["status"], errorHint?: string) {
+    switch (status) {
+        case "checking": return "...";
+        case "rate_limited": return "Limit";
+        case "error":
+            if (errorHint === "timeout") return "Time";
+            if (errorHint === "network_error") return "Net";
+            return "!";
+        case "invalid": return "X";
+        default: return "?";
+    }
+}
+
+async function verifyTokenWithRetry(token: string, maxAttempts = TOKEN_CHECK_MAX_ATTEMPTS): Promise<{ valid: boolean; user?: any; error?: string; }> {
+    return enqueueTokenCheck(async () => {
+        if (!Native?.checkToken) return { valid: false, error: "native_missing" };
+        for (let attempt = 0; attempt < maxAttempts; attempt++) {
+            const result = await Native.checkToken(token);
+            if (result.valid || result.error !== "rate_limited") return result;
+            const waitMs = ((result as { retryAfter?: number; }).retryAfter ?? 8) * 1000 + attempt * 1000;
+            await sleep(waitMs);
+        }
+        return { valid: false, error: "rate_limited" };
+    });
+}
 
 function TokenModal({ rootProps }: { rootProps: any; }) {
     const [accounts, setAccounts] = useState<SavedAccount[]>(() => accountsCache ?? []);
@@ -178,6 +263,7 @@ function TokenModal({ rootProps }: { rootProps: any; }) {
     const [done, setDone] = useState(false);
     const [copied, setCopied] = useState(false);
     const [accountSearch, setAccountSearch] = useState("");
+    const [statusMessage, setStatusMessage] = useState<string | null>(null);
     const fileRef = useRef<HTMLInputElement>(null);
 
     const filteredAccounts = useMemo(() => {
@@ -187,6 +273,14 @@ function TokenModal({ rootProps }: { rootProps: any; }) {
     }, [accounts, accountSearch]);
 
     const detectTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const verifyGenRef = useRef(0);
+
+    useEffect(() => {
+        return () => {
+            verifyGenRef.current += 1;
+            if (detectTimer.current) clearTimeout(detectTimer.current);
+        };
+    }, []);
 
     useEffect(() => {
         if (accountsCache !== null) {
@@ -219,9 +313,9 @@ function TokenModal({ rootProps }: { rootProps: any; }) {
         const ns: Record<string, string> = {};
         for (const acc of accounts) {
             ns[acc.id] = "checking"; setStatuses({ ...ns });
-            try { const r = await Native.checkToken(acc.token); ns[acc.id] = r.valid ? "valid" : "invalid"; } catch { ns[acc.id] = "error"; }
+            try { const r = await verifyTokenWithRetry(acc.token); ns[acc.id] = r.valid ? "valid" : "invalid"; } catch { ns[acc.id] = "error"; }
             setStatuses({ ...ns });
-            await new Promise(r => setTimeout(r, 400));
+            await sleep(TOKEN_CHECK_DELAY_MS);
         }
         const toKeep = accounts.filter(a => ns[a.id] !== "invalid");
         if (toKeep.length !== accounts.length) { setAccounts(toKeep); await saveAccounts(toKeep); }
@@ -229,35 +323,111 @@ function TokenModal({ rootProps }: { rootProps: any; }) {
     }
 
     async function processTokens(raw: string) {
+        if (checking) return;
+        if (!assertNative()) return;
+
         const tokens = extractTokens(raw);
-        if (!tokens.length) { setResults([{ token: "No tokens found", status: "invalid" }]); return; }
-        const initial: TokenResult[] = tokens.map(t => ({ token: t, status: "pending" as const }));
-        setResults(initial); setChecking(true); setDone(false);
-        const updated = [...initial];
-        const existing = await getAccounts();
-        for (let i = 0; i < tokens.length; i++) {
-            updated[i] = { ...updated[i], status: "checking" }; setResults([...updated]);
-            try {
-                const result = await Native.checkToken(tokens[i]);
-                if (result.valid && result.user) {
-                    const u = result.user;
-                    const av = u.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.webp?size=64`
-                        : `https://cdn.discordapp.com/embed/avatars/${(BigInt(u.id) >> 22n) % 6n}.png`;
-                    if (!existing.find(a => a.id === u.id)) {
-                        existing.push({ id: u.id, token: tokens[i], username: u.global_name || u.username, discriminator: u.discriminator ?? "0", avatar: av });
-                        await saveAccounts(existing);
-                        await patchTokenStore();
-                        setAccounts([...existing]);
-                    }
-                    updated[i] = { ...updated[i], status: "valid", username: u.global_name || u.username, id: u.id, avatar: av };
-                } else {
-                    updated[i] = { ...updated[i], status: (result as any).error === "rate_limited" ? "rate_limited" : (result as any).error ? "error" : "invalid" };
-                }
-            } catch { updated[i] = { ...updated[i], status: "error" }; }
-            setResults([...updated]);
-            await new Promise(r => setTimeout(r, 200));
+        if (!tokens.length) {
+            setResults([{ token: "No tokens found", status: "invalid" }]);
+            toast("No valid token format detected. Paste a full Discord token.", Toasts.Type.FAILURE);
+            return;
         }
-        setChecking(false); setDone(true);
+
+        const runId = ++verifyGenRef.current;
+        const initial: TokenResult[] = tokens.map(t => ({ token: t, status: "pending" as const }));
+        const updated = [...initial];
+
+        setResults(initial);
+        setChecking(true);
+        setDone(false);
+        setStatusMessage(null);
+
+        try {
+            const existing = [...(await getAccounts())];
+            let accountsChanged = false;
+            let addedCount = 0;
+
+            for (let i = 0; i < tokens.length; i++) {
+                if (runId !== verifyGenRef.current) return;
+
+                updated[i] = { ...updated[i], status: "checking" };
+                setResults([...updated]);
+
+                try {
+                    const result = await verifyTokenWithRetry(tokens[i]);
+                    if (runId !== verifyGenRef.current) return;
+
+                    if (result.valid && result.user) {
+                        const u = result.user;
+                        const av = u.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.webp?size=64`
+                            : `https://cdn.discordapp.com/embed/avatars/${(BigInt(u.id) >> 22n) % 6n}.png`;
+                        if (!existing.find(a => a.id === u.id)) {
+                            existing.push({
+                                id: u.id,
+                                token: tokens[i],
+                                username: u.global_name || u.username,
+                                discriminator: u.discriminator ?? "0",
+                                avatar: av,
+                            });
+                            accountsChanged = true;
+                            addedCount++;
+                        }
+                        updated[i] = { ...updated[i], status: "valid", username: u.global_name || u.username, id: u.id, avatar: av };
+                    } else {
+                        updated[i] = {
+                            ...updated[i],
+                            status: result.error === "rate_limited" ? "rate_limited" : result.error ? "error" : "invalid",
+                            errorHint: result.error,
+                        };
+                    }
+                } catch {
+                    updated[i] = { ...updated[i], status: "error" };
+                }
+
+                setResults([...updated]);
+                await sleep(TOKEN_CHECK_DELAY_MS);
+            }
+
+            if (runId !== verifyGenRef.current) return;
+
+            if (accountsChanged) {
+                await saveAccounts(existing);
+                setAccounts([...existing]);
+                toast(`Added ${addedCount} account(s).`, Toasts.Type.SUCCESS);
+            }
+
+            const validCount = updated.filter(r => r.status === "valid").length;
+            const invalidCount = updated.filter(r => r.status === "invalid").length;
+            const errorCount = updated.filter(r => r.status === "error" || r.status === "rate_limited").length;
+
+            if (validCount === 0 && invalidCount === 0 && errorCount > 0) {
+                const rateLimited = updated.filter(r => r.status === "rate_limited").length;
+                const msg = rateLimited > 0
+                    ? "Discord Rate-Limit (HTTP 429) — 1–3 Min. warten oder „Ohne Prüfung hinzufügen“. FakeFriends belasten das nicht direkt."
+                    : "Verifikation fehlgeschlagen (Timeout/Netzwerk). Erneut versuchen oder ohne Prüfung hinzufügen.";
+                setStatusMessage(msg);
+                toast(msg, Toasts.Type.FAILURE);
+            } else if (validCount === 0 && invalidCount > 0) {
+                const msg = `${invalidCount} invalid token${invalidCount !== 1 ? "s" : ""}.`;
+                setStatusMessage(msg);
+                toast(msg, Toasts.Type.FAILURE);
+            } else if (validCount > 0) {
+                setStatusMessage(`${validCount} account${validCount !== 1 ? "s" : ""} added.`);
+            }
+
+            const rateLimited = updated.filter(r => r.status === "rate_limited").length;
+            if (rateLimited > 0 && validCount > 0) {
+                toast(`Discord rate limit — ${rateLimited} token(s) not checked. Wait 1–2 min and retry.`, Toasts.Type.MESSAGE);
+            }
+        } catch (err) {
+            console.error("[TokenImporter] processTokens failed:", err);
+            toast("Token verification failed — see console (Ctrl+Shift+I).", Toasts.Type.FAILURE);
+        } finally {
+            if (runId === verifyGenRef.current) {
+                setChecking(false);
+                setDone(true);
+            }
+        }
     }
 
     function handleFile(e: React.ChangeEvent<HTMLInputElement>) {
@@ -271,8 +441,8 @@ function TokenModal({ rootProps }: { rootProps: any; }) {
         setPaste(val);
         if (detectTimer.current) clearTimeout(detectTimer.current);
         detectTimer.current = setTimeout(() => {
-            setDetectedCount(extractTokens(val).length);
-        }, 150);
+            setDetectedCount(extractTokens(val.slice(0, 4096)).length);
+        }, 200);
     }
 
     return (
@@ -284,6 +454,10 @@ function TokenModal({ rootProps }: { rootProps: any; }) {
                 <ModalCloseButton onClick={rootProps.onClose} />
             </ModalHeader>
             <ModalContent className="ti-content">
+                <p className="ti-hint">
+                    „Verify &amp; Add“ fragt Discords API ab (Rate-Limit möglich). „Ohne Prüfung“ speichert lokal.
+                    Meldungen wie <code>sentry-ipc://…</code> in der Konsole sind normaler Discord-/Sentry-Lärm, kein Token-Fehler.
+                </p>
                 <div className="ti-tabs">
                     <button className={`ti-tab ${tab === "saved" ? "ti-tab--active" : ""}`} onClick={() => handleTabChange("saved")}>
                         Saved accounts
@@ -302,7 +476,7 @@ function TokenModal({ rootProps }: { rootProps: any; }) {
                                 {accountSearch && <button className="ti-search-clear" onClick={() => setAccountSearch("")}>✕</button>}
                             </div>
                             <button className="ti-verify-btn" style={{ marginRight: 6 }} onClick={async () => {
-                                if (verifying) return;
+                                if (verifying || !assertNative()) return;
                                 setVerifying(true);
                                 try {
                                     const tokens = await Native.findLocalTokens();
@@ -310,7 +484,7 @@ function TokenModal({ rootProps }: { rootProps: any; }) {
                                     let addedCount = 0;
                                     for (const tok of tokens) {
                                         if (!existing.find(a => a.token === tok)) {
-                                            const verified = await Native.checkToken(tok);
+                                            const verified = await verifyTokenWithRetry(tok);
                                             if (verified.valid && verified.user) {
                                                 const u = verified.user;
                                                 const av = u.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.webp?size=64`
@@ -320,16 +494,15 @@ function TokenModal({ rootProps }: { rootProps: any; }) {
                                                     addedCount++;
                                                 }
                                             }
-                                            await new Promise(r => setTimeout(r, 200));
+                                            await sleep(TOKEN_CHECK_DELAY_MS);
                                         }
                                     }
                                     if (addedCount > 0) {
                                         await saveAccounts(existing);
-                                        await patchTokenStore();
                                         setAccounts([...existing]);
-                                        (window as any).Vencord?.Webpack?.findByProps?.("showToast")?.showToast?.(`${addedCount} new accounts imported!`);
+                                        toast(`${addedCount} new account${addedCount !== 1 ? "s" : ""} imported!`, Toasts.Type.SUCCESS);
                                     } else {
-                                        (window as any).Vencord?.Webpack?.findByProps?.("showToast")?.showToast?.("No new accounts found.");
+                                        toast("No new accounts found.", Toasts.Type.MESSAGE);
                                     }
                                 } catch (err) {
                                     console.error("[TokenImporter] Scan failed:", err);
@@ -371,8 +544,7 @@ function TokenModal({ rootProps }: { rootProps: any; }) {
                                                             const native = (window as any).DiscordNative?.clipboard?.copy;
                                                             if (typeof native === "function") native(a.token);
                                                             else navigator.clipboard.writeText(a.token);
-                                                            const { showToast, Toasts } = (window as any).Vencord.Webpack.common;
-                                                            showToast("Token copied!", Toasts.Type.SUCCESS);
+                                                            toast("Token copied!", Toasts.Type.SUCCESS);
                                                         }}><CopyIcon /></button>
                                                         <button className="ti-del-btn" title="Delete" onClick={() => removeAccount(a.id)}><TrashIcon /></button>
                                                     </div>
@@ -386,34 +558,94 @@ function TokenModal({ rootProps }: { rootProps: any; }) {
 
                 {tab === "add" && (
                     <div className="ti-add-body">
-                        <textarea className="ti-textarea ti-textarea-mask" placeholder="Paste your Discord tokens here... (1 per line, or pasted together)" value={pasteValue} onChange={e => handlePasteChange(e.target.value)} autoFocus />
+                        <textarea className="ti-textarea" placeholder="Paste your Discord tokens here... (1 per line, or pasted together)" value={pasteValue} onChange={e => handlePasteChange(e.target.value)} />
                         <div className="ti-add-footer">
                             <span className="ti-detected">{detectedCount} token{detectedCount !== 1 ? "s" : ""} detected</span>
                             <button className="ti-file-btn" onClick={() => fileRef.current?.click()}>File .txt</button>
-                            <button className="ti-submit-btn" disabled={checking || detectedCount === 0} onClick={() => processTokens(pasteValue)}>
+                            <button className="ti-submit-btn" disabled={checking || !pasteValue.trim()} onClick={() => {
+                                const count = extractTokens(pasteValue).length;
+                                setDetectedCount(count);
+                                void processTokens(pasteValue);
+                            }}>
                                 {checking ? "Checking..." : "Verify & Add"}
+                            </button>
+                            <button
+                                className="ti-file-btn"
+                                disabled={checking || !pasteValue.trim()}
+                                title="Speichert ohne Discord-API — bei Rate-Limit nutzen"
+                                onClick={async () => {
+                                    const tokens = extractTokens(pasteValue);
+                                    if (!tokens.length) {
+                                        toast("Kein Token erkannt.", Toasts.Type.FAILURE);
+                                        return;
+                                    }
+                                    setChecking(true);
+                                    setStatusMessage(null);
+                                    try {
+                                        let added = 0;
+                                        let duplicate = 0;
+                                        let invalid = 0;
+                                        for (const tok of tokens) {
+                                            const r = await addTokenWithoutVerify(tok);
+                                            if (r === "added") added++;
+                                            else if (r === "duplicate") duplicate++;
+                                            else invalid++;
+                                            await sleep(50);
+                                        }
+                                        const existing = await getAccounts();
+                                        setAccounts([...existing]);
+                                        const parts = [
+                                            added ? `${added} gespeichert` : null,
+                                            duplicate ? `${duplicate} schon in der Liste` : null,
+                                            invalid ? `${invalid} ungültig (Format prüfen)` : null,
+                                        ].filter(Boolean);
+                                        const msg = parts.length
+                                            ? `${parts.join(", ")}. „Switch“ testet den Login.`
+                                            : "Nichts gespeichert — Token-Format prüfen (ein Token pro Zeile).";
+                                        setStatusMessage(msg);
+                                        toast(msg, added ? Toasts.Type.SUCCESS : Toasts.Type.FAILURE);
+                                        if (added) {
+                                            setPaste("");
+                                            setDetectedCount(0);
+                                        }
+                                    } finally {
+                                        setChecking(false);
+                                    }
+                                }}
+                            >
+                                Ohne Prüfung
                             </button>
                         </div>
                         <input ref={fileRef} type="file" accept=".txt,text/plain" style={{ display: "none" }} onChange={handleFile} />
+                        {statusMessage && <div className="ti-status-msg">{statusMessage}</div>}
                         {results.length > 0 && (
                             <div className="ti-results">
                                 {done && (
                                     <div className="ti-results-summary">
-                                        <span className="ti-st ti-st--ok"><CheckIcon /> {results.filter(r => r.status === "valid").length} valid{results.filter(r => r.status === "valid").length !== 1 ? "s" : ""}</span>
-                                        <span className="ti-st ti-st--bad"><CrossIcon /> {results.filter(r => r.status === "invalid").length} invalid{results.filter(r => r.status === "invalid").length !== 1 ? "s" : ""}</span>
+                                        <span className="ti-summary-stat ti-summary-stat--ok">
+                                            <CheckIcon /> {results.filter(r => r.status === "valid").length} valid
+                                        </span>
+                                        <span className="ti-summary-stat ti-summary-stat--bad">
+                                            <CrossIcon /> {results.filter(r => r.status === "invalid").length} invalid
+                                        </span>
+                                        {results.some(r => r.status === "error" || r.status === "rate_limited") && (
+                                            <span className="ti-summary-stat ti-summary-stat--warn">
+                                                {results.filter(r => r.status === "error" || r.status === "rate_limited").length} failed
+                                            </span>
+                                        )}
                                     </div>
                                 )}
                                 <div className="ti-list">
                                     {results.map((r, i) => (
-                                        <div key={i} className={`ti-row ti-row--${r.status === "valid" ? "valid" : r.status === "checking" ? "idle" : "invalid"}`}>
+                                        <div key={i} className={`ti-row ti-row--${r.status === "valid" ? "valid" : r.status === "checking" ? "idle" : r.status === "invalid" ? "invalid" : "warn"}`}>
                                             {r.status === "valid" && r.avatar ? <img src={r.avatar} className="ti-avatar" alt="" />
                                                 : <div className="ti-avatar ti-avatar--ph">{r.status === "checking" ? "..." : "?"}</div>}
                                             <div className="ti-row-info">
                                                 {r.status === "valid" ? <span className="ti-username">{r.username}</span>
                                                     : <span className="ti-token-hidden" onClick={() => navigator.clipboard.writeText(r.token)} title="Copy token" style={{ cursor: "pointer" }}>{r.status === "checking" ? "Checking..." : "••••••••••••••••••••••••"}</span>}
                                             </div>
-                                            <span className={`ti-badge ti-badge--${r.status === "rate_limited" || r.status === "error" ? "warn" : r.status === "valid" ? "valid" : "invalid"}`}>
-                                                {r.status === "valid" ? <CheckIcon /> : r.status === "checking" ? "..." : r.status === "rate_limited" ? "Slow" : r.status === "error" ? "!" : <CrossIcon />}
+                                            <span className={`ti-badge ti-badge--${r.status === "rate_limited" || r.status === "error" ? "warn" : r.status === "valid" ? "valid" : "invalid"}`} title={statusLabel(r.status, r.errorHint)}>
+                                                {r.status === "valid" ? <CheckIcon /> : r.status === "checking" ? "..." : r.status === "invalid" ? <CrossIcon /> : statusBadgeText(r.status, r.errorHint)}
                                             </span>
                                         </div>
                                     ))}
@@ -436,74 +668,12 @@ export default definePlugin({
     enabledByDefault: true,
     description: "Import and verify Discord tokens.",
     authors: [{ name: "Moggcord", id: 0n }],
-    dependencies: ["HeaderBarAPI"],
+    dependencies: ["HeaderBarAPI", "AccountTokenBridge"],
     start() {
         addHeaderBarButton("moggcord-token-importer", () => <TokenImporterButton />, 10);
-        getAccounts().then(async existing => {
-            try {
-                if (window.DiscordNative?.process?.platform === "win32") {
-                    const autoFound = await Native.findLocalTokens();
-                    let added = false;
-                    const current = [...existing];
-                    for (const tok of autoFound) {
-                        if (!current.find(a => a.token === tok)) {
-                            const verified = await Native.checkToken(tok);
-                            if (verified.valid && verified.user) {
-                                const u = verified.user;
-                                if (!current.find(a => a.id === u.id)) {
-                                    const av = u.avatar ? `https://cdn.discordapp.com/avatars/${u.id}/${u.avatar}.webp?size=64`
-                                        : `https://cdn.discordapp.com/embed/avatars/${(BigInt(u.id) >> 22n) % 6n}.png`;
-                                    current.push({ id: u.id, token: tok, username: u.global_name || u.username, discriminator: u.discriminator ?? "0", avatar: av });
-                                    added = true;
-                                }
-                            }
-                        }
-                    }
-                    if (added) {
-                        await saveAccounts(current);
-                        await patchTokenStore();
-                    }
-                }
-            } catch (e) { console.error("[TokenImporter] Auto import failed:", e); }
-            setTimeout(() => this._injectAccounts(), 5000);
-        });
-    },
-    async _injectAccounts() {
-        try {
-            const saved = await getAccounts();
-            if (!saved.length) return;
-            const FluxDispatcher = findByProps("dispatch", "subscribe", "register");
-            if (!FluxDispatcher?.dispatch) return;
-            const existing = new Set((findByProps("getAccounts")?.getAccounts?.() ?? []).map((u: any) => u.id));
-            const toInject = saved.filter(a => !existing.has(a.id));
-            for (const acc of toInject) {
-                await new Promise(r => setTimeout(r, 0));
-                try {
-                    FluxDispatcher.dispatch({
-                        type: "MULTI_ACCOUNT_VALIDATE_TOKEN_SUCCESS",
-                        userId: acc.id,
-                        token: acc.token,
-                        user: { id: acc.id, username: acc.username, discriminator: acc.discriminator, avatar: null }
-                    });
-                } catch { }
-                await new Promise(r => setTimeout(r, 300));
-            }
-        } catch (e) { console.error("[TokenImporter] inject:", e); }
     },
     stop() {
         removeHeaderBarButton("moggcord-token-importer");
-        if (tokenModulePatched) {
-            try {
-                const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
-                if (tokenMod && originalEncryptAndStoreTokens) {
-                    tokenMod.encryptAndStoreTokens = originalEncryptAndStoreTokens;
-                }
-            } catch (e) {
-                console.warn("[TokenImporter] unpatchTokenStore failed", e);
-            }
-            tokenModulePatched = false;
-            originalEncryptAndStoreTokens = null;
-        }
         accountsCache = null;
     },
 });

@@ -158,17 +158,4 @@ export default definePlugin({
             },
         },
     ],
-
-    start() {
-        const { addUserAreaButton } = Vencord.Api.UserArea;
-        addUserAreaButton("fake-voice-option", {
-            icon: FakeDeafenIcon,
-            render: FakeDeafenUserButton
-        });
-    },
-
-    stop() {
-        const { removeUserAreaButton } = Vencord.Api.UserArea;
-        removeUserAreaButton("fake-voice-option");
-    }
 });

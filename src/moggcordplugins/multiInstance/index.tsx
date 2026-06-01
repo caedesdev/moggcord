@@ -14,12 +14,12 @@
  *   - Clic DROIT avec token → context menu
  */
 
-import { addHeaderBarButton, HeaderBarButton, removeHeaderBarButton } from "@api/HeaderBar";
+import { HeaderBarButton } from "@api/HeaderBar";
 import { DataStore } from "@api/index";
 import definePlugin, { PluginNative } from "@utils/types";
 import { ModalCloseButton, ModalContent, ModalHeader, ModalRoot, openModal } from "@utils/modal";
-import { findByProps } from "@webpack";
-import { Forms, React, ReactDOM, UserStore } from "@webpack/common";
+import { findByProps, findStoreLazy } from "@webpack";
+import { FluxDispatcher, Forms, React, ReactDOM, Toasts, UserStore } from "@webpack/common";
 import { t } from "../autoTranslateMoggcord";
 import "./styles.css";
 
@@ -33,7 +33,6 @@ const MI_TOKEN_CACHE_KEY = "moggcord-mi-token-cache";
 
 let tokenCache: Record<string, string> = {};
 let tokenCacheLoaded = false;
-let encryptHooked = false;
 
 async function loadTokenCache(): Promise<void> {
     if (tokenCacheLoaded) return;
@@ -43,6 +42,17 @@ async function loadTokenCache(): Promise<void> {
 
 async function saveTokenCache(): Promise<void> {
     await DataStore.set(MI_TOKEN_CACHE_KEY, tokenCache);
+}
+
+async function syncTokensFromImporter(): Promise<void> {
+    try {
+        const saved = await DataStore.get<SavedAccount[]>(STORE_KEY);
+        if (!saved?.length) return;
+        for (const acc of saved) {
+            if (acc.id && acc.token) cacheToken(acc.id, acc.token);
+        }
+        await saveTokenCache();
+    } catch { }
 }
 
 function cacheToken(userId: string, token: string): void {
@@ -62,37 +72,71 @@ function captureCurrentToken(): void {
     } catch { }
 }
 
-function hookEncryptAndStoreTokens(): void {
-    if (encryptHooked) return;
-    try {
-        const tokenMod = findByProps("getToken", "encryptAndStoreTokens");
-        if (!tokenMod?.encryptAndStoreTokens) return;
-        const orig = tokenMod.encryptAndStoreTokens.bind(tokenMod);
-        tokenMod.encryptAndStoreTokens = async function (tokens: Record<string, string>) {
-            // Capture tous les tokens au passage
-            for (const [id, token] of Object.entries(tokens)) {
-                if (id && token) cacheToken(id, token);
-            }
-            saveTokenCache();
-            return orig(tokens);
-        };
-        encryptHooked = true;
-    } catch { }
+function onValidateTokenSuccess(event: any) {
+    const userId = event?.userId ?? event?.user_id ?? event?.user?.id;
+    const token = event?.token;
+    if (userId && token) {
+        cacheToken(userId, token);
+        void saveTokenCache();
+    }
+}
+
+function onLoginSuccess(event: any) {
+    const token = event?.token;
+    const userId = UserStore.getCurrentUser()?.id;
+    if (token && userId) {
+        cacheToken(userId, token);
+        void saveTokenCache();
+    }
+    captureCurrentToken();
 }
 
 function hookFluxDispatcher(): (() => void) | null {
     try {
-        const Flux = findByProps("dispatch", "subscribe");
-        if (!Flux?.subscribe) return null;
-        const handler = (event: any) => {
-            if (event?.token && event?.userId) {
-                cacheToken(event.userId, event.token);
-                saveTokenCache();
-            }
+        FluxDispatcher.subscribe("MULTI_ACCOUNT_VALIDATE_TOKEN_SUCCESS", onValidateTokenSuccess);
+        FluxDispatcher.subscribe("LOGIN_SUCCESS", onLoginSuccess);
+        return () => {
+            FluxDispatcher.unsubscribe("MULTI_ACCOUNT_VALIDATE_TOKEN_SUCCESS", onValidateTokenSuccess);
+            FluxDispatcher.unsubscribe("LOGIN_SUCCESS", onLoginSuccess);
         };
-        Flux.subscribe("MULTI_ACCOUNT_VALIDATE_TOKEN_SUCCESS", handler);
-        return () => Flux.unsubscribe("MULTI_ACCOUNT_VALIDATE_TOKEN_SUCCESS", handler);
     } catch { return null; }
+}
+
+function isMultiAccountStore(mod: any): boolean {
+    try {
+        if (!mod || typeof mod.getUsers !== "function") return false;
+        if (typeof mod.getFrequentlyUsedEmojis === "function") return false;
+        const users = mod.getUsers();
+        if (!Array.isArray(users)) return false;
+        if (users.length > 0) {
+            const first = users[0];
+            if (typeof first !== "object" || first === null) return false;
+            if (typeof first.id !== "string") return false;
+            if ("type" in first || "permissions" in first || "parentId" in first) return false;
+        }
+        return true;
+    } catch {
+        return false;
+    }
+}
+
+let resolvedMultiAccountStore: any = null;
+
+function getMultiAccountStore() {
+    if (resolvedMultiAccountStore) return resolvedMultiAccountStore;
+    try {
+        const lazy = findStoreLazy("MultiAccountStore");
+        if (lazy && isMultiAccountStore(lazy)) {
+            resolvedMultiAccountStore = lazy;
+            return lazy;
+        }
+    } catch { }
+    const mod = findByProps("getUsers", "getValidUsers", "getHasLoggedInAccounts");
+    if (mod && isMultiAccountStore(mod)) {
+        resolvedMultiAccountStore = mod;
+        return mod;
+    }
+    return null;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -126,7 +170,7 @@ function getAvatarUrl(id: string, hash?: string | null, discriminator?: string):
 
 function getNativeAccounts(): SavedAccount[] {
     try {
-        const store = findByProps("getUsers", "getValidUsers");
+        const store = getMultiAccountStore();
         const users: any[] = store?.getUsers?.() ?? [];
         return users.filter(u => u?.id).map(u => ({
             id: u.id,
@@ -140,36 +184,103 @@ function getNativeAccounts(): SavedAccount[] {
     }
 }
 
-/** Quick switch — token direct */
-function switchToQuick(token: string) {
+/** Switch with token (same flow as TokenImporter). */
+function switchWithToken(token: string, userId?: string) {
     try {
-        window.localStorage.setItem("token", `"${token}"`);
-        location.reload();
-    } catch {
-        const iframe = document.createElement("iframe");
-        iframe.style.display = "none";
-        document.body.appendChild(iframe);
-        try { (iframe as any).contentWindow.localStorage.token = `"${token}"`; } catch { }
-        document.body.removeChild(iframe);
+        const isMultiInstance = window.location.href.includes("multi-instance=true") || (window as any).IS_MULTI_INSTANCE;
+        if (isMultiInstance && userId) {
+            void Native.openInstanceWindow(token, userId, true).then(() => window.close());
+            return;
+        }
+
+        const TokenStore = findByProps("getToken", "setToken");
+        if (TokenStore && typeof (TokenStore as any).setToken === "function") {
+            (TokenStore as any).setToken(token);
+        }
+
+        FluxDispatcher.dispatch({
+            type: "LOGIN_SUCCESS",
+            token,
+        });
+
+        try { window.localStorage.setItem("token", `"${token}"`); } catch { }
+        setTimeout(() => location.reload(), 350);
+    } catch (err) {
+        console.warn("[MultiInstance] switchWithToken failed", err);
+        try { window.localStorage.setItem("token", `"${token}"`); } catch { }
         location.reload();
     }
 }
 
-/** Switch pour accounts natifs sans token — utilise le mécanisme Discord natif */
-function switchNativeAccount(userId: string) {
+/** Native Discord account switch (no token in cache). */
+async function switchNativeAccount(userId: string): Promise<boolean> {
     try {
-        const multiAuth = findByProps("switchAccount", "loginToken") ?? findByProps("switchAccount");
-        if (multiAuth?.switchAccount) {
-            multiAuth.switchAccount(userId);
-            return;
+        const store = getMultiAccountStore();
+        if (store && typeof store.switchAccount === "function") {
+            store.switchAccount(userId);
+            return waitForUserSwitch(userId);
         }
-        // Fallback : dispatch le flux event comme Discord le fait nativement
-        const Flux = findByProps("dispatch", "subscribe");
-        if (Flux?.dispatch) {
-            Flux.dispatch({ type: "MULTI_ACCOUNT_SWITCH_ATTEMPT", userId });
+
+        const actions = findByProps("switchAccount", "loginToken") ?? findByProps("switchAccount");
+        if (actions?.switchAccount) {
+            actions.switchAccount(userId);
+            return waitForUserSwitch(userId);
         }
-    } catch {
-        console.warn("[MultiInstance] switchNativeAccount failed for", userId);
+
+        let failed = false;
+        const onFail = (event: any) => {
+            const id = event?.userId ?? event?.user_id ?? event?.id;
+            if (id === userId) failed = true;
+        };
+        FluxDispatcher.subscribe("MULTI_ACCOUNT_SWITCH_FAILURE", onFail);
+        FluxDispatcher.dispatch({ type: "MULTI_ACCOUNT_SWITCH_ATTEMPT", userId });
+        const ok = await waitForUserSwitch(userId, 4000);
+        FluxDispatcher.unsubscribe("MULTI_ACCOUNT_SWITCH_FAILURE", onFail);
+        return ok && !failed;
+    } catch (err) {
+        console.warn("[MultiInstance] switchNativeAccount failed for", userId, err);
+        return false;
+    }
+}
+
+function waitForUserSwitch(userId: string, timeoutMs = 3000): Promise<boolean> {
+    return new Promise(resolve => {
+        const start = Date.now();
+        const tick = () => {
+            if (UserStore.getCurrentUser()?.id === userId) {
+                captureCurrentToken();
+                resolve(true);
+                return;
+            }
+            if (Date.now() - start >= timeoutMs) {
+                resolve(false);
+                return;
+            }
+            requestAnimationFrame(tick);
+        };
+        tick();
+    });
+}
+
+async function handleAccountSwitch(acc: AccountEntry, setStatus: (s: string | null) => void) {
+    if (acc.token) {
+        setStatus("Wechsle Account…");
+        switchWithToken(acc.token, acc.id);
+        return;
+    }
+
+    setStatus("Wechsle über Discord…");
+    const ok = await switchNativeAccount(acc.id);
+    if (ok) {
+        setStatus("Account gewechselt ✓");
+        captureCurrentToken();
+    } else {
+        setStatus(null);
+        Toasts.show({
+            id: Toasts.genId(),
+            type: Toasts.Type.FAILURE,
+            message: "Wechsel fehlgeschlagen. Einmal unten links in Discord auf den Account klicken, oder TokenImporter nutzen.",
+        });
     }
 }
 
@@ -286,12 +397,19 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
     const [ctx, setCtx] = React.useState<CtxState | null>(null);
     const [status, setStatus] = React.useState<string | null>(null);
 
-    React.useEffect(() => {
+    const refreshAccounts = React.useCallback(() => {
         captureCurrentToken();
-        DataStore.get<SavedAccount[]>(STORE_KEY).then(v => setSavedAccounts(v ?? []));
-        setNativeAccounts(getNativeAccounts());
-        Native.getOpenInstances().then(ids => setOpenInstances(ids ?? [])).catch(() => { });
+        void syncTokensFromImporter().then(() => {
+            void saveTokenCache();
+            DataStore.get<SavedAccount[]>(STORE_KEY).then(v => setSavedAccounts(v ?? []));
+            setNativeAccounts(getNativeAccounts());
+        });
     }, []);
+
+    React.useEffect(() => {
+        refreshAccounts();
+        Native.getOpenInstances().then(ids => setOpenInstances(ids ?? [])).catch(() => { });
+    }, [refreshAccounts]);
 
     const allAccounts = React.useMemo<AccountEntry[]>(() => {
         const seen = new Set<string>();
@@ -380,7 +498,28 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
             <ModalContent className="mi-modal-content">
                 <p className="mi-subtitle">
                     <strong>{t("Left click")}</strong> {t("or")} <strong>{t("right click")}</strong> → {t("options menu")}
+                    <br />
+                    <span style={{ opacity: 0.75, fontSize: 11 }}>
+                        Nur „Quick switch“? Token fehlt noch — einmal in Discord unten links auf den Account wechseln, dann hier „Aktualisieren“.
+                    </span>
                 </p>
+                <button
+                    type="button"
+                    className="mi-refresh-btn"
+                    onClick={() => refreshAccounts()}
+                    style={{
+                        marginBottom: 10,
+                        padding: "6px 12px",
+                        fontSize: 12,
+                        borderRadius: 4,
+                        border: "1px solid rgba(255,255,255,0.2)",
+                        background: "rgba(255,255,255,0.06)",
+                        color: "#fff",
+                        cursor: "pointer",
+                    }}
+                >
+                    Accounts aktualisieren
+                </button>
 
                 {/* Active account */}
                 {currentUser && (
@@ -416,8 +555,8 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
                     ) : allAccounts.map(acc => {
                         const isOpen = openInstances.includes(acc.id);
                         const tagText = acc.hasToken
-                            ? (acc.isNative ? "🔗 Discord Account" : `🔑 Token`)
-                            : t("Switch only");
+                            ? (acc.isNative ? "🔗 Discord · Token OK" : "🔑 Token")
+                            : "⚠ Nur Quick switch (Token fehlt)";
                         return (
                             <div
                                 key={acc.id}
@@ -461,7 +600,7 @@ function MultiInstanceModal({ rootProps }: { rootProps: any; }) {
                         onNewWindow={() => handleNewWindow(acc)}
                         onNewDetached={() => handleNewDetached(acc)}
                         onNewGrouped={() => handleNewGrouped(acc)}
-                        onSwitch={() => acc.token ? switchToQuick(acc.token) : switchNativeAccount(acc.id)}
+                        onSwitch={() => { void handleAccountSwitch(acc, setStatus); }}
                     />
                 );
             })()}
@@ -552,7 +691,7 @@ function MultiInstanceButton() {
         <HeaderBarButton
             icon={MultiInstanceIcon}
             tooltip="Multi-instance — open Discord with another account"
-            onClick={() => openModal(props => <MultiInstanceModal rootProps={props} />)}
+            onClick={openMultiInstanceModal}
         />
     );
 }
@@ -561,25 +700,33 @@ function MultiInstanceButton() {
 // Plugin
 // ─────────────────────────────────────────────────────────────────────────────
 
+function openMultiInstanceModal() {
+    openModal(props => <MultiInstanceModal rootProps={props} />);
+}
+
 export default definePlugin({
     name: "MultiInstance",
     enabledByDefault: true,
     description: "Opens a 2nd Discord (new window or split screen) with another account.",
     authors: [{ name: "Moggcord", id: 0n }],
-    dependencies: ["HeaderBarAPI"],
+    dependencies: ["HeaderBarAPI", "AccountTokenBridge"],
+
+    headerBarButton: {
+        icon: MultiInstanceIcon,
+        render: MultiInstanceButton,
+        priority: 9,
+    },
 
     _fluxUnsub: null as (() => void) | null,
 
     async start() {
         await loadTokenCache();
-        hookEncryptAndStoreTokens();
+        await syncTokensFromImporter();
         this._fluxUnsub = hookFluxDispatcher();
         captureCurrentToken();
-        addHeaderBarButton("moggcord-multi-instance", () => <MultiInstanceButton />, 9);
     },
 
     stop() {
-        removeHeaderBarButton("moggcord-multi-instance");
         if (this._fluxUnsub) { this._fluxUnsub(); this._fluxUnsub = null; }
         const root = document.getElementById("moggcord-mi-ctx-root");
         if (root) root.remove();

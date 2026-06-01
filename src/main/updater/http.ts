@@ -193,8 +193,10 @@ async function buildOrDefer(): Promise<boolean> {
 }
 
 app.on("before-quit", (event) => {
+    // Only defer quit when a zip was actually downloaded — not when fetchUpdates()
+    // merely stored a GitHub URL after a background update check.
     const hasPending = pendingZipPath && existsSync(pendingZipPath);
-    if (!hasPending && !pendingDownloadUrl) return;
+    if (!hasPending) return;
     if (isApplying) return;
 
     event.preventDefault();

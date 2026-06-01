@@ -7,14 +7,34 @@
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Logger } from "@utils/Logger";
 import { classes } from "@utils/misc";
-import { findComponentByCodeLazy, findCssClassesLazy } from "@webpack";
+import { find, filters, findComponentByCodeLazy, onceReady } from "@webpack";
 import { Clickable, Tooltip, useEffect, useState, ReactDOM } from "@webpack/common";
 import type { ComponentType, JSX, MouseEventHandler, ReactNode } from "react";
 
 const logger = new Logger("HeaderBarAPI");
 
-const HeaderBarClasses = findCssClassesLazy("clickable", "withHighlight");
-const HeaderBarIcon = findComponentByCodeLazy(".HEADER_BAR_BADGE_TOP:", '"aria-haspopup":') as ComponentType<ChannelToolbarButtonProps>;
+const FALLBACK_HEADER_BAR_CLASSES = {
+    clickable: "vc-header-bar-clickable",
+    withHighlight: "vc-header-bar-with-highlight",
+};
+
+function resolveHeaderBarClasses() {
+    try {
+        const mod = find(filters.byClassNames("clickable", "withHighlight"), { isIndirect: true, topLevelOnly: true });
+        if (!mod || typeof mod !== "object") return FALLBACK_HEADER_BAR_CLASSES;
+
+        const values = Object.values(mod).filter(v => typeof v === "string") as string[];
+        const clickable = values.find(v => /clickable/i.test(v));
+        const withHighlight = values.find(v => /highlight/i.test(v));
+        if (clickable && withHighlight) return { clickable, withHighlight };
+    } catch { /* ignore */ }
+    return FALLBACK_HEADER_BAR_CLASSES;
+}
+
+let headerBarClasses = FALLBACK_HEADER_BAR_CLASSES;
+onceReady.then(() => {
+    headerBarClasses = resolveHeaderBarClasses();
+}).catch(() => { });
 
 export interface HeaderBarButtonProps {
     /** The icon component to render inside the button */
@@ -101,7 +121,7 @@ export function HeaderBarButton(props: HeaderBarButtonProps & { ref?: React.RefO
             {({ onMouseEnter, onMouseLeave }) => (
                 <Clickable
                     {...{ innerRef: ref } as any}
-                    className={classes(HeaderBarClasses.clickable, HeaderBarClasses.withHighlight, className)}
+                    className={classes(headerBarClasses.clickable, headerBarClasses.withHighlight, className)}
                     style={{ width: iconSize, boxSizing: "content-box", justifyContent: "center", color: "oklab(0.745437 0.00131872 -0.00849736)", margin: "0 4px", cursor: "pointer" }}
                     onClick={onClick}
                     onContextMenu={onContextMenu}
@@ -118,6 +138,12 @@ export function HeaderBarButton(props: HeaderBarButtonProps & { ref?: React.RefO
         </Tooltip>
     );
 }
+
+const HeaderBarIconLazy = findComponentByCodeLazy(".HEADER_BAR_BADGE_TOP:", '"aria-haspopup":') as ComponentType<ChannelToolbarButtonProps>;
+const HeaderBarIcon = ErrorBoundary.wrap(
+    (props: ChannelToolbarButtonProps) => <HeaderBarIconLazy {...props} />,
+    { fallback: ({ wrappedProps }) => <HeaderBarButton {...(wrappedProps as ChannelToolbarButtonProps)} /> }
+) as ComponentType<ChannelToolbarButtonProps>;
 
 /**
  * Button component for the channel toolbar (below the search bar).
@@ -241,6 +267,16 @@ function hideNonReactElements(hide: boolean) {
     console.log("[StealthMode] hideNonReact hide=" + hide + " count=" + count);
 }
 
+function hideNonReactElementsQuiet(hide: boolean) {
+    for (const sel of NON_REACT_SELECTORS) {
+        try {
+            document.querySelectorAll(sel).forEach(el => {
+                (el as HTMLElement).style.display = hide ? "none" : "";
+            });
+        } catch { }
+    }
+}
+
 export function syncStealthBodyClass() {
     try { if (_stealthActive) document.body?.classList.add("moggcord-stealth"); else document.body?.classList.remove("moggcord-stealth"); } catch { }
     hideNonReactElements(_stealthActive);
@@ -280,7 +316,7 @@ try {
     const startObserver = () => {
         if (stealthObserver) return;
         stealthObserver = new MutationObserver(() => {
-            if (_stealthActive) hideNonReactElements(true);
+            if (_stealthActive) hideNonReactElementsQuiet(true);
         });
         const target = document.body || document.documentElement;
         if (target) {

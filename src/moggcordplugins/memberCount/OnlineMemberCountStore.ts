@@ -5,13 +5,9 @@
  */
 
 import { proxyLazy } from "@utils/lazy";
-import { sleep } from "@utils/misc";
-import { Queue } from "@utils/Queue";
-import { ChannelActionCreators, Flux, FluxDispatcher, GuildChannelStore } from "@webpack/common";
+import { Flux, FluxDispatcher } from "@webpack/common";
 
 export const OnlineMemberCountStore = proxyLazy(() => {
-    const preloadQueue = new Queue();
-
     const onlineMemberMap = new Map<string, number>();
 
     class OnlineMemberCountStore extends Flux.Store {
@@ -19,23 +15,8 @@ export const OnlineMemberCountStore = proxyLazy(() => {
             return onlineMemberMap.get(guildId!);
         }
 
-        async _ensureCount(guildId: string) {
-            if (onlineMemberMap.has(guildId)) return;
-
-            await ChannelActionCreators.preload(guildId, GuildChannelStore.getDefaultChannel(guildId)!.id);
-        }
-
-        ensureCount(guildId?: string) {
-            if (!guildId || onlineMemberMap.has(guildId)) return;
-
-            preloadQueue.push(() =>
-                this._ensureCount(guildId)
-                    .then(
-                        () => sleep(200),
-                        () => sleep(200)
-                    )
-            );
-        }
+        /** No-op — ChannelActionCreators.preload caused gateway load and ~20s freezes. */
+        ensureCount(_guildId?: string) { }
     }
 
     return new OnlineMemberCountStore(FluxDispatcher, {

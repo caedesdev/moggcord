@@ -8,7 +8,6 @@ import RoleColorEverywhere from "@plugins/roleColorEverywhere";
 import definePlugin from "@utils/types";
 
 import {
-    CREATOR_GOLD,
     getCreatorColorString,
     getCreatorGlowStyle,
     isMoggcordCreator,
@@ -20,41 +19,11 @@ export { getCreatorColorInt, getCreatorColorString, getCreatorGlowStyle, isMoggc
 
 export default definePlugin({
     name: "CreatorGlow",
-    description: "Golden glowing names for Moggcord Creator badge holders — overrides role colors for creators only.",
+    description: "Golden glowing names for Moggcord Creator badge holders. Member-list webpack patches are disabled on Discord Stable until updated.",
     authors: [{ name: "Moggcord", id: 0n }],
     tags: ["Appearance", "Badges"],
-    enabledByDefault: true,
+    enabledByDefault: false,
     managedStyle: style,
-
-    patches: [
-        {
-            find: "#{intl::GUILD_OWNER}),children:",
-            replacement: [
-                {
-                    match: /(?<=roleName:\i,)colorString:[^,]+/,
-                    replace: "colorString:$self.getMemberListColor(arguments[0]),",
-                },
-                {
-                    match: /lostPermissionTooltipText:(\i)/,
-                    replace: "lostPermissionTooltipText:$1,\"data-moggcord-creator\":$self.isCreator(arguments[0]?.user?.id),",
-                },
-            ],
-        },
-        {
-            find: "#{intl::GUEST_NAME_SUFFIX})]",
-            replacement: {
-                match: /#{intl::GUEST_NAME_SUFFIX}.{0,50}?"".{0,100}\](?=\}\))(?<=guildId:(\i),.+?user:(\i).+?)/,
-                replace: "$&,\"data-moggcord-creator\":$self.isCreator($2.id),",
-            },
-        },
-        {
-            find: ",connectUserDragSource:",
-            replacement: {
-                match: /(?<=user:(\i),channel:(\i).{0,200}?)(?=nick:)/,
-                replace: "\"data-moggcord-creator\":$self.isCreator($1.id),",
-            },
-        },
-    ],
 
     isCreator(userId?: string | null) {
         return isMoggcordCreator(userId);

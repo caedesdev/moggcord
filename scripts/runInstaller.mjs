@@ -5,7 +5,7 @@
  *
  * Usage:
  *   pnpm inject    → install Moggcord into the chosen Discord (Equilotl GUI)
- *   pnpm inject:dev → safe local inject for development (scripts/inject.mjs)
+ *   pnpm inject:dev → build + reinject Stable (Equilotl, same patch as inject)
  *   pnpm uninject  → uninstall Moggcord from Discord
  *
  * SPDX-License-Identifier: GPL-3.0-or-later
@@ -137,9 +137,7 @@ async function ensureBinary() {
 }
 
 function markPostInstallRelaunch() {
-    const dir = join(process.env.LOCALAPPDATA || "", "Moggcord");
-    mkdirSync(dir, { recursive: true });
-    writeFileSync(join(dir, ".pending-relaunch"), String(Date.now()));
+    // No-op: delayed app.relaunch() looked like a silent crash ~60s after inject.
 }
 
 function getArgValue(args, names) {
@@ -525,11 +523,10 @@ if (isInstall) {
         console.log(`[Moggcord] Patch result: ${formatTargetLabel(nextStatus)} ${formatPatchStatus(nextStatus)}.`);
     }
 
-    markPostInstallRelaunch();
     console.log(`[Moggcord] Restarting ${selectedTarget?.label ?? "Discord"}...`);
-    console.log("\x1b[33m[Moggcord] Discord will restart once more automatically so the UI works correctly.\x1b[0m");
     if (startDiscord(selectedTarget)) {
-        console.log("\x1b[32m[Moggcord] Discord started — finishing setup on first launch.\x1b[0m");
+        console.log("\x1b[32m[Moggcord] Discord started.\x1b[0m");
+        console.log("\x1b[33m[Moggcord] If the UI feels unclickable after first inject, press Ctrl+R once inside Discord.\x1b[0m");
     } else {
         console.log("\x1b[33m[Moggcord] Could not auto-start Discord — open it manually once.\x1b[0m");
     }

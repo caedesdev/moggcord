@@ -49,6 +49,14 @@ export class Queue {
     }
 
     /**
+     * Drop all pending tasks (e.g. on logout while the gateway socket is closing).
+     */
+    clear() {
+        this.queue = [];
+        this.promise = undefined;
+    }
+
+    /**
      * Append a task at the end of the queue. This task will be executed after all other tasks
      * If the queue exceeds the specified maxSize, the first task in queue will be removed.
      * @param func Task

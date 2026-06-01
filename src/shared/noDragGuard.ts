@@ -10,7 +10,7 @@ export const NO_DRAG_GUARD_STYLE_ID = "moggcord-nodrag-guard";
  * break when a parent (often <body> or a modal layer) is stuck on `drag`.
  */
 export const NO_DRAG_GUARD_CSS = `
-html, body, #app-mount {
+html, body, #app-mount, #app-mount > div {
     -webkit-app-region: no-drag !important;
 }
 
