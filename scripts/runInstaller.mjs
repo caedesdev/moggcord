@@ -24,6 +24,7 @@ import {
     writeFileSync,
 } from "fs";
 import { dirname, join } from "path";
+import { emitKeypressEvents } from "readline";
 import { Readable } from "stream";
 import { finished } from "stream/promises";
 import { fileURLToPath } from "url";
@@ -41,6 +42,20 @@ const INSTALLER_APP_DARWIN = "Equilotl.app";
 const BASE_DIR = join(dirname(fileURLToPath(import.meta.url)), "..");
 const FILE_DIR = join(BASE_DIR, "dist", "Installer");
 const ETAG_FILE = join(FILE_DIR, "etag.txt");
+const ANSI = {
+    reset: "\x1b[0m",
+    bold: "\x1b[1m",
+    dim: "\x1b[2m",
+    blue: "\x1b[34m",
+    cyan: "\x1b[36m",
+    magenta: "\x1b[35m",
+    yellow: "\x1b[33m"
+};
+const DISCORD_TARGETS = [
+    { branch: "stable", directory: "Discord", label: "Discord Stable", process: "Discord.exe", color: ANSI.blue },
+    { branch: "ptb", directory: "DiscordPTB", label: "Discord PTB", process: "DiscordPTB.exe", color: ANSI.magenta },
+    { branch: "canary", directory: "DiscordCanary", label: "Discord Canary", process: "DiscordCanary.exe", color: ANSI.yellow }
+];
 
 function getFilename() {
     switch (process.platform) {
@@ -122,9 +137,181 @@ function markPostInstallRelaunch() {
     writeFileSync(join(dir, ".pending-relaunch"), String(Date.now()));
 }
 
-function stopDiscord() {
+function getArgValue(args, names) {
+    const idx = args.findIndex(arg => names.includes(arg));
+    if (idx === -1 || idx + 1 >= args.length) return null;
+    return args[idx + 1];
+}
+
+function pushArgValue(args, name, value) {
+    const shortName = `-${name.replace(/^--/, "")}`;
+    if (value == null || getArgValue(args, [name, shortName]) != null) return;
+    args.push(name, value);
+}
+
+function colorText(text, color) {
+    return process.stdout.isTTY ? `${color}${text}${ANSI.reset}` : text;
+}
+
+function formatTargetLabel(target) {
+    return colorText(target.label, target.color);
+}
+
+function normalizeBranch(branch) {
+    const normalized = branch?.toLowerCase();
+    if (normalized === "discord" || normalized === "stable") return "stable";
+    if (normalized === "discordptb" || normalized === "ptb") return "ptb";
+    if (normalized === "discordcanary" || normalized === "canary") return "canary";
+    return normalized;
+}
+
+function findLatestResources(directory) {
+    const root = join(process.env.LOCALAPPDATA || "", directory);
+    if (!existsSync(root)) return null;
+
+    try {
+        const latest = readdirSync(root)
+            .filter(d => /^app-\d+\.\d+\.\d+$/.test(d))
+            .sort()
+            .reverse()
+            .find(d => existsSync(join(root, d, "resources")));
+
+        if (!latest) return null;
+
+        return {
+            root,
+            version: latest.slice("app-".length),
+            resourcesDir: join(root, latest, "resources")
+        };
+    } catch {
+        return null;
+    }
+}
+
+function getInstalledTargets() {
+    if (process.platform !== "win32") return [];
+
+    return DISCORD_TARGETS
+        .map(target => {
+            const install = findLatestResources(target.directory);
+            return install && { ...target, ...install };
+        })
+        .filter(Boolean);
+}
+
+function getTargetFromBranch(branch) {
+    const normalized = normalizeBranch(branch);
+    return getInstalledTargets().find(target => target.branch === normalized) ?? null;
+}
+
+function getTargetFromLocation(location) {
+    if (!location) return null;
+
+    const normalized = location.toLowerCase();
+    return getInstalledTargets()
+        .sort((a, b) => b.directory.length - a.directory.length)
+        .find(target => normalized.includes(target.directory.toLowerCase())) ?? null;
+}
+
+function renderTargetMenu(targets, selectedIndex, renderedLines) {
+    if (renderedLines > 0) process.stdout.write(`\x1b[${renderedLines}F`);
+
+    const lines = [
+        `${colorText("[Moggcord]", ANSI.cyan)} Select Discord target`,
+        colorText("Use arrow keys and Enter.", ANSI.dim),
+        ...targets.map((target, index) => {
+            const selected = index === selectedIndex;
+            const marker = selected ? colorText(">", ANSI.cyan) : " ";
+            const label = selected ? `${ANSI.bold}${formatTargetLabel(target)}` : formatTargetLabel(target);
+            const reset = selected ? ANSI.reset : "";
+            const details = colorText(`${target.version}  ${target.resourcesDir}`, ANSI.dim);
+
+            return `${marker} ${label}${reset} ${details}`;
+        })
+    ];
+
+    process.stdout.write(`${lines.map(line => `\x1b[2K${line}`).join("\n")}\n`);
+    return lines.length;
+}
+
+function selectTargetFromMenu(targets) {
+    return new Promise(resolve => {
+        let selectedIndex = 0;
+        let renderedLines = 0;
+        const { stdin, stdout } = process;
+        const wasRaw = stdin.isRaw;
+
+        const showCursor = () => stdout.write("\x1b[?25h");
+        const hideCursor = () => stdout.write("\x1b[?25l");
+        const finish = target => {
+            stdin.off("keypress", onKeypress);
+            if (stdin.setRawMode) stdin.setRawMode(wasRaw);
+            showCursor();
+            stdout.write("\n");
+            resolve(target);
+        };
+        const onKeypress = (_, key) => {
+            if (key?.ctrl && key.name === "c") {
+                finish(null);
+                process.exit(130);
+            }
+
+            if (key?.name === "up" || key?.name === "k") {
+                selectedIndex = (selectedIndex - 1 + targets.length) % targets.length;
+                renderedLines = renderTargetMenu(targets, selectedIndex, renderedLines);
+                return;
+            }
+
+            if (key?.name === "down" || key?.name === "j") {
+                selectedIndex = (selectedIndex + 1) % targets.length;
+                renderedLines = renderTargetMenu(targets, selectedIndex, renderedLines);
+                return;
+            }
+
+            if (key?.name === "return" || key?.name === "enter" || key?.name === "space") {
+                finish(targets[selectedIndex]);
+            }
+        };
+
+        hideCursor();
+        emitKeypressEvents(stdin);
+        stdin.on("keypress", onKeypress);
+        if (stdin.setRawMode) stdin.setRawMode(true);
+        stdin.resume();
+        renderedLines = renderTargetMenu(targets, selectedIndex, renderedLines);
+    });
+}
+
+async function selectTarget(args, shouldSelect) {
+    if (!shouldSelect || process.platform !== "win32") return null;
+
+    const location = getArgValue(args, ["-location", "--location"]);
+    if (location) return getTargetFromLocation(location);
+
+    const branch = getArgValue(args, ["-branch", "--branch"]);
+    if (branch && normalizeBranch(branch) !== "auto") return getTargetFromBranch(branch);
+
+    if (!process.stdin.isTTY || !process.stdout.isTTY) return null;
+
+    const targets = getInstalledTargets();
+    if (targets.length === 0) return null;
+
+    const selected = await selectTargetFromMenu(targets);
+    if (!selected) return null;
+
+    pushArgValue(args, "-branch", selected.branch);
+    console.log(`[Moggcord] Selected ${formatTargetLabel(selected)}.`);
+
+    return selected;
+}
+
+function stopDiscord(target) {
     if (process.platform !== "win32") return;
-    for (const img of ["Discord.exe", "DiscordSystemHelper.exe"]) {
+    const processes = target
+        ? [target.process, "DiscordSystemHelper.exe"]
+        : [...DISCORD_TARGETS.map(t => t.process), "DiscordSystemHelper.exe"];
+
+    for (const img of processes) {
         try {
             execSync(`taskkill /F /IM ${img} /T`, { stdio: "ignore" });
         } catch { }
@@ -132,15 +319,16 @@ function stopDiscord() {
     try { execSync("timeout /t 2 /nobreak >nul", { stdio: "ignore", shell: true }); } catch { }
 }
 
-function startDiscord() {
+function startDiscord(target) {
     if (process.platform !== "win32") return false;
 
-    const discordRoot = join(process.env.LOCALAPPDATA || "", "Discord");
+    const discordRoot = target?.root ?? join(process.env.LOCALAPPDATA || "", "Discord");
     const updateExe = join(discordRoot, "Update.exe");
+    const processName = target?.process ?? "Discord.exe";
 
     if (existsSync(updateExe)) {
         try {
-            execFileSync(updateExe, ["--processStart", "Discord.exe"], {
+            execFileSync(updateExe, ["--processStart", processName], {
                 stdio: "ignore",
                 windowsHide: true
             });
@@ -154,7 +342,7 @@ function startDiscord() {
             .sort()
             .reverse();
         for (const ver of versions) {
-            const discordExe = join(discordRoot, ver, "Discord.exe");
+            const discordExe = join(discordRoot, ver, processName);
             if (!existsSync(discordExe)) continue;
             execFileSync(discordExe, [], { stdio: "ignore", detached: true, windowsHide: true });
             return true;
@@ -173,9 +361,9 @@ function checkBuild() {
     }
 }
 
-function cleanOldMoggcord() {
+function cleanOldMoggcord(target) {
     console.log("[Moggcord] Preparing Discord for safe re-inject...");
-    const candidates = findAllDiscordResources();
+    const candidates = target?.resourcesDir ? [target.resourcesDir] : findAllDiscordResources();
 
     let cleanedAny = false;
     for (const resourcesDir of candidates) {
@@ -196,23 +384,38 @@ function cleanOldMoggcord() {
     }
 }
 
-cleanOldMoggcord();
+function getActionLabel() {
+    if (isInstall) return "injection";
+    if (isUninstall) return "uninstall";
+    if (isRepair) return "repair";
+    return "installer";
+}
 
 const argStart = process.argv.indexOf("--");
-const args = argStart === -1 ? [] : process.argv.slice(argStart + 1);
+const args = (argStart === -1 ? process.argv.slice(2) : process.argv.slice(argStart + 1)).filter(arg => arg !== "--");
 
 const isUninstall = args.includes("--uninstall");
-if (!isUninstall) {
+const isInstall = args.includes("--install");
+const isRepair = args.includes("--repair");
+const isInfoOnly = args.includes("-help") || args.includes("--help") || args.includes("-version") || args.includes("--version");
+
+if (!isUninstall && !isInfoOnly) {
     checkBuild();
+}
+
+const selectedTarget = await selectTarget(args, !isInfoOnly && (isInstall || isUninstall || isRepair));
+
+if (!isInfoOnly && isRepair) {
+    cleanOldMoggcord(selectedTarget);
 }
 
 const installerBin = await ensureBinary();
 
-const isInstall = args.includes("--install");
-
 if (isInstall) {
     console.log("[Moggcord] Closing Discord before injection...");
-    stopDiscord();
+    stopDiscord(selectedTarget);
+
+    cleanOldMoggcord(selectedTarget);
 
     console.log("[Moggcord] Cleaning up previous installations (Vencord/Equicord/Moggcord)...");
     try {
@@ -241,7 +444,8 @@ if (isInstall) {
     }
 }
 
-console.log("[Moggcord] Starting injection...");
+const actionLabel = getActionLabel();
+console.log(`[Moggcord] Starting ${actionLabel}...`);
 
 try {
     execFileSync(installerBin, args, {
@@ -255,7 +459,7 @@ try {
         }
     });
 } catch {
-    console.error("[Moggcord] Injection failed.");
+    console.error(`[Moggcord] ${actionLabel[0].toUpperCase() + actionLabel.slice(1)} failed.`);
     process.exit(1);
 }
 
@@ -265,9 +469,9 @@ if (isInstall) {
     }
 
     markPostInstallRelaunch();
-    console.log("[Moggcord] Restarting Discord...");
+    console.log(`[Moggcord] Restarting ${selectedTarget?.label ?? "Discord"}...`);
     console.log("\x1b[33m[Moggcord] Discord will restart once more automatically so the UI works correctly.\x1b[0m");
-    if (startDiscord()) {
+    if (startDiscord(selectedTarget)) {
         console.log("\x1b[32m[Moggcord] Discord started — finishing setup on first launch.\x1b[0m");
     } else {
         console.log("\x1b[33m[Moggcord] Could not auto-start Discord — open it manually once.\x1b[0m");
