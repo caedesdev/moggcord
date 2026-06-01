@@ -179,12 +179,8 @@ if (!IS_REPORTER && settings.plugins && plugins) {
         }
 
         const shouldBeEnabled = Boolean(pluginDef?.required) || Boolean(pluginDef?.enabledByDefault);
-        if (shouldBeEnabled) {
-            if (!settings.plugins[pluginKey]) {
-                settings.plugins[pluginKey] = { enabled: true };
-            } else {
-                settings.plugins[pluginKey].enabled = true;
-            }
+        if (!settings.plugins[pluginKey]) {
+            settings.plugins[pluginKey] = { enabled: shouldBeEnabled };
         }
     }
 }
@@ -213,9 +209,6 @@ export const SettingsStore = new SettingsStoreClass(settings, {
                 return target[key] = { enabled: shouldBeEnabled };
             }
 
-            if (shouldBeEnabled && target[key].enabled === false) {
-                target[key].enabled = true;
-            }
             if (forceOff) {
                 target[key].enabled = false;
             }
