@@ -70,7 +70,13 @@ jobs:
       - name: Create version metadata
         shell: pwsh
         run: |
-          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tagVersion = "${{ github.ref_name }}" -replace '^v',''
+          $pkgVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ($tagVersion -ne $pkgVersion) {
+            Write-Error "package.json version ($pkgVersion) must match tag (v$tagVersion). Bump package.json before releasing."
+            exit 1
+          }
+          $version = $pkgVersion
           $meta = [ordered]@{
             version = $version
             releaseDate = (Get-Date -Format "yyyy-MM-dd")
@@ -81,6 +87,11 @@ jobs:
             changelog = "Moggcord $version"
           }
           $meta | ConvertTo-Json | Set-Content "release\installer\version.json"
+
+      - name: Validate release assets
+        run: node scripts/build/validate-release.mjs
+        env:
+          GITHUB_REF_NAME: ${{ github.ref_name }}
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
