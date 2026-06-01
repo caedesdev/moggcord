@@ -2,17 +2,28 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { createPackage, extractFile } from "@electron/asar";
-import { cpSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "original-fs";
+import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "original-fs";
 import { basename, dirname, join } from "path";
-import { tmpdir } from "os";
 
-const DISCORD_NEW_UPDATER_STUB_INDEX = 'require(process.resourcesPath+"/_app.asar")';
-const DISCORD_NEW_UPDATER_STUB_PKG = JSON.stringify({ name: "discord", main: "index.js" });
 const MIN_VALID_ASAR_BYTES = 1_000_000;
 
 export function getMoggcordLocalDistDir() {
     return join(process.env.LOCALAPPDATA || "", "Moggcord", "dist", "desktop");
+}
+
+/** Directory containing patcher.js / renderer.js (survives sourceURL-only eval contexts). */
+export function getPatcherInstallDir(): string {
+    const fromEnv = process.env.MOGGCORD_PATCHER_DIR;
+    if (fromEnv && existsSync(join(fromEnv, "patcher.js"))) return fromEnv;
+
+    if (typeof __dirname === "string" && __dirname.length > 1) {
+        if (existsSync(join(__dirname, "patcher.js"))) return __dirname;
+    }
+
+    const resolved = resolvePatcherPath();
+    if (resolved) return dirname(resolved);
+
+    return getMoggcordLocalDistDir();
 }
 
 /** Paths tried by resources/app/index.js to load patcher.js (keep in sync with scripts/discordResources.mjs). */
@@ -25,7 +36,7 @@ export function getPatcherCandidates(primaryInstallDir: string): string[] {
     ];
 }
 
-export function resolvePatcherPath(primaryInstallDir = __dirname): string | null {
+export function resolvePatcherPath(primaryInstallDir = getPatcherInstallDir()): string | null {
     for (const candidate of getPatcherCandidates(primaryInstallDir)) {
         try {
             if (existsSync(candidate)) return candidate;
@@ -51,12 +62,15 @@ const resolved = candidates.find(p => { try { return fs.existsSync(p); } catch {
 if (!resolved) {
     throw new Error("[Moggcord] patcher.js not found. Re-run Moggcord install or: pnpm inject");
 }
+process.env.MOGGCORD_PATCHER_DIR = path.dirname(resolved);
 require(resolved);
 `;
 }
 
-export function syncDistToLocal(installDir = __dirname): string {
+export function syncDistToLocal(installDir = getPatcherInstallDir()): string {
     const dest = getMoggcordLocalDistDir();
+    if (!existsSync(installDir)) return join(dest, "patcher.js");
+
     mkdirSync(dest, { recursive: true });
 
     for (const name of readdirSync(installDir)) {
@@ -71,16 +85,6 @@ export function syncDistToLocal(installDir = __dirname): string {
     return join(dest, "patcher.js");
 }
 
-function isNewUpdaterStubAsar(appAsarPath: string): boolean {
-    if (!existsSync(appAsarPath)) return false;
-    try {
-        if (statSync(appAsarPath).isDirectory()) return false;
-        return statSync(appAsarPath).size < MIN_VALID_ASAR_BYTES;
-    } catch {
-        return false;
-    }
-}
-
 function isValidAsarFile(path: string): boolean {
     try {
         return existsSync(path) && !statSync(path).isDirectory() && statSync(path).size >= MIN_VALID_ASAR_BYTES;
@@ -89,43 +93,9 @@ function isValidAsarFile(path: string): boolean {
     }
 }
 
-export function restoreDiscordNewUpdaterStub(resourcesDir: string): boolean {
-    const appAsar = join(resourcesDir, "app.asar");
-    const backup = join(resourcesDir, "_app.asar");
-
-    if (!isValidAsarFile(backup) || !existsSync(appAsar) || !isNewUpdaterStubAsar(appAsar)) {
-        return false;
-    }
-
-    let currentIndex = "";
-    let broken = statSync(appAsar).size < 100;
-    try {
-        currentIndex = extractFile(appAsar, "index.js").toString("utf8");
-    } catch {
-        broken = true;
-    }
-
-    if (!broken && currentIndex === DISCORD_NEW_UPDATER_STUB_INDEX) return false;
-    if (!broken && !/moggcord|vencord|equicord|dist\\desktop|dist\/desktop/i.test(currentIndex)) return false;
-
-    try {
-        const tmp = mkdtempSync(join(tmpdir(), "moggcord-discord-stub-"));
-        writeFileSync(join(tmp, "index.js"), DISCORD_NEW_UPDATER_STUB_INDEX, "utf8");
-        writeFileSync(join(tmp, "package.json"), DISCORD_NEW_UPDATER_STUB_PKG, "utf8");
-        createPackage(tmp, appAsar);
-        rmSync(tmp, { recursive: true, force: true });
-        console.info("[Moggcord] Restored Discord newUpdater app.asar stub.");
-        return true;
-    } catch (err) {
-        console.warn("[Moggcord] Could not restore app.asar stub:", err);
-        return false;
-    }
-}
-
-export function writeMoggcordLoaderToResources(resourcesDir: string, primaryInstallDir = __dirname) {
+export function writeMoggcordLoaderToResources(resourcesDir: string, primaryInstallDir = getPatcherInstallDir()) {
     const appDir = join(resourcesDir, "app");
     mkdirSync(appDir, { recursive: true });
-    restoreDiscordNewUpdaterStub(resourcesDir);
 
     writeFileSync(join(appDir, "package.json"), JSON.stringify({
         name: "moggcord",
@@ -147,7 +117,7 @@ function isNewer(newVer: string, oldVer: string) {
 }
 
 /** Re-inject Moggcord after Discord installed a newer app-* folder (also when Discord was closed during update). */
-export function repatchLatestDiscordHost(installDir = __dirname): boolean {
+export function repatchLatestDiscordHost(installDir = getPatcherInstallDir()): boolean {
     try {
         syncDistToLocal(installDir);
 
@@ -181,7 +151,6 @@ export function repatchLatestDiscordHost(installDir = __dirname): boolean {
         const loaderLooksOk = existsSync(join(appDir, "index.js"))
             && readFileSync(join(appDir, "index.js"), "utf8").includes("Moggcord Injector");
 
-        // Always refresh loader on latest host folder when newUpdater or loader missing/wrong version.
         const needsLoader = latestVersion !== currentVersion
             || !loaderLooksOk
             || (newUpdater && !existsSync(appDir));
@@ -215,7 +184,7 @@ export function repatchLatestDiscordHost(installDir = __dirname): boolean {
     }
 }
 
-export function validateMoggcordDist(installDir = __dirname): boolean {
+export function validateMoggcordDist(installDir = getPatcherInstallDir()): boolean {
     const required = ["patcher.js", "preload.js", "renderer.js"];
     const missing = required.filter(f => !existsSync(join(installDir, f)));
     if (missing.length) {

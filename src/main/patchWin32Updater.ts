@@ -18,12 +18,12 @@
 
 import { app } from "electron";
 
-import { repatchLatestDiscordHost } from "./moggcordLoader";
+import { getPatcherInstallDir, repatchLatestDiscordHost } from "./moggcordLoader";
 
 function runRepatch() {
-    repatchLatestDiscordHost();
+    repatchLatestDiscordHost(getPatcherInstallDir());
 }
 
-// Discord may update while the client is closed — repatch on startup, not only on quit.
-runRepatch();
+// Run after Electron + patcher bootstrap (not at module load — avoids createRequire crashes).
+app.whenReady().then(() => runRepatch());
 app.on("before-quit", runRepatch);
