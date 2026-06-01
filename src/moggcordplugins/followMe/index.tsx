@@ -124,7 +124,9 @@ const ctxPatch: NavContextMenuPatchCallback = (children, props) => {
 
         const isFollowed = targetId === userId;
 
-        children.push(
+        require("../../utils/moggcordContextMenu").addCategorizedUserContextItem(
+            children,
+            "Moggcord Actions",
             <Menu.MenuCheckboxItem
                 id="follow-me-ctx"
                 label={isFollowed ? "Stop Follow Me" : "Follow Me"}

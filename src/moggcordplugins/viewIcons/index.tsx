@@ -97,29 +97,34 @@ const UserContext: NavContextMenuPatchCallback = (children, { user, guildId }: U
     if (!user) return;
     const memberAvatar = GuildMemberStore.getMember(guildId!, user.id)?.avatar || null;
 
-    children.splice(-1, 0, (
-        <Menu.MenuGroup>
+    require("../../utils/moggcordContextMenu").addCategorizedUserContextItem(
+        children,
+        "Customization",
+        <Menu.MenuItem
+            id="view-avatar"
+            label="View Avatar"
+            action={() => openAvatar(IconUtils.getUserAvatarURL(user, true))}
+            icon={ImageIcon}
+        />
+    );
+
+    if (memberAvatar) {
+        require("../../utils/moggcordContextMenu").addCategorizedUserContextItem(
+            children,
+            "Customization",
             <Menu.MenuItem
-                id="view-avatar"
-                label="View Avatar"
-                action={() => openAvatar(IconUtils.getUserAvatarURL(user, true))}
+                id="view-server-avatar"
+                label="View Server Avatar"
+                action={() => openAvatar(IconUtils.getGuildMemberAvatarURLSimple({
+                    userId: user.id,
+                    avatar: memberAvatar,
+                    guildId: guildId!,
+                    canAnimate: true
+                }))}
                 icon={ImageIcon}
             />
-            {memberAvatar && (
-                <Menu.MenuItem
-                    id="view-server-avatar"
-                    label="View Server Avatar"
-                    action={() => openAvatar(IconUtils.getGuildMemberAvatarURLSimple({
-                        userId: user.id,
-                        avatar: memberAvatar,
-                        guildId: guildId!,
-                        canAnimate: true
-                    }))}
-                    icon={ImageIcon}
-                />
-            )}
-        </Menu.MenuGroup>
-    ));
+        );
+    }
 };
 
 const GuildContext: NavContextMenuPatchCallback = (children, { guild }: GuildContextProps) => {

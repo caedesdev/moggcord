@@ -100,34 +100,41 @@ function buildCSS(): string {
 `;
 }
 
+// Cached reference to avoid repeated DOM lookups
+let caretEl: HTMLDivElement | null = null;
+
 function getCaret(): HTMLDivElement {
+    if (caretEl && caretEl.isConnected) return caretEl;
     let el = document.getElementById("vc-smoothtype-caret") as HTMLDivElement | null;
     if (!el) {
         el = document.createElement("div");
         el.id = "vc-smoothtype-caret";
         document.body.appendChild(el);
     }
+    caretEl = el;
     return el;
 }
 
 function getExistingCaret(): HTMLDivElement | null {
-    return document.getElementById("vc-smoothtype-caret") as HTMLDivElement | null;
+    if (caretEl && caretEl.isConnected) return caretEl;
+    caretEl = document.getElementById("vc-smoothtype-caret") as HTMLDivElement | null;
+    return caretEl;
 }
 
 let blinkTimer: ReturnType<typeof setTimeout> | null = null;
 let instantTimer: ReturnType<typeof setTimeout> | null = null;
 
-function startBlink() { getCaret().classList.add("is-blinking"); }
+function startBlink() { getExistingCaret()?.classList.add("is-blinking"); }
 
 function stopBlink() {
-    getCaret().classList.remove("is-blinking");
+    getExistingCaret()?.classList.remove("is-blinking");
     if (blinkTimer) clearTimeout(blinkTimer);
     blinkTimer = setTimeout(startBlink, 1000);
 }
 
 function hideCaret() {
     const el = getExistingCaret();
-    if (el) el.style.display = "none";
+    if (el && el.style.display !== "none") el.style.display = "none";
 }
 
 function isSlateEditorActive() {
@@ -139,7 +146,8 @@ function isSlateEditorEvent(event: Event) {
 }
 
 function moveInstantlyForTyping() {
-    const el = getCaret();
+    const el = getExistingCaret();
+    if (!el) return;
     el.classList.add("is-instant");
     if (instantTimer) clearTimeout(instantTimer);
     instantTimer = setTimeout(() => {
@@ -149,31 +157,59 @@ function moveInstantlyForTyping() {
 }
 
 function applyCaretPosition(instant = false) {
-    const el = getCaret();
     if (!isSlateEditorActive()) {
         hideCaret(); return;
     }
+    const el = getCaret();
     if (instant) moveInstantlyForTyping();
     const sel = window.getSelection();
     if (!sel?.rangeCount) { hideCaret(); return; }
     const range = sel.getRangeAt(0).cloneRange();
     range.collapse(false);
-    const rects = range.getClientRects();
+    let rects = range.getClientRects();
     let rect: DOMRect | null = rects.length > 0 ? rects[0] : null;
+
+    // Collapsed ranges after deletion often return 0 rects. Use a temporary
+    // zero-width space to get the real cursor position instead of falling back
+    // to the parent element (which gave the wrong right-edge position).
+    if (!rect || rect.height === 0) {
+        const marker = document.createTextNode("\u200b");
+        range.insertNode(marker);
+        const markerRange = document.createRange();
+        markerRange.selectNode(marker);
+        const markerRects = markerRange.getClientRects();
+        if (markerRects.length > 0) rect = markerRects[0];
+        // Restore selection and clean up marker
+        marker.parentNode?.removeChild(marker);
+        // Reinstate the selection so the editor doesn't break
+        sel.removeAllRanges();
+        const restored = document.createRange();
+        restored.setStart(range.startContainer, range.startOffset);
+        restored.collapse(true);
+        sel.addRange(restored);
+    }
+
+    // Final fallback: try the closest Slate leaf span or parent element
     if (!rect || rect.height === 0) {
         const node = range.startContainer;
         const parent = (node.nodeType === Node.TEXT_NODE ? node.parentElement : node) as HTMLElement | null;
-        if (parent) rect = parent.getBoundingClientRect();
+        // Prefer Slate leaf nodes (narrow) over block-level containers
+        const leaf = parent?.closest("[data-slate-leaf]") as HTMLElement | null;
+        const target = leaf ?? parent;
+        if (target) rect = target.getBoundingClientRect();
     }
+
     if (!rect || rect.height === 0) { hideCaret(); return; }
-    const newLeft = rect.right + "px";
+    // Use rect.left for collapsed cursor position (rect.right == rect.left for
+    // zero-width rects, but for the parent fallback left is more correct)
+    const newLeft = (rects.length > 0 ? rect.right : rect.left) + "px";
     const newTop = rect.top + "px";
     if (el.style.left !== newLeft || el.style.top !== newTop) {
         if (el.style.display !== "none") stopBlink();
     }
     el.style.display = "block";
     el.style.left = newLeft;
-    el.style.top = rect.top + "px";
+    el.style.top = newTop;
     el.style.height = rect.height + "px";
 }
 
@@ -181,28 +217,50 @@ let observerRaf = 0;
 let instantUpdate = false;
 
 function scheduleCaretUpdate(instant = false) {
+    // Early bail-out before any work if editor is not focused
     if (!isSlateEditorActive()) {
-        hideCaret();
+        if (!observerRaf) hideCaret();
         return;
     }
     instantUpdate = instantUpdate || instant;
     if (observerRaf) return;
+    // Double-RAF: Slate re-renders the DOM asynchronously after input events.
+    // A single RAF can fire before Slate finishes updating, giving us stale
+    // rects. The second RAF ensures the DOM is settled.
     observerRaf = requestAnimationFrame(() => {
-        observerRaf = 0;
-        const shouldMoveInstantly = instantUpdate;
-        instantUpdate = false;
-        applyCaretPosition(shouldMoveInstantly);
+        observerRaf = requestAnimationFrame(() => {
+            observerRaf = 0;
+            const shouldMoveInstantly = instantUpdate;
+            instantUpdate = false;
+            applyCaretPosition(shouldMoveInstantly);
+        });
     });
 }
 
 const handlers = {
-    sel:   () => scheduleCaretUpdate(),
+    sel:   () => {
+        // Guard: skip entirely if not in a Slate editor — this fires on EVERY
+        // selection change in the document (clicking anywhere, highlighting text
+        // in messages, etc.) and was the #1 cause of lag.
+        if (!isSlateEditorActive()) return;
+        scheduleCaretUpdate();
+    },
     focus: () => scheduleCaretUpdate(),
     blur:  () => hideCaret(),
     key:   (event: Event) => {
         if (isSlateEditorEvent(event)) scheduleCaretUpdate(true);
     },
-    click: () => scheduleCaretUpdate(),
+    keydown: (event: Event) => {
+        // Holding Backspace/Delete can batch input events — listen to keydown
+        // as well so the caret tracks every individual deletion frame.
+        if (!(event instanceof KeyboardEvent)) return;
+        if (event.key === "Backspace" || event.key === "Delete") {
+            if (isSlateEditorEvent(event)) scheduleCaretUpdate(true);
+        }
+    },
+    click: (event: Event) => {
+        if (isSlateEditorEvent(event)) scheduleCaretUpdate();
+    },
 };
 
 function startListeners() {
@@ -210,6 +268,7 @@ function startListeners() {
     document.addEventListener("focusin", handlers.focus);
     document.addEventListener("focusout", handlers.blur);
     document.addEventListener("input", handlers.key, true);
+    document.addEventListener("keydown", handlers.keydown, true);
     document.addEventListener("click", handlers.click, true);
 }
 
@@ -218,6 +277,7 @@ function stopListeners() {
     document.removeEventListener("focusin", handlers.focus);
     document.removeEventListener("focusout", handlers.blur);
     document.removeEventListener("input", handlers.key, true);
+    document.removeEventListener("keydown", handlers.keydown, true);
     document.removeEventListener("click", handlers.click, true);
 }
 
@@ -255,5 +315,6 @@ export default definePlugin({
         removeCSS();
         if (blinkTimer) clearTimeout(blinkTimer);
         document.getElementById("vc-smoothtype-caret")?.remove();
+        caretEl = null;
     },
 });

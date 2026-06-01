@@ -419,32 +419,61 @@ const messageContextPatch: NavContextMenuPatchCallback = (children, { message }:
     }
 };
 
+// ─── Helper: collect all menu item IDs already present ─────────────────────
+function collectExistingIds(children: any[]): Set<string> {
+    const ids = new Set<string>();
+    function walk(arr: any[]) {
+        for (const el of arr) {
+            if (!el?.props) continue;
+            if (el.props.id) ids.add(el.props.id);
+            const sub = el.props.children;
+            if (Array.isArray(sub)) walk(sub);
+            else if (sub?.props) walk([sub]);
+        }
+    }
+    walk(children);
+    return ids;
+}
+
 const userContextPatch: NavContextMenuPatchCallback = (children, { user }: any) => {
     if (!children || !Array.isArray(children) || !isEnabled || !user) return;
     try {
         const guildId = getCurrentGuildId();
         if (!guildId) return;
 
-        // Hide native Roles and Permissions viewer when FakePerm is enabled
-        const HIDDEN_IDS = new Set(["roles", "perm-viewer-permissions"]);
-        for (let i = 0; i < children.length; i++) {
-            const group = children[i];
-            if (!group?.props?.children) continue;
-            const sub: any[] = Array.isArray(group.props.children)
-                ? group.props.children
-                : [group.props.children];
-            const filtered = sub.filter((child: any) => !HIDDEN_IDS.has(child?.props?.id ?? ""));
-            if (filtered.length !== sub.length) {
-                children[i] = React.cloneElement(group, { children: filtered });
-            }
-        }
         const username = user.username;
-        const allRoles = getGuildRoles(guildId);
-        const memberRoleIds = getMemberRoleIds(guildId, user.id);
 
-        const groupA = (
-            <Menu.MenuGroup key="fp-group-a">
+        // Scan existing menu for native moderation items that are already shown
+        // (Discord shows these when the user actually has the permissions,
+        //  and our patches make Discord think we always have them)
+        const existing = collectExistingIds(children);
+
+        // Map of native Discord IDs → our FakePerm equivalents
+        // If the native item already exists, we skip the FakePerm one
+        const hasNativeNick       = existing.has("change-nickname");
+        const hasNativeRoles      = existing.has("roles");
+        const hasNativeMoveTo     = existing.has("move-to");
+        const hasNativeServerMute = existing.has("server-mute");
+        const hasNativeDeafen     = existing.has("server-deafen");
+        const hasNativeDisconnect = existing.has("disconnect");
+        const hasNativeTimeout    = existing.has("timeout");
+        const hasNativeKick       = existing.has("kick");
+        const hasNativeBan        = existing.has("ban");
+
+        if (!hasNativeNick) {
+            require("../../utils/moggcordContextMenu").addCategorizedUserContextItem(
+                children,
+                "Spoofing",
                 <Menu.MenuItem key="fp-rename" id="fp-rename" label="Change Nickname" action={() => openModal(p => <RenameModal rootProps={p} user={user} guildId={guildId} />)} />
+            );
+        }
+
+        if (!hasNativeRoles) {
+            const allRoles = getGuildRoles(guildId);
+            const memberRoleIds = getMemberRoleIds(guildId, user.id);
+            require("../../utils/moggcordContextMenu").addCategorizedUserContextItem(
+                children,
+                "Spoofing",
                 <Menu.MenuItem key="fp-roles" id="fp-roles" label="Roles">
                     {allRoles.length === 0
                         ? <Menu.MenuItem key="fp-roles-empty" id="fp-roles-empty" label="No roles" disabled />
@@ -468,6 +497,13 @@ const userContextPatch: NavContextMenuPatchCallback = (children, { user }: any) 
                             render={() => <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderTop: "1px solid rgba(79,84,92,0.48)", color: "#b9bbbe", fontSize: 13, cursor: "pointer" }}><span>+</span><span>Add a role</span></div>} />,
                         ]}
                 </Menu.MenuItem>
+            );
+        }
+
+        if (!hasNativeMoveTo) {
+            require("../../utils/moggcordContextMenu").addCategorizedUserContextItem(
+                children,
+                "Spoofing",
                 <Menu.MenuItem key="fp-move" id="fp-move" label="Move to">
                     {(() => {
                         const allChannels: Array<{ id: string; name: string; position: number; }> = [];
@@ -483,18 +519,56 @@ const userContextPatch: NavContextMenuPatchCallback = (children, { user }: any) 
                         return allChannels.map(ch => <Menu.MenuItem key={`fp-move-${ch.id}`} id={`fp-move-${ch.id}`} label={`🔊 ${ch.name}`} action={() => toast(`Moved to #${ch.name} — simulation`)} />);
                     })()}
                 </Menu.MenuItem>
-                <Menu.MenuCheckboxItem key="fp-mute" id="fp-mute" label="Server Mute" color="danger" checked={mutedUsers.get(user.id) === true} action={() => { const next = !mutedUsers.get(user.id); mutedUsers.set(user.id, next); notifyBadgeChange(); }} />
-                <Menu.MenuCheckboxItem key="fp-deafen" id="fp-deafen" label="Server Deafen" color="danger" checked={deafenedUsers.get(user.id) === true} action={() => { const next = !deafenedUsers.get(user.id); deafenedUsers.set(user.id, next); notifyBadgeChange(); }} />
-                <Menu.MenuItem key="fp-disconnect" id="fp-disconnect" label="Disconnect" color="danger" action={() => { disconnectedUsers.add(user.id); notifyMemberListChange(); toast(`@${username} disconnected from voice (local)`); }} />
-                <Menu.MenuItem key="fp-kick" id="fp-kick" label={`Timeout ${username}`} color="danger" action={() => openModal(p => <TimeoutModal rootProps={p} user={user} />)} />
-                <Menu.MenuItem key="fp-expulser" id="fp-expulser" label={`Kick ${username}`} color="danger" action={() => openModal(p => <KickModal rootProps={p} user={user} guildId={guildId} />)} />
-                <Menu.MenuItem key="fp-ban" id="fp-ban" label={`Ban ${username}`} color="danger" action={() => openModal(p => <BanModal rootProps={p} user={user} />)} />
-            </Menu.MenuGroup>
-        );
+            );
+        }
 
-        const idxBlock = findGroupWithItem(children, ["block", "ignore"]);
-        if (idxBlock >= 0) children.splice(idxBlock + 1, 0, groupA);
-        else children.splice(-1, 0, groupA);
+        if (!hasNativeServerMute) {
+            require("../../utils/moggcordContextMenu").addCategorizedUserContextItem(
+                children,
+                "Spoofing",
+                <Menu.MenuCheckboxItem key="fp-mute" id="fp-mute" label="Server Mute" color="danger" checked={mutedUsers.get(user.id) === true} action={() => { const next = !mutedUsers.get(user.id); mutedUsers.set(user.id, next); notifyBadgeChange(); }} />
+            );
+        }
+
+        if (!hasNativeDeafen) {
+            require("../../utils/moggcordContextMenu").addCategorizedUserContextItem(
+                children,
+                "Spoofing",
+                <Menu.MenuCheckboxItem key="fp-deafen" id="fp-deafen" label="Server Deafen" color="danger" checked={deafenedUsers.get(user.id) === true} action={() => { const next = !deafenedUsers.get(user.id); deafenedUsers.set(user.id, next); notifyBadgeChange(); }} />
+            );
+        }
+
+        if (!hasNativeDisconnect) {
+            require("../../utils/moggcordContextMenu").addCategorizedUserContextItem(
+                children,
+                "Spoofing",
+                <Menu.MenuItem key="fp-disconnect" id="fp-disconnect" label="Disconnect" color="danger" action={() => { disconnectedUsers.add(user.id); notifyMemberListChange(); toast(`@${username} disconnected from voice (local)`); }} />
+            );
+        }
+
+        if (!hasNativeTimeout) {
+            require("../../utils/moggcordContextMenu").addCategorizedUserContextItem(
+                children,
+                "Spoofing",
+                <Menu.MenuItem key="fp-kick" id="fp-kick" label={`Timeout ${username}`} color="danger" action={() => openModal(p => <TimeoutModal rootProps={p} user={user} />)} />
+            );
+        }
+
+        if (!hasNativeKick) {
+            require("../../utils/moggcordContextMenu").addCategorizedUserContextItem(
+                children,
+                "Spoofing",
+                <Menu.MenuItem key="fp-expulser" id="fp-expulser" label={`Kick ${username}`} color="danger" action={() => openModal(p => <KickModal rootProps={p} user={user} guildId={guildId} />)} />
+            );
+        }
+
+        if (!hasNativeBan) {
+            require("../../utils/moggcordContextMenu").addCategorizedUserContextItem(
+                children,
+                "Spoofing",
+                <Menu.MenuItem key="fp-ban" id="fp-ban" label={`Ban ${username}`} color="danger" action={() => openModal(p => <BanModal rootProps={p} user={user} />)} />
+            );
+        }
     } catch (e) {
         console.error("[FakePerm] User context patch error:", e);
     }

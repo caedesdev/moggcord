@@ -10,7 +10,7 @@ import { addMessagePreSendListener, removeMessagePreSendListener } from "@api/Me
 import { definePluginSettings, migratePluginToSettings } from "@api/Settings";
 import { WarningIcon } from "@components/Icons";
 import { Devs, EQUIBOT_USER_ID, EquicordDevs, GUILD_ID, MOGGCORD_BOT_USER_ID, SUPPORT_CHANNEL_ID, SUPPORT_CHANNEL_IDS, VC_SUPPORT_CHANNEL_IDS } from "@utils/constants";
-import { isAnyPluginDev } from "@utils/misc";
+import { isAnyPluginDev, isEquicordGuild, isEquicordSupport } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import type { Message } from "@vencord/discord-types";
 import { StandingState } from "@vencord/discord-types/enums";

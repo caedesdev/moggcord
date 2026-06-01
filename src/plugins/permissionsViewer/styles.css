@@ -230,3 +230,25 @@
     align-items: center;
     gap: 4px;
 }
+
+/* Custom scrollbar for PermissionsViewer */
+.vc-permviewer-modal-list::-webkit-scrollbar,
+.vc-permviewer-modal-perms::-webkit-scrollbar {
+    width: 6px;
+}
+
+.vc-permviewer-modal-list::-webkit-scrollbar-track,
+.vc-permviewer-modal-perms::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.vc-permviewer-modal-list::-webkit-scrollbar-thumb,
+.vc-permviewer-modal-perms::-webkit-scrollbar-thumb {
+    background-color: var(--background-modifier-active);
+    border-radius: 10px;
+}
+
+.vc-permviewer-modal-list::-webkit-scrollbar-thumb:hover,
+.vc-permviewer-modal-perms::-webkit-scrollbar-thumb:hover {
+    background-color: var(--background-modifier-hover);
+}
