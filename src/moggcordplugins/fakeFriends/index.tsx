@@ -731,6 +731,24 @@ const userContextPatch: NavContextMenuPatchCallback = (children, props) => {
 
         if (!state && realRel !== RelationshipType.NONE) return;
 
+        let items: React.ReactElement[] = [];
+        if (!state) {
+            items = [
+                <Menu.MenuItem key="ff-friend" id="ff-friend" label="Fake Friend" action={() => doFakeFriend(userId)} />,
+                <Menu.MenuItem key="ff-request" id="ff-request" label="Fake Friend Request" action={() => doFakeFriendRequest(userId)} />,
+            ];
+        } else if (state === "pending") {
+            items = [
+                <Menu.MenuItem key="ff-cancel" id="ff-cancel" label="Fake-Anfrage entfernen" color="danger"
+                    action={async () => { await removeFakeFriendById(userId); }} />
+            ];
+        } else {
+            items = [
+                <Menu.MenuItem key="ff-remove" id="ff-remove" label="Fake-Freund entfernen" color="danger"
+                    action={async () => { await removeFakeFriendById(userId); }} />
+            ];
+        }
+
         items.forEach(item => {
             require("../../utils/moggcordContextMenu").addCategorizedUserContextItem(
                 children,

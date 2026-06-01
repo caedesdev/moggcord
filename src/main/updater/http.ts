@@ -6,7 +6,7 @@ import { fetchBuffer, fetchJson } from "@main/utils/http";
 import { IpcEvents } from "@shared/IpcEvents";
 import { VENCORD_USER_AGENT } from "@shared/vencordUserAgent";
 import { ipcMain, app } from "electron";
-import { writeFileSync, rmSync, existsSync } from "original-fs";
+import { writeFileSync, rmSync, existsSync, readdirSync } from "original-fs";
 import { join } from "path";
 import { exec } from "child_process";
 
@@ -122,6 +122,19 @@ async function getUpdates() {
     }];
 }
 
+function resolveExtractRoot(extractDir: string): string {
+    const patcherAtRoot = join(extractDir, "patcher.js");
+    if (existsSync(patcherAtRoot)) return extractDir;
+
+    const entries = readdirSync(extractDir, { withFileTypes: true });
+    const dirs = entries.filter(e => e.isDirectory()).map(e => join(extractDir, e.name));
+    for (const dir of dirs) {
+        if (existsSync(join(dir, "patcher.js"))) return dir;
+    }
+
+    return extractDir;
+}
+
 async function applyUpdates(): Promise<boolean> {
     if (isApplying) return false;
 
@@ -142,7 +155,8 @@ async function applyUpdates(): Promise<boolean> {
         const psExtract = `Expand-Archive -LiteralPath '${psQuote(zipPath)}' -DestinationPath '${psQuote(tmpExtract)}' -Force`;
         await runPowerShell(psExtract);
 
-        const psMove = `Copy-Item -Path '${psQuote(join(tmpExtract, "*"))}' -Destination '${psQuote(destPath)}' -Recurse -Force`;
+        const sourceDir = resolveExtractRoot(tmpExtract);
+        const psMove = `Copy-Item -Path '${psQuote(join(sourceDir, "*"))}' -Destination '${psQuote(destPath)}' -Recurse -Force`;
         await runPowerShell(psMove);
 
         pendingDownloadUrl = null;
