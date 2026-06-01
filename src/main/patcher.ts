@@ -25,6 +25,7 @@ import { registerMediaPermissionsForSession } from "../moggcord/main/mediaPermis
 import { crashLog, crashLogPath, installCrashLogHandlers } from "./crashLog";
 import { installMoggcordHomeIcon } from "./homeButtonIcon";
 import { installMoggcordLoadingScreen } from "./loadingScreen";
+import { validateMoggcordDist, syncDistToLocal } from "./moggcordLoader";
 import { injectNoDragGuard } from "./noDragGuard";
 import { schedulePostInstallRelaunchIfNeeded, clearPendingRelaunchMarker } from "./postInstallRelaunch";
 import { isLiveWindow } from "./safeWebContents";
@@ -39,6 +40,11 @@ console.log("[Moggcord] Starting up...");
 
 installCrashLogHandlers(app);
 console.log("[Moggcord] Crash diagnostics enabled — log:", crashLogPath());
+
+syncDistToLocal(__dirname);
+if (!validateMoggcordDist(__dirname)) {
+    console.error("[Moggcord] Re-install Moggcord or run pnpm inject — renderer bundle incomplete.");
+}
 
 // Our injector file at app/index.js
 const injectorPath = require.main!.filename;

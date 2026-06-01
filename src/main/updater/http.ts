@@ -11,6 +11,7 @@ import { join } from "path";
 import { exec } from "child_process";
 
 import { markPendingRelaunch } from "../postInstallRelaunch";
+import { syncDistToLocal } from "../moggcordLoader";
 import { serializeErrors } from "./common";
 
 const RELEASES_REPO = "caedesdev/moggcord";
@@ -158,6 +159,9 @@ async function applyUpdates(): Promise<boolean> {
         const sourceDir = resolveExtractRoot(tmpExtract);
         const psMove = `Copy-Item -Path '${psQuote(join(sourceDir, "*"))}' -Destination '${psQuote(destPath)}' -Recurse -Force`;
         await runPowerShell(psMove);
+
+        syncDistToLocal(destPath);
+        console.log("[Moggcord] Update applied to", destPath, "and synced to %LOCALAPPDATA%\\Moggcord\\dist\\desktop");
 
         pendingDownloadUrl = null;
         pendingVersion = null;

@@ -6,7 +6,7 @@ import { debounce } from "@shared/debounce";
 import { IpcEvents } from "@shared/IpcEvents";
 import { app, BrowserWindow, desktopCapturer, dialog, ipcMain, nativeTheme, screen, shell, systemPreferences } from "electron";
 import monacoHtml from "file://monacoWin.html?minify&base64";
-import { FSWatcher, mkdirSync, readFileSync, watch, writeFileSync } from "fs";
+import { existsSync, FSWatcher, mkdirSync, readFileSync, watch, writeFileSync } from "fs";
 import { open, readdir, readFile, unlink } from "fs/promises";
 import { join, normalize } from "path";
 
@@ -873,10 +873,21 @@ ipcMain.handle(IpcEvents.SET_THUMBAR_BUTTONS, (event, state: "playing" | "paused
 if (IS_DISCORD_DESKTOP) {
     let rendererJsCache: string | null = null;
     ipcMain.on(IpcEvents.PRELOAD_GET_RENDERER_JS, e => {
-        if (!rendererJsCache) {
-            rendererJsCache = readFileSync(join(__dirname, "renderer.js"), "utf-8");
+        try {
+            if (!rendererJsCache) {
+                const rendererPath = join(__dirname, "renderer.js");
+                if (!existsSync(rendererPath)) {
+                    console.error("[Moggcord] renderer.js missing at", rendererPath);
+                    e.returnValue = `console.error("[Moggcord] renderer.js missing — re-run Moggcord install. Path: ${rendererPath.replace(/\\/g, "\\\\")}");`;
+                    return;
+                }
+                rendererJsCache = readFileSync(rendererPath, "utf-8");
+            }
+            e.returnValue = rendererJsCache;
+        } catch (err) {
+            console.error("[Moggcord] Failed to read renderer.js:", err);
+            e.returnValue = `console.error("[Moggcord] Failed to load renderer:", ${JSON.stringify(String(err))});`;
         }
-        e.returnValue = rendererJsCache;
     });
 }
 
