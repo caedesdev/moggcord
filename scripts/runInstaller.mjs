@@ -31,6 +31,9 @@ import { fileURLToPath } from "url";
 
 import {
     findAllDiscordResources,
+    isMoggcordDevInjection,
+    isModInjection,
+    isValidAsarFile,
     prepareForReinject,
     warnIfCorruptAppAsar,
 } from "./discordResources.mjs";
@@ -48,7 +51,9 @@ const ANSI = {
     dim: "\x1b[2m",
     blue: "\x1b[34m",
     cyan: "\x1b[36m",
+    green: "\x1b[32m",
     magenta: "\x1b[35m",
+    red: "\x1b[31m",
     yellow: "\x1b[33m"
 };
 const DISCORD_TARGETS = [
@@ -157,6 +162,17 @@ function formatTargetLabel(target) {
     return colorText(target.label, target.color);
 }
 
+function formatPatchStatus(target) {
+    return colorText(`[${target.patchStatus.label}]`, target.patchStatus.color);
+}
+
+function printPatchSummary(targets) {
+    console.log(`${colorText("[Moggcord]", ANSI.cyan)} Discord patch status:`);
+    for (const target of targets) {
+        console.log(`  ${formatTargetLabel(target)} ${formatPatchStatus(target)} ${colorText(target.version, ANSI.dim)}`);
+    }
+}
+
 function normalizeBranch(branch) {
     const normalized = branch?.toLowerCase();
     if (normalized === "discord" || normalized === "stable") return "stable";
@@ -194,21 +210,54 @@ function getInstalledTargets() {
     return DISCORD_TARGETS
         .map(target => {
             const install = findLatestResources(target.directory);
-            return install && { ...target, ...install };
+            return install && { ...target, ...install, patchStatus: getPatchStatus(install.resourcesDir) };
         })
         .filter(Boolean);
 }
 
-function getTargetFromBranch(branch) {
-    const normalized = normalizeBranch(branch);
-    return getInstalledTargets().find(target => target.branch === normalized) ?? null;
+function getPatchStatus(resourcesDir) {
+    const appDir = join(resourcesDir, "app");
+    const appAsar = join(resourcesDir, "app.asar");
+    const backupAsar = join(resourcesDir, "_app.asar");
+
+    if (isMoggcordDevInjection(resourcesDir)) {
+        return { label: "patched: Moggcord dev", color: ANSI.green, patched: true };
+    }
+
+    if (isModInjection(resourcesDir)) {
+        return { label: "patched: mod loader", color: ANSI.green, patched: true };
+    }
+
+    if (existsSync(appDir)) {
+        return { label: "patched: unknown app folder", color: ANSI.yellow, patched: true };
+    }
+
+    if (existsSync(backupAsar)) {
+        const validBackup = isValidAsarFile(backupAsar);
+        return {
+            label: validBackup ? "patched before: backup present" : "warning: broken backup",
+            color: validBackup ? ANSI.yellow : ANSI.red,
+            patched: true
+        };
+    }
+
+    if (isValidAsarFile(appAsar)) {
+        return { label: "clean", color: ANSI.dim, patched: false };
+    }
+
+    return { label: "warning: app.asar missing or corrupt", color: ANSI.red, patched: false };
 }
 
-function getTargetFromLocation(location) {
+function getTargetFromBranch(targets, branch) {
+    const normalized = normalizeBranch(branch);
+    return targets.find(target => target.branch === normalized) ?? null;
+}
+
+function getTargetFromLocation(targets, location) {
     if (!location) return null;
 
     const normalized = location.toLowerCase();
-    return getInstalledTargets()
+    return [...targets]
         .sort((a, b) => b.directory.length - a.directory.length)
         .find(target => normalized.includes(target.directory.toLowerCase())) ?? null;
 }
@@ -226,7 +275,7 @@ function renderTargetMenu(targets, selectedIndex, renderedLines) {
             const reset = selected ? ANSI.reset : "";
             const details = colorText(`${target.version}  ${target.resourcesDir}`, ANSI.dim);
 
-            return `${marker} ${label}${reset} ${details}`;
+            return `${marker} ${label}${reset} ${formatPatchStatus(target)} ${details}`;
         })
     ];
 
@@ -246,6 +295,7 @@ function selectTargetFromMenu(targets) {
         const finish = target => {
             stdin.off("keypress", onKeypress);
             if (stdin.setRawMode) stdin.setRawMode(wasRaw);
+            stdin.pause();
             showCursor();
             stdout.write("\n");
             resolve(target);
@@ -285,22 +335,24 @@ function selectTargetFromMenu(targets) {
 async function selectTarget(args, shouldSelect) {
     if (!shouldSelect || process.platform !== "win32") return null;
 
-    const location = getArgValue(args, ["-location", "--location"]);
-    if (location) return getTargetFromLocation(location);
-
-    const branch = getArgValue(args, ["-branch", "--branch"]);
-    if (branch && normalizeBranch(branch) !== "auto") return getTargetFromBranch(branch);
-
-    if (!process.stdin.isTTY || !process.stdout.isTTY) return null;
-
     const targets = getInstalledTargets();
     if (targets.length === 0) return null;
+
+    printPatchSummary(targets);
+
+    const location = getArgValue(args, ["-location", "--location"]);
+    if (location) return getTargetFromLocation(targets, location);
+
+    const branch = getArgValue(args, ["-branch", "--branch"]);
+    if (branch && normalizeBranch(branch) !== "auto") return getTargetFromBranch(targets, branch);
+
+    if (!process.stdin.isTTY || !process.stdout.isTTY) return null;
 
     const selected = await selectTargetFromMenu(targets);
     if (!selected) return null;
 
     pushArgValue(args, "-branch", selected.branch);
-    console.log(`[Moggcord] Selected ${formatTargetLabel(selected)}.`);
+    console.log(`[Moggcord] Selected ${formatTargetLabel(selected)} ${formatPatchStatus(selected)}.`);
 
     return selected;
 }
@@ -468,6 +520,11 @@ if (isInstall) {
         warnIfCorruptAppAsar(resourcesDir);
     }
 
+    if (selectedTarget?.resourcesDir) {
+        const nextStatus = { ...selectedTarget, patchStatus: getPatchStatus(selectedTarget.resourcesDir) };
+        console.log(`[Moggcord] Patch result: ${formatTargetLabel(nextStatus)} ${formatPatchStatus(nextStatus)}.`);
+    }
+
     markPostInstallRelaunch();
     console.log(`[Moggcord] Restarting ${selectedTarget?.label ?? "Discord"}...`);
     console.log("\x1b[33m[Moggcord] Discord will restart once more automatically so the UI works correctly.\x1b[0m");
@@ -477,3 +534,6 @@ if (isInstall) {
         console.log("\x1b[33m[Moggcord] Could not auto-start Discord — open it manually once.\x1b[0m");
     }
 }
+
+console.log(`[Moggcord] ${actionLabel[0].toUpperCase() + actionLabel.slice(1)} complete. Exiting.`);
+process.stdin.pause();

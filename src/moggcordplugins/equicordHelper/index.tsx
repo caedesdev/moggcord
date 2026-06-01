@@ -7,12 +7,12 @@
 import { ApplicationCommandInputType, sendBotMessage } from "@api/Commands";
 import { HeaderBarButton } from "@api/HeaderBar";
 import { addMessagePreSendListener, removeMessagePreSendListener } from "@api/MessageEvents";
-import { isPluginEnabled } from "@api/PluginManager";
 import { definePluginSettings, migratePluginToSettings } from "@api/Settings";
 import { WarningIcon } from "@components/Icons";
-import { Devs, EquicordDevs, GUILD_ID, SUPPORT_CHANNEL_ID, SUPPORT_CHANNEL_IDS, VC_SUPPORT_CHANNEL_IDS } from "@utils/constants";
+import { Devs, EQUIBOT_USER_ID, EquicordDevs, GUILD_ID, MOGGCORD_BOT_USER_ID, SUPPORT_CHANNEL_ID, SUPPORT_CHANNEL_IDS, VC_SUPPORT_CHANNEL_IDS } from "@utils/constants";
 import { isAnyPluginDev } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
+import type { Message } from "@vencord/discord-types";
 import { StandingState } from "@vencord/discord-types/enums";
 import { findByCodeLazy, findComponentByCodeLazy, findStoreLazy } from "@webpack";
 import { Alerts, ApplicationCommandIndexStore, NavigationRouter, React, SettingsRouter, UserStore, useStateFromStores } from "@webpack/common";
@@ -65,6 +65,19 @@ const listener = async (channelId, msg) => {
     if (!settings.store.noBulletPoints) return;
     msg.content = textProcessing(msg.content);
 };
+
+function shouldRenderPluginHelpers(message?: Message) {
+    if (!message?.author?.id) return false;
+
+    const isSupport = isEquicordGuild(message.channel_id) && isEquicordSupport(message.author.id);
+    if (isSupport) {
+        const content = message.content?.toLowerCase() ?? "";
+        if (content.includes("`") && (content.startsWith("enable") || content.startsWith("disable"))) return true;
+        if (message.embeds?.some(embed => embed.url?.startsWith("https://equicord.org/plugins/") || embed.url?.startsWith("https://vencord.dev/plugins/"))) return true;
+    }
+
+    return (message.author.id === EQUIBOT_USER_ID || message.author.id === MOGGCORD_BOT_USER_ID) && Boolean(message.components?.length);
+}
 
 const settings = definePluginSettings({
     noMirroredCamera: {
@@ -259,6 +272,8 @@ export default definePlugin({
         }
     ],
     renderMessageAccessory(props) {
+        if (!shouldRenderPluginHelpers(props.message)) return null;
+
         return (
             <>
                 <PluginButtons message={props.message} />

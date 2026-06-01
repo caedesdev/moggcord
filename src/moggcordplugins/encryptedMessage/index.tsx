@@ -4,11 +4,11 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { addContextMenuPatch, removeContextMenuPatch } from "@api/ContextMenu";
 import { ChatBarButton, ChatBarButtonFactory } from "@api/ChatButtons";
+import { addContextMenuPatch, removeContextMenuPatch } from "@api/ContextMenu";
 import definePlugin from "@utils/types";
-import { Menu, Parser, Toasts, useState, useEffect, React } from "@webpack/common";
 import type { Message } from "@vencord/discord-types";
+import { Menu, Parser, React, Toasts, useEffect, useState } from "@webpack/common";
 
 const MARKER = "\u200B\u200C\u200D";
 
@@ -40,7 +40,7 @@ function seededRng(seed: number) {
     return () => {
         seed = (seed + 0x6D2B79F5) | 0;
         let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
-        t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        t ^= t + Math.imul(t ^ (t >>> 7), 61 | t);
         return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
     };
 }
@@ -215,10 +215,10 @@ function DecryptionAccessory({ message }: { message: Message; }) {
     const [decrypted, setDecrypted] = useState<string>();
 
     useEffect(() => {
-        if ((message as any).vencordEmbeddedBy) return;
+        if ((message as Message & { vencordEmbeddedBy?: unknown; }).vencordEmbeddedBy) return () => { };
         DecryptionSetters.set(message.id, setDecrypted);
         return () => void DecryptionSetters.delete(message.id);
-    }, []);
+    }, [message.id]);
 
     if (!decrypted) return null;
 
@@ -300,7 +300,10 @@ export default definePlugin({
         render: EncryptButton,
     },
 
-    renderMessageAccessory: (props: any) => props?.message ? <DecryptionAccessory message={props.message} /> : null,
+    renderMessageAccessory({ message }: { message?: Message; }) {
+        if (!message?.content || !isEncrypted(message.content)) return null;
+        return <DecryptionAccessory message={message} />;
+    },
 
     start() {
         addContextMenuPatch("message", messageContextPatch);
@@ -311,7 +314,7 @@ export default definePlugin({
         encryptionEnabled = false;
     },
 
-    async onBeforeMessageSend(_channelId: string, messageObj: { content: string; }) {
+    onBeforeMessageSend(_channelId: string, messageObj: { content: string; }) {
         if (!encryptionEnabled || !messageObj.content || messageObj.content.trim().length === 0) return;
 
         const encrypted = encrypt(messageObj.content, currentTechnique);

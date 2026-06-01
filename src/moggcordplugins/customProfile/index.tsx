@@ -504,6 +504,10 @@ function getFakeDateVariants(isoDate: string): string[] {
 let _cachedMyId: string | null = null;
 let _realUsername = "";
 let _realGlobalName = "";
+let _realDateCacheKey = "";
+let _realDateCache: string[] = [];
+let _fakeDateCacheKey = "";
+let _fakeDateCache: string[] = [];
 
 function updateCachedRealData() {
     try { const myId = AuthenticationStore?.getId?.(); if (myId) _cachedMyId = myId; } catch { }
@@ -511,6 +515,7 @@ function updateCachedRealData() {
 
 let _domQueued = false;
 let _domMutations: MutationRecord[] = [];
+const DOM_TEXT_SCAN_LIMIT = 600;
 
 function shouldSkipDomText(node: Node) {
     const element = node.nodeType === Node.TEXT_NODE
@@ -519,15 +524,64 @@ function shouldSkipDomText(node: Node) {
     return Boolean(element?.closest("[data-slate-editor], textarea, input, [contenteditable='true'], [role='textbox']"));
 }
 
+function shouldProcessDomMutation(mutation: MutationRecord) {
+    if (shouldSkipDomText(mutation.target)) return false;
+    if (mutation.type === "characterData") return nodeHasReplacementText(mutation.target);
+    return Array.from(mutation.addedNodes).some(nodeHasReplacementText);
+}
+
+function getCachedRealDateVariants() {
+    let key = "";
+    try { key = UserStore.getCurrentUser()?.id ?? ""; } catch { }
+    if (key === _realDateCacheKey) return _realDateCache;
+    _realDateCacheKey = key;
+    _realDateCache = getRealDateVariants();
+    return _realDateCache;
+}
+
+function getCachedFakeDateVariants(isoDate: string) {
+    if (isoDate === _fakeDateCacheKey) return _fakeDateCache;
+    _fakeDateCacheKey = isoDate;
+    _fakeDateCache = getFakeDateVariants(isoDate);
+    return _fakeDateCache;
+}
+
+function hasReplacementText(text: string | null) {
+    if (!text) return false;
+    if (_realUsername && storedData.username && text.includes(_realUsername)) return true;
+    if (_realGlobalName && storedData.globalName && text.includes(_realGlobalName)) return true;
+    if (!storedData.createdAt) return false;
+    return getCachedRealDateVariants().some(realDate =>
+        realDate.length >= 4 && (text.includes(realDate) || text.toLowerCase().includes(realDate.toLowerCase()))
+    );
+}
+
+function nodeHasReplacementText(node: Node, limit = DOM_TEXT_SCAN_LIMIT) {
+    if (shouldSkipDomText(node)) return false;
+    if (node.nodeType === Node.TEXT_NODE) return hasReplacementText((node as Text).nodeValue);
+    if (!(node instanceof Element)) return false;
+    if (node.childElementCount === 0) return hasReplacementText(node.textContent);
+
+    const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
+    let n: Node | null;
+    let checked = 0;
+    while ((n = walker.nextNode())) {
+        if (checked++ >= limit) return false;
+        if (!shouldSkipDomText(n) && hasReplacementText((n as Text).nodeValue)) return true;
+    }
+    return false;
+}
+
 function scanTextNode(node: Text) {
     if (!isEnabled || !node.nodeValue) return;
     if (shouldSkipDomText(node)) return;
-    const val = (node as any).__cp_orig || node.nodeValue;
-    let result = val;
     try { if (_trueOriginalUser) { _realUsername = _trueOriginalUser.username || _realUsername; _realGlobalName = _trueOriginalUser.globalName || _realGlobalName; } } catch { }
+    const val = (node as any).__cp_orig || node.nodeValue;
+    if (!hasReplacementText(val)) return;
+    let result = val;
     let replaced = false;
     if (storedData.createdAt) {
-        const realDates = getRealDateVariants(); const fakeDates = getFakeDateVariants(storedData.createdAt);
+        const realDates = getCachedRealDateVariants(); const fakeDates = getCachedFakeDateVariants(storedData.createdAt);
         if (realDates.length > 0 && fakeDates.length > 0) {
             for (let i = 0; i < realDates.length; i++) {
                 const realDate = realDates[i];
@@ -545,16 +599,26 @@ function scanTextNode(node: Text) {
 function scanNode(node: Node) {
     if (shouldSkipDomText(node)) return;
     if (node.nodeType === Node.TEXT_NODE) { scanTextNode(node as Text); return; }
+    if (node instanceof Element && node.childElementCount === 0 && !hasReplacementText(node.textContent)) return;
     const walker = document.createTreeWalker(node, NodeFilter.SHOW_TEXT);
     let n: Node | null;
-    while ((n = walker.nextNode())) scanTextNode(n as Text);
+    let scanned = 0;
+    while ((n = walker.nextNode())) {
+        if (scanned++ >= DOM_TEXT_SCAN_LIMIT) break;
+        scanTextNode(n as Text);
+    }
 }
 
 function processDomBatch() {
     _domQueued = false;
     if (!isEnabled) { _domMutations = []; return; }
     const batch = _domMutations; _domMutations = [];
-    for (const m of batch) { if (m.type === "characterData") scanTextNode(m.target as Text); else for (const n of m.addedNodes) scanNode(n); }
+    for (const m of batch) {
+        if (m.type === "characterData") scanTextNode(m.target as Text);
+        else for (const n of m.addedNodes) {
+            if (nodeHasReplacementText(n)) scanNode(n);
+        }
+    }
 }
 
 function startDomObserver() {
@@ -569,10 +633,12 @@ function startDomObserver() {
     runInitialScan();
     domObserver = new MutationObserver(mutations => {
         if (!isEnabled || !mutations.length) return;
-        _domMutations.push(...mutations);
+        const relevantMutations = mutations.filter(shouldProcessDomMutation);
+        if (!relevantMutations.length) return;
+        _domMutations.push(...relevantMutations);
         if (!_domQueued) { _domQueued = true; setTimeout(() => requestAnimationFrame(processDomBatch), 10); }
     });
-    domObserver.observe(document.body, { childList: true, subtree: true, characterData: true });
+    domObserver.observe(document.body, { childList: true, subtree: true });
 }
 
 function stopDomObserver() {

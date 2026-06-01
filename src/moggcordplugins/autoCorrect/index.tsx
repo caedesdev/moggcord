@@ -172,14 +172,14 @@ export default definePlugin({
         render: AutoCorrectChatBarButton,
     },
 
-    async onBeforeMessageSend(_channelId: string, message: { content: string; }) {
+    onBeforeMessageSend(_channelId: string, message: { content: string; }) {
         if (!settings.store.isActive) return;
         if (!message.content || message.content.trim().length < 3) return;
 
-        const corrected = await correctText(message.content);
-        if (corrected && corrected !== message.content) {
-            message.content = corrected;
-        }
+        return correctText(message.content).then(corrected => {
+            if (corrected && corrected !== message.content) {
+                message.content = corrected;
+            }
+        });
     },
 });
-

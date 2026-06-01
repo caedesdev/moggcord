@@ -238,8 +238,10 @@ export default definePlugin({
     },
 
     flux: {
-        async MESSAGE_CREATE({ message, optimistic }: { message: any; optimistic?: boolean; }) {
+        MESSAGE_CREATE({ message, optimistic }: { message: any; optimistic?: boolean; }) {
+            if (!settings.store.active) return;
             if (optimistic) return;
+            if (!message?.content?.trim()) return;
             if (!message?.author?.id || !message?.channel_id) return;
 
             const currentUser = UserStore?.getCurrentUser?.();

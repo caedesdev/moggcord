@@ -826,16 +826,24 @@ export default definePlugin({
             });
         }
 
-        this.preSend = addMessagePreSendListener(async (channelId, messageObj, extra) => {
+        this.preSend = addMessagePreSendListener((channelId, messageObj, extra) => {
             const { guildId } = this;
+            const stickers = extra.stickers ?? [];
+            const emojis = messageObj.validNonShortcutEmojis ?? [];
+            const hasStickers = stickers.length > 0;
+            const hasEmojis = s.enableEmojiBypass && emojis.length > 0;
+
+            if (!hasStickers && !hasEmojis) return { cancel: false };
 
             let hasBypass = false;
 
             stickerBypass: {
                 if (!s.enableStickerBypass)
                     break stickerBypass;
+                if (!hasStickers)
+                    break stickerBypass;
 
-                const sticker = StickersStore.getStickerById(extra.stickers?.[0]!);
+                const sticker = StickersStore.getStickerById(stickers[0]);
                 if (!sticker)
                     break stickerBypass;
 
@@ -879,8 +887,8 @@ export default definePlugin({
                 }
             }
 
-            if (s.enableEmojiBypass) {
-                for (const emoji of messageObj.validNonShortcutEmojis) {
+            if (hasEmojis) {
+                for (const emoji of emojis) {
                     if (this.canUseEmote(emoji, channelId)) continue;
 
                     hasBypass = true;
@@ -901,16 +909,15 @@ export default definePlugin({
             }
 
             if (hasBypass && !s.disableEmbedPermissionCheck && !hasEmbedPerms(channelId)) {
-                if (!await cannotEmbedNotice()) {
-                    return { cancel: true };
-                }
+                return cannotEmbedNotice().then(confirmed => ({ cancel: !confirmed }));
             }
 
             return { cancel: false };
         });
 
-        this.preEdit = addMessagePreEditListener(async (channelId, __, messageObj) => {
+        this.preEdit = addMessagePreEditListener((channelId, __, messageObj) => {
             if (!s.enableEmojiBypass) return;
+            if (!messageObj.content) return;
 
             let hasBypass = false;
 
@@ -932,9 +939,7 @@ export default definePlugin({
             });
 
             if (hasBypass && !s.disableEmbedPermissionCheck && !hasEmbedPerms(channelId)) {
-                if (!await cannotEmbedNotice()) {
-                    return { cancel: true };
-                }
+                return cannotEmbedNotice().then(confirmed => ({ cancel: !confirmed }));
             }
 
             return { cancel: false };

@@ -12,7 +12,7 @@ import { classNameFactory } from "@utils/css";
 import definePlugin, { OptionType } from "@utils/types";
 import { DiscordPlatform, User } from "@vencord/discord-types";
 import { filters, findStoreLazy, mapMangledModuleLazy } from "@webpack";
-import { AuthenticationStore, PresenceStore, Tooltip, UserStore, useStateFromStores } from "@webpack/common";
+import { AuthenticationStore, PresenceStore, Tooltip, UserStore } from "@webpack/common";
 
 const cl = classNameFactory("vc-platform-");
 
@@ -39,6 +39,59 @@ const platformMap = {
     embedded: "Console",
     vr: "VR"
 };
+
+const STATUS_CACHE_TTL_MS = 2500;
+const STATUS_CACHE_MAX_SIZE = 5000;
+
+let cachedSessions: Record<string, Session> | null = null;
+let cachedOwnStatus: Record<string, string> | null = null;
+const clientStatusCache = new Map<string, {
+    expiresAt: number;
+    entries: Array<[string, string]>;
+}>();
+
+function getStatusRank(status: string) {
+    if (status === "online") return 3;
+    if (status === "idle") return 2;
+    if (status === "dnd") return 1;
+    return 0;
+}
+
+function getOwnStatus(sessions: Record<string, Session>) {
+    if (sessions === cachedSessions && cachedOwnStatus) return cachedOwnStatus;
+
+    const ownStatus: Record<string, string> = {};
+    for (const session of Object.values(sessions)) {
+        const { client } = session.clientInfo;
+        if (client === "unknown") continue;
+
+        const currentStatus = ownStatus[client];
+        if (!currentStatus || getStatusRank(session.status) > getStatusRank(currentStatus)) {
+            ownStatus[client] = session.status;
+        }
+    }
+
+    cachedSessions = sessions;
+    cachedOwnStatus = ownStatus;
+    return ownStatus;
+}
+
+function getCachedClientStatus(userId: string) {
+    const now = Date.now();
+    const cached = clientStatusCache.get(userId);
+    if (cached && cached.expiresAt > now) return cached.entries;
+
+    const status = PresenceStore.getClientStatus(userId) as Record<string, string> | null | undefined;
+    const entries = status ? Object.entries(status) : [];
+    clientStatusCache.set(userId, { expiresAt: now + STATUS_CACHE_TTL_MS, entries });
+
+    if (clientStatusCache.size > STATUS_CACHE_MAX_SIZE) {
+        const firstKey = clientStatusCache.keys().next().value;
+        if (firstKey) clientStatusCache.delete(firstKey);
+    }
+
+    return entries;
+}
 
 function Icon(path: string, opts?: { viewBox?: string; width?: number; height?: number; }) {
     return ({ color, tooltip, small }: { color: string; tooltip: string; small: boolean; }) => (
@@ -92,30 +145,25 @@ const PlatformIcon = ({ platform, status, small }) => {
     return <Icon color={useStatusFillColor(status)} tooltip={tooltip} small={small} />;
 };
 
-function useEnsureOwnStatus(user: User) {
+function ensureOwnStatus(user: User) {
     if (user.id !== AuthenticationStore.getId()) {
         return;
     }
 
-    const sessions = useStateFromStores([SessionsStore], () => SessionsStore.getSessions());
+    const sessions = SessionsStore.getSessions();
     if (typeof sessions !== "object") return null;
-    const sortedSessions = Object.values(sessions).sort(({ status: a }, { status: b }) => {
-        if (a === b) return 0;
-        if (a === "online") return 1;
-        if (b === "online") return -1;
-        if (a === "idle") return 1;
-        if (b === "idle") return -1;
-        return 0;
-    });
 
-    const ownStatus = Object.values(sortedSessions).reduce((acc, curr) => {
-        if (curr.clientInfo.client !== "unknown")
-            acc[curr.clientInfo.client] = curr.status;
-        return acc;
-    }, {});
+    const ownStatus = getOwnStatus(sessions);
 
     const { clientStatuses } = PresenceStore.getState();
-    clientStatuses[UserStore.getCurrentUser().id] = ownStatus;
+    const currentUserId = UserStore.getCurrentUser().id;
+    if (clientStatuses[currentUserId] !== ownStatus) {
+        clientStatuses[currentUserId] = ownStatus;
+        clientStatusCache.set(currentUserId, {
+            expiresAt: Date.now() + STATUS_CACHE_TTL_MS,
+            entries: Object.entries(ownStatus)
+        });
+    }
 }
 
 interface PlatformIndicatorProps {
@@ -133,12 +181,12 @@ const PlatformIndicator = ({ user, isProfile, isMessage, isMemberList }: Platfor
     if (isMessage && !settings.store.messages) return null;
     if (isMemberList && !settings.store.list) return null;
 
-    useEnsureOwnStatus(user);
+    ensureOwnStatus(user);
 
-    const status = useStateFromStores([PresenceStore], () => PresenceStore.getClientStatus(user.id));
-    if (!status || Object.keys(status).length === 0) return null;
+    const statusEntries = getCachedClientStatus(user.id);
+    if (statusEntries.length === 0) return null;
 
-    const icons = Array.from(Object.entries(status), ([platform, status]) => (
+    const icons = statusEntries.map(([platform, status]) => (
         <PlatformIcon
             key={platform}
             platform={platform as DiscordPlatform}

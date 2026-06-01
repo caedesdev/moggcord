@@ -19,6 +19,7 @@
 import "./styles.css";
 
 import { findGroupChildrenByChildId, NavContextMenuPatchCallback } from "@api/ContextMenu";
+import { updateMessage } from "@api/MessageUpdater";
 import { Devs } from "@utils/constants";
 import definePlugin from "@utils/types";
 import { Message } from "@vencord/discord-types";
@@ -26,7 +27,7 @@ import { ChannelStore, Menu } from "@webpack/common";
 
 import { settings } from "./settings";
 import { setShouldShowTranslateEnabledTooltip, TranslateChatBarIcon, TranslateIcon } from "./TranslateIcon";
-import { handleTranslate, TranslationAccessory } from "./TranslationAccessory";
+import { handleTranslate, hasTranslation, TranslationAccessory } from "./TranslationAccessory";
 import { translate } from "./utils";
 
 const messageCtxPatch: NavContextMenuPatchCallback = (children, { message }: { message: Message; }) => {
@@ -44,6 +45,7 @@ const messageCtxPatch: NavContextMenuPatchCallback = (children, { message }: { m
             action={async () => {
                 const trans = await translate("received", content);
                 handleTranslate(message.id, trans);
+                updateMessage(message.channel_id, message.id);
             }}
         />
     ));
@@ -72,7 +74,10 @@ export default definePlugin({
     // not used, just here in case some other plugin wants it or w/e
     translate,
 
-    renderMessageAccessory: props => <TranslationAccessory message={props.message} />,
+    renderMessageAccessory({ message }: { message?: Message; }) {
+        if (!message || !hasTranslation(message.id)) return null;
+        return <TranslationAccessory message={message} />;
+    },
 
     start() {
         // Force disable auto-translate on startup — must never be active
@@ -103,12 +108,13 @@ export default definePlugin({
                 onClick: async () => {
                     const trans = await translate("received", content);
                     handleTranslate(message.id, trans);
+                    updateMessage(message.channel_id, message.id);
                 }
             };
         }
     },
 
-    async onBeforeMessageSend(_, message) {
+    onBeforeMessageSend(_, message) {
         if (!settings.store.autoTranslate) return;
         if (!message.content) return;
 
@@ -116,7 +122,8 @@ export default definePlugin({
         clearTimeout(tooltipTimeout);
         tooltipTimeout = setTimeout(() => setShouldShowTranslateEnabledTooltip?.(false), 2000);
 
-        const trans = await translate("sent", message.content);
-        message.content = trans.text;
+        return translate("sent", message.content).then(trans => {
+            message.content = trans.text;
+        });
     }
 });

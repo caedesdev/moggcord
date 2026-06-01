@@ -173,6 +173,7 @@ let isLoadingMessages = false;
 
 function cacheMsg(msg: any) {
     if (!msg?.id) return;
+    if (!msg.content?.trim()) return;
     // FIX: Ne pas purger le cache pendant un chargement de messages (scroll DM)
     // La purge en plein milieu d'un LOAD_MESSAGES_SUCCESS forçait un recalcul des
     // globalPaths Node qui entrait en conflit avec la virtualisation Discord.
@@ -624,21 +625,26 @@ function subscribeToEvents() {
     };
 
     sub("MESSAGE_CREATE", d => {
-        if (d.message) {
-            cacheMsg(d.message);
-            const meId = UserStore?.getCurrentUser?.()?.id;
-            if (meId && d.message.mentions?.some((m: any) => m.id === meId)) {
-                const a = authorFrom(d.message);
-                pushLog({
-                    type: "ping",
-                    content: d.message.content || "",
-                    authorId: a.authorId ?? "",
-                    authorName: a.authorName,
-                    authorAvatar: a.authorAvatar,
-                    realId: d.message.id,
-                    ...chInfo(d.message.channel_id)
-                });
-            }
+        const { message } = d;
+        if (!message || d.optimistic) return;
+
+        const hasContent = Boolean(message.content?.trim());
+        if (!hasContent && !message.mentions?.length) return;
+
+        if (hasContent) cacheMsg(message);
+
+        const meId = UserStore?.getCurrentUser?.()?.id;
+        if (meId && message.mentions?.some((m: any) => m.id === meId)) {
+            const a = authorFrom(message);
+            pushLog({
+                type: "ping",
+                content: message.content || "",
+                authorId: a.authorId ?? "",
+                authorName: a.authorName,
+                authorAvatar: a.authorAvatar,
+                realId: message.id,
+                ...chInfo(message.channel_id)
+            });
         }
     });
     sub("LOAD_MESSAGES_SUCCESS", d => {
