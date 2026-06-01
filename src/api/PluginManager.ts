@@ -26,7 +26,7 @@ import { addMessageDecoration, removeMessageDecoration } from "@api/MessageDecor
 import { addMessageClickListener, addMessagePreEditListener, addMessagePreSendListener, removeMessageClickListener, removeMessagePreEditListener, removeMessagePreSendListener } from "@api/MessageEvents";
 import { addMessagePopoverButton, removeMessagePopoverButton } from "@api/MessagePopover";
 import { addNicknameIcon, removeNicknameIcon } from "@api/NicknameIcons";
-import { FORCE_DISABLED_DEFAULT_PLUGIN_KEYS, Settings, SettingsStore } from "@api/Settings";
+import { Settings, SettingsStore } from "@api/Settings";
 import { disableStyle, enableStyle } from "@api/Styles";
 import { Logger } from "@utils/Logger";
 import { onlyOnce } from "@utils/onlyOnce";
@@ -380,40 +380,47 @@ export const initPluginManager = onlyOnce(function init() {
 
     const neededApiPlugins = new Set<string>();
 
-    // One-time: undo earlier Moggcord migrations that bulk-disabled plugins.
-    const RESTORE_FLAG = "__moggcord_restore_plugins_v1__";
     const plain = SettingsStore.plain as Record<string, unknown>;
-    if (!plain[RESTORE_FLAG]) {
-        let restored = 0;
 
-        if (plain.__moggcord_discord_553187_incompat_v1__) {
-            const shc = SettingsStore.plain.plugins.ShowHiddenChannels;
-            if (!shc) SettingsStore.plain.plugins.ShowHiddenChannels = { enabled: true };
-            else shc.enabled = true;
-            restored++;
-        }
+    /** Disable optional plugins; keep only required + enabledByDefault. */
+    function applyDefaultOffPlugins() {
+        let changed = 0;
+        for (const key of Object.keys(Plugins)) {
+            if (!key) continue;
+            const p = Plugins[key];
+            if (!p?.name || p.required || p.enabledByDefault) continue;
 
-        if (plain.__moggcord_default_off_v1__) {
-            for (const p of pluginsValues) {
-                if (p.required) continue;
-                const key = p.name;
-                if (FORCE_DISABLED_DEFAULT_PLUGIN_KEYS.has(key.toLowerCase())) continue;
-
-                const s = SettingsStore.plain.plugins[key];
-                if (!s) {
-                    SettingsStore.plain.plugins[key] = { enabled: true };
-                    restored++;
-                } else if (!s.enabled) {
-                    s.enabled = true;
-                    restored++;
-                }
+            const s = SettingsStore.plain.plugins[key];
+            if (!s) {
+                SettingsStore.plain.plugins[key] = { enabled: false };
+                changed++;
+            } else if (s.enabled) {
+                s.enabled = false;
+                changed++;
             }
         }
+        return changed;
+    }
 
-        plain[RESTORE_FLAG] = true;
-        if (restored) {
+    // First install: only required / enabledByDefault plugins stay on.
+    const DEFAULT_OFF_FLAG = "__moggcord_default_off_v1__";
+    if (!plain[DEFAULT_OFF_FLAG]) {
+        const changed = applyDefaultOffPlugins();
+        plain[DEFAULT_OFF_FLAG] = true;
+        if (changed) {
             SettingsStore.markAsChanged();
-            logger.info(`Re-enabled ${restored} plugin(s) after removing auto-disable migrations.`);
+            logger.info(`Disabled ${changed} optional plugin(s) (default-off policy).`);
+        }
+    }
+
+    // Undo v1.18.22–1.18.24 bulk restore that re-enabled everything.
+    const UNDO_RESTORE_FLAG = "__moggcord_undo_bulk_restore_v1__";
+    if (plain.__moggcord_restore_plugins_v1__ && !plain[UNDO_RESTORE_FLAG]) {
+        const changed = applyDefaultOffPlugins();
+        plain[UNDO_RESTORE_FLAG] = true;
+        if (changed) {
+            SettingsStore.markAsChanged();
+            logger.info(`Re-applied default-off after mistaken bulk restore (${changed} plugin(s) disabled).`);
         }
     }
 
