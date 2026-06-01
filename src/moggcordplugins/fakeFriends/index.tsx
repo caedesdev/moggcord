@@ -731,36 +731,13 @@ const userContextPatch: NavContextMenuPatchCallback = (children, props) => {
 
         if (!state && realRel !== RelationshipType.NONE) return;
 
-        const followIndex = children.findIndex((c: any) =>
-            c?.props?.id === "follow-user" || c?.key === "follow-user"
-        );
-
-        let items: React.ReactElement[] = [];
-        if (!state) {
-            items = [
-                <Menu.MenuItem key="ff-friend" id="ff-friend" label="Fake Friend" action={() => doFakeFriend(userId)} />,
-                <Menu.MenuItem key="ff-request" id="ff-request" label="Fake Friend Request" action={() => doFakeFriendRequest(userId)} />,
-            ];
-        } else if (state === "pending") {
-            items = [
-                <Menu.MenuItem key="ff-cancel" id="ff-cancel" label="Cancel la fake demande" color="danger"
-                    action={async () => {
-                        await removeFakeFriendById(userId);
-                    }} />
-            ];
-        } else {
-            items = [
-                <Menu.MenuItem key="ff-remove" id="ff-remove" label="Retirer des fake friends" color="danger"
-                    action={async () => {
-                        await removeFakeFriendById(userId);
-                    }} />
-            ];
-        }
-
-        const group = <Menu.MenuGroup key="ff-group" label="Fake Friends">{items}</Menu.MenuGroup>;
-
-        if (followIndex !== -1) children.splice(followIndex + 1, 0, group);
-        else children.push(<Menu.MenuSeparator key="ff-sep" />, group);
+        items.forEach(item => {
+            require("../../utils/moggcordContextMenu").addCategorizedUserContextItem(
+                children,
+                "Spoofing",
+                item
+            );
+        });
     } catch (e) {
         console.error("[FakeFriends] Context menu patch error:", e);
     }

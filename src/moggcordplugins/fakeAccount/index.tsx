@@ -316,7 +316,9 @@ const ctxPatch: NavContextMenuPatchCallback = (children, { user }) => {
     if (!children || !Array.isArray(children)) return;
     try {
         if (!user || user.id === UserStore.getCurrentUser()?.id) return;
-        children.push(
+        require("../../utils/moggcordContextMenu").addCategorizedUserContextItem(
+            children,
+            "Spoofing",
             <Menu.MenuItem
                 id="fake-account-add"
                 label="Add to Switcher (Fake)"

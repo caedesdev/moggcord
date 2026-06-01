@@ -403,44 +403,46 @@ const userContextMenuPatch: NavContextMenuPatchCallback = (children, { user }: a
         if (!me || user.id === me.id) return;
         const isCopied = isEnabled && storedData.copiedUserId === user.id;
 
-        children.push(
-            <Menu.MenuGroup>
-                {isCopied ? (
-                    <Menu.MenuItem
-                        id="remove-copy-profile"
-                        label={t("Remove copy profile")}
-                        color="danger"
-                        action={() => {
-                            try {
-                                const myId = AuthenticationStore?.getId?.();
-                                if (myId) {
-                                    delete allAccountsData[myId];
-                                    delete allAccountsEnabled[myId];
-                                }
-                                storedData = {};
-                                isEnabled = false;
-                                saveDataSync({}, false);
-                                cachedFakeUser = null;
-                                cachedOriginalUser = null;
-                                _trueOriginalUser = null;
-                                _dataVersion++;
-                                saveAllDataSync();
-                                DataStore.set(DS_ALL_DATA, allAccountsData).catch(() => { });
-                                DataStore.set(DS_ALL_ENABLED, allAccountsEnabled).catch(() => { });
-                                forceAccountPanelRerender();
-                            } catch (e) {
-                                console.error("[CustomProfile] Error removing copy:", e);
-                            }
-                        }}
-                    />
-                ) : (
-                    <Menu.MenuItem
-                        id="copy-user-profile"
-                        label={t("Copy this profile")}
-                        action={() => copyUserProfile(user.id)}
-                    />
-                )}
-            </Menu.MenuGroup>
+        const menuItem = isCopied ? (
+            <Menu.MenuItem
+                id="remove-copy-profile"
+                label={t("Remove copy profile")}
+                color="danger"
+                action={() => {
+                    try {
+                        const myId = AuthenticationStore?.getId?.();
+                        if (myId) {
+                            delete allAccountsData[myId];
+                            delete allAccountsEnabled[myId];
+                        }
+                        storedData = {};
+                        isEnabled = false;
+                        saveDataSync({}, false);
+                        cachedFakeUser = null;
+                        cachedOriginalUser = null;
+                        _trueOriginalUser = null;
+                        _dataVersion++;
+                        saveAllDataSync();
+                        DataStore.set(DS_ALL_DATA, allAccountsData).catch(() => { });
+                        DataStore.set(DS_ALL_ENABLED, allAccountsEnabled).catch(() => { });
+                        forceAccountPanelRerender();
+                    } catch (e) {
+                        console.error("[CustomProfile] Error removing copy:", e);
+                    }
+                }}
+            />
+        ) : (
+            <Menu.MenuItem
+                id="copy-user-profile"
+                label={t("Copy this profile")}
+                action={() => copyUserProfile(user.id)}
+            />
+        );
+
+        require("../../utils/moggcordContextMenu").addCategorizedUserContextItem(
+            children,
+            "Customization",
+            menuItem
         );
     } catch (err) {
         console.error("[CustomProfile] Context menu patch error:", err);

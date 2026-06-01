@@ -397,7 +397,9 @@ const userContextMenuPatch: NavContextMenuPatchCallback = (children, { user }: a
     const channelId = (ChannelStore as any).getDMFromUserId?.(user.id);
     if (!channelId) return;
 
-    children.push(
+    require("../../utils/moggcordContextMenu").addCategorizedUserContextItem(
+        children,
+        "Customization",
         buildWallpaperMenu(channelId)
     );
 };

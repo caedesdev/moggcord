@@ -153,6 +153,15 @@ function makeContextMenuPatch(childId: string | string[], type?: MenuItemParentT
 
         if (item == null) return;
 
+        if (type === MenuItemParentType.User) {
+            require("../../utils/moggcordContextMenu").addCategorizedUserContextItem(
+                children,
+                "Moggcord Utilities",
+                item
+            );
+            return;
+        }
+
         if (group) {
             return group.push(item);
         }
