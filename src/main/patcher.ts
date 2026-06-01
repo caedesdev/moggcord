@@ -25,7 +25,7 @@ import { registerMediaPermissionsForSession } from "../moggcord/main/mediaPermis
 import { crashLog, crashLogPath, installCrashLogHandlers } from "./crashLog";
 import { installMoggcordHomeIcon } from "./homeButtonIcon";
 import { installMoggcordLoadingScreen } from "./loadingScreen";
-import { validateMoggcordDist, syncDistToLocal } from "./moggcordLoader";
+import { validateMoggcordDist, syncDistToLocal, getPatcherInstallDir } from "./moggcordLoader";
 import { injectNoDragGuard } from "./noDragGuard";
 import { schedulePostInstallRelaunchIfNeeded, clearPendingRelaunchMarker } from "./postInstallRelaunch";
 import { isLiveWindow } from "./safeWebContents";
@@ -41,13 +41,15 @@ console.log("[Moggcord] Starting up...");
 installCrashLogHandlers(app);
 console.log("[Moggcord] Crash diagnostics enabled — log:", crashLogPath());
 
-syncDistToLocal(__dirname);
-if (!validateMoggcordDist(__dirname)) {
+const PATCHER_DIR = getPatcherInstallDir();
+syncDistToLocal(PATCHER_DIR);
+if (!validateMoggcordDist(PATCHER_DIR)) {
     console.error("[Moggcord] Re-install Moggcord or run pnpm inject — renderer bundle incomplete.");
 }
 
 // Our injector file at app/index.js
-const injectorPath = require.main!.filename;
+const injectorPath = require.main?.filename
+    ?? join(process.resourcesPath, "app", "index.js");
 
 // The original app.asar
 // With Discord's newUpdater system, _app.asar may not exist as a real file.
@@ -113,7 +115,7 @@ if (!IS_VANILLA) {
             if (options?.webPreferences?.preload && options.title && !isDiscordPopout) {
                 const original = options.webPreferences.preload;
                 const isMainWindow = options.title === "Discord";
-                options.webPreferences.preload = join(__dirname, "preload.js");
+                options.webPreferences.preload = join(PATCHER_DIR, "preload.js");
                 options.webPreferences.sandbox = false;
                 // work around discord unloading when in background
                 options.webPreferences.backgroundThrottling = false;

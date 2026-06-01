@@ -345,6 +345,7 @@ const resolved = candidates.find(p => { try { return fs.existsSync(p); } catch {
 if (!resolved) {
     throw new Error("[Moggcord] patcher.js not found. Run: pnpm build && pnpm inject:dev");
 }
+process.env.MOGGCORD_PATCHER_DIR = path.dirname(resolved);
 require(resolved);
 `
     );
