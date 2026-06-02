@@ -424,6 +424,12 @@ export const initPluginManager = onlyOnce(function init() {
         }
     }
 
+    if (!settings.MessageLoggerEnhanced?.enabled && settings.MessageLogger?.enabled) {
+        settings.MessageLogger.enabled = false;
+        SettingsStore.markAsChanged();
+        logger.info("Disabled hidden MessageLogger because MessageLoggerEnhanced is off.");
+    }
+
     // First round-trip to mark and force enable dependencies
     //
     // FIXME: might need to revisit this if there's ever nested (dependencies of dependencies) dependencies since this only
