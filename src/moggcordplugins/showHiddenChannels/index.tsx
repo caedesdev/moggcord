@@ -25,7 +25,7 @@ import { classNameFactory } from "@utils/css";
 import { classes } from "@utils/misc";
 import definePlugin, { OptionType } from "@utils/types";
 import type { Channel, Role } from "@vencord/discord-types";
-import { ChannelStore, PermissionsBits, PermissionStore, Tooltip } from "@webpack/common";
+import { ChannelStore, FluxDispatcher, PermissionsBits, PermissionStore, Tooltip } from "@webpack/common";
 
 import HiddenChannelLockScreen, { setChannelBeginHeader } from "./components/HiddenChannelLockScreen";
 import { TextChannelLockOverlay } from "./textChannelLockOverlay";
@@ -49,6 +49,17 @@ const enum ChannelStyle {
 }
 
 const CONNECT = 1n << 20n;
+const NO_ACCESS_CHANNEL_NAME = "No access";
+const PRIVATE_CHANNEL_HIDING_EXPERIMENT_ID = "2026-02-private-channel-hiding";
+const NOT_ELIGIBLE_EXPERIMENT_BUCKET = "-1";
+
+function disablePrivateChannelHidingExperiment() {
+    void FluxDispatcher.dispatch({
+        type: "EXPERIMENT_OVERRIDE_BUCKET",
+        experimentId: PRIVATE_CHANNEL_HIDING_EXPERIMENT_ID,
+        experimentBucket: NOT_ELIGIBLE_EXPERIMENT_BUCKET
+    });
+}
 
 export const settings = definePluginSettings({
     channelStyle: {
@@ -101,7 +112,7 @@ export default definePlugin({
                 // Remove the special logic for channels we don't have access to
                 {
                     match: /if\(!\i\.\i\.can\(\i\.\i\.VIEW_CHANNEL.+?{if\(this\.id===\i\).+?threadIds:\[\]}}/,
-                    replace: ""
+                    replace: "if($self.isNoAccessChannel(this.record))return{renderLevel:1,threadIds:[]};"
                 },
                 // Do not check for unreads when selecting the render level if the channel is hidden
                 {
@@ -624,6 +635,8 @@ export default definePlugin({
     },
 
     start() {
+        disablePrivateChannelHidingExperiment();
+
         textChannelLockOverlay = new TextChannelLockOverlay(this);
         textChannelLockOverlay.start();
     },
@@ -666,8 +679,6 @@ export default definePlugin({
     },
 
     resolveGuildChannels(channels: Record<string | number, Array<{ channel: Channel; comparator: number; }> | string | number>, shouldIncludeHidden: boolean) {
-        if (shouldIncludeHidden) return channels;
-
         const res = {};
         for (const [key, maybeObjChannels] of Object.entries(channels)) {
             if (!Array.isArray(maybeObjChannels)) {
@@ -678,11 +689,15 @@ export default definePlugin({
             res[key] ??= [];
 
             for (const objChannel of maybeObjChannels) {
-                if (isUncategorized(objChannel) || objChannel.channel.id === null || !this.isHiddenChannel(objChannel.channel)) res[key].push(objChannel);
+                if (isUncategorized(objChannel) || objChannel.channel.id === null || !this.isNoAccessChannel(objChannel.channel) && (shouldIncludeHidden || !this.isHiddenChannel(objChannel.channel))) res[key].push(objChannel);
             }
         }
 
         return res;
+    },
+
+    isNoAccessChannel(channel: Channel) {
+        return channel?.name === NO_ACCESS_CHANNEL_NAME && !PermissionStore.can(PermissionsBits.VIEW_CHANNEL, channel);
     },
 
     makeAllowedRolesReduce(guildId: string) {
