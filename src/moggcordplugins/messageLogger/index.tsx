@@ -440,7 +440,8 @@ export const settings = definePluginSettings({
 
 export default definePlugin({
     name: "MessageLogger",
-    enabledByDefault: true,
+    enabledByDefault: false,
+    hidden: true,
     description: "Temporarily logs deleted and edited messages.",
     tags: ["Chat", "Utility"],
     authors: [Devs.rushii, Devs.Ven, Devs.AutumnVN, Devs.Nickyux, Devs.Kyuuhachi, EquicordDevs.justjxke],

@@ -72,6 +72,8 @@ async function messageDeleteHandler(payload: MessageDeletePayload & { isBulk: bo
         return;
     }
 
+    if (!settings.store.saveMessages) return;
+
     if (handledMessageIds.has(payload.id)) {
         return;
     }
@@ -125,6 +127,8 @@ async function messageDeleteHandler(payload: MessageDeletePayload & { isBulk: bo
 }
 
 async function messageDeleteBulkHandler({ channelId, guildId, ids }: MessageDeleteBulkPayload) {
+    if (!settings.store.saveMessages) return;
+
     // is this bad? idk man
     const messages = [] as LoggedMessageJSON[];
     for (const id of ids) {
@@ -147,6 +151,8 @@ async function messageDeleteBulkHandler({ channelId, guildId, ids }: MessageDele
 }
 
 async function messageUpdateHandler(payload: MessageUpdatePayload) {
+    if (!settings.store.saveMessages) return;
+
     const cachedMessage = cacheSentMessages.get(`${payload.message.channel_id},${payload.message.id}`);
     if (
         shouldIgnore({
@@ -197,6 +203,7 @@ async function messageUpdateHandler(payload: MessageUpdatePayload) {
 }
 
 function messageCreateHandler(payload: MessageCreatePayload) {
+    if (!settings.store.saveMessages) return;
     if (payload.optimistic) return;
 
     if (!settings.store.saveImages && isMediaOnlyMessage(payload.message)) return;
@@ -217,6 +224,8 @@ function messageCreateHandler(payload: MessageCreatePayload) {
 }
 
 async function processMessageFetch(response: FetchMessagesResponse) {
+    if (!settings.store.saveMessages) return;
+
     try {
         if (!response.ok) {
             Flogger.error("Failed to fetch messages", response);
@@ -278,7 +287,7 @@ async function processMessageFetch(response: FetchMessagesResponse) {
 
 export default definePlugin({
     name: "MessageLoggerEnhanced",
-    enabledByDefault: true,
+    enabledByDefault: false,
     authors: [Devs.Aria, EquicordDevs.keircn],
     description: "Improves MessageLogger with edited message history, ghost ping detection and more",
     tags: ["Chat", "Servers"],
