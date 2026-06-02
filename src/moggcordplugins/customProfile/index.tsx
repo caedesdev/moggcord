@@ -204,6 +204,10 @@ function loadDataSync() {
     }
 }
 
+function needsDomTextObserver() {
+    return isEnabled && Boolean(storedData.username || storedData.globalName || storedData.createdAt);
+}
+
 function onAccountSwitch() {
     updateCachedRealData();
     syncCurrentUserData();
@@ -213,7 +217,7 @@ function onAccountSwitch() {
     _dataVersion++;
     _realUsername = "";
     _realGlobalName = "";
-    if (isEnabled) startDomObserver();
+    if (needsDomTextObserver()) startDomObserver();
     else stopDomObserver();
     forceAccountPanelRerender();
 }
@@ -517,6 +521,7 @@ function updateCachedRealData() {
 
 let _domQueued = false;
 let _domMutations: MutationRecord[] = [];
+let _domPatchedText = false;
 const DOM_TEXT_SCAN_LIMIT = 600;
 
 function shouldSkipDomText(node: Node) {
@@ -527,6 +532,7 @@ function shouldSkipDomText(node: Node) {
 }
 
 function shouldProcessDomMutation(mutation: MutationRecord) {
+    if (!needsDomTextObserver()) return false;
     if (shouldSkipDomText(mutation.target)) return false;
     if (mutation.type === "characterData") return nodeHasReplacementText(mutation.target);
     return Array.from(mutation.addedNodes).some(nodeHasReplacementText);
@@ -575,7 +581,7 @@ function nodeHasReplacementText(node: Node, limit = DOM_TEXT_SCAN_LIMIT) {
 }
 
 function scanTextNode(node: Text) {
-    if (!isEnabled || !node.nodeValue) return;
+    if (!needsDomTextObserver() || !node.nodeValue) return;
     if (shouldSkipDomText(node)) return;
     try { if (_trueOriginalUser) { _realUsername = _trueOriginalUser.username || _realUsername; _realGlobalName = _trueOriginalUser.globalName || _realGlobalName; } } catch { }
     const val = (node as any).__cp_orig || node.nodeValue;
@@ -595,7 +601,7 @@ function scanTextNode(node: Text) {
     }
     if (_realUsername && storedData.username && result.includes(_realUsername)) { result = result.split(_realUsername).join(storedData.username); replaced = true; }
     if (_realGlobalName && storedData.globalName && result.includes(_realGlobalName)) { result = result.split(_realGlobalName).join(storedData.globalName); replaced = true; }
-    if (replaced && result !== node.nodeValue) { if ((node as any).__cp_orig === undefined) (node as any).__cp_orig = val; node.nodeValue = result; }
+    if (replaced && result !== node.nodeValue) { if ((node as any).__cp_orig === undefined) (node as any).__cp_orig = val; node.nodeValue = result; _domPatchedText = true; }
 }
 
 function scanNode(node: Node) {
@@ -613,7 +619,7 @@ function scanNode(node: Node) {
 
 function processDomBatch() {
     _domQueued = false;
-    if (!isEnabled) { _domMutations = []; return; }
+    if (!needsDomTextObserver()) { _domMutations = []; return; }
     const batch = _domMutations; _domMutations = [];
     for (const m of batch) {
         if (m.type === "characterData") scanTextNode(m.target as Text);
@@ -624,7 +630,7 @@ function processDomBatch() {
 }
 
 function startDomObserver() {
-    stopDomObserver(); if (!isEnabled) return;
+    stopDomObserver(); if (!needsDomTextObserver()) return;
     const runInitialScan = () => {
         if (typeof requestIdleCallback === "function") {
             requestIdleCallback(() => scanNode(document.body), { timeout: 3000 });
@@ -645,9 +651,11 @@ function startDomObserver() {
 
 function stopDomObserver() {
     domObserver?.disconnect(); domObserver = null;
+    if (!_domPatchedText) return;
     const walker = document.createTreeWalker(document.body, NodeFilter.SHOW_TEXT);
     let n: Node | null;
     while ((n = walker.nextNode())) { if ((n as any).__cp_orig !== undefined) { n.nodeValue = (n as any).__cp_orig; delete (n as any).__cp_orig; } }
+    _domPatchedText = false;
 }
 
 function isMe(userId: string | null | undefined): boolean {
@@ -818,7 +826,7 @@ function forceAccountPanelRerender() {
         FluxDispatcher.dispatch({ type: "USER_SETTINGS_PROTO_UPDATE", settings: { type: 1, proto: {} } });
 
         // Restart full DOM scan
-        if (isEnabled) startDomObserver();
+        if (needsDomTextObserver()) startDomObserver();
         else stopDomObserver();
     } catch { }
 }
