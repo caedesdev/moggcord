@@ -11,6 +11,7 @@ import definePlugin from "@utils/types";
 const STYLE_ID = "moggcord-settings-glint";
 const CLASS = "moggcord-glint-title";
 const TARGET_TEXT = "Moggcord Settings";
+const SCAN_INTERVAL_MS = 1000;
 
 const CSS = `
 @keyframes moggcord-glint-sweep {
@@ -32,7 +33,8 @@ const CSS = `
     background-clip: text;
     -webkit-text-fill-color: transparent;
     color: transparent !important;
-    animation: moggcord-glint-sweep 3.5s linear infinite;
+    animation: moggcord-glint-sweep 3.5s linear infinite !important;
+    animation-play-state: running !important;
 }
 `;
 
@@ -47,7 +49,7 @@ function injectStyle() {
 }
 
 function scan() {
-    if (document.querySelector("." + CLASS)) return true;
+    let matched = false;
 
     const candidates = document.querySelectorAll<HTMLElement>(CANDIDATE_SELECTOR);
     for (const el of candidates) {
@@ -55,10 +57,10 @@ function scan() {
         if (el.childElementCount !== 0) continue;
         if (el.textContent?.trim() === TARGET_TEXT) {
             el.classList.add(CLASS);
-            return true;
+            matched = true;
         }
     }
-    return false;
+    return matched;
 }
 
 let scanTimer: ReturnType<typeof setInterval> | null = null;
@@ -74,16 +76,13 @@ export default definePlugin({
         if (typeof window === "undefined") return;
 
         injectStyle();
-        if (scan()) return;
+        scan();
 
         // Settings mount later — light polling only. No body MutationObserver (startup freeze).
-        let attempts = 0;
         scanTimer = setInterval(() => {
-            if (scan() || ++attempts >= 10) {
-                if (scanTimer) clearInterval(scanTimer);
-                scanTimer = null;
-            }
-        }, 3000);
+            injectStyle();
+            scan();
+        }, SCAN_INTERVAL_MS);
     },
 
     stop() {
