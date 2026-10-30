@@ -1,0 +1,40 @@
+.vc-developer-team-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr));
+    gap: 10px;
+    margin-top: 16px;
+}
+
+.vc-developer-team-member {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    min-width: 0;
+}
+
+.vc-developer-team-details {
+    min-width: 0;
+}
+
+.vc-developer-team-name,
+.vc-developer-team-username {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin: 0;
+}
+
+.vc-developer-team-role {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    margin: 3px 0;
+    color: var(--text-muted);
+}
+
+.vc-developer-team-role svg {
+    width: 14px;
+    height: 14px;
+    color: var(--status-warning);
+}
