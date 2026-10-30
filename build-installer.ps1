@@ -38,9 +38,16 @@ $distZip = Join-Path $Root "release\installer\moggcord-dist.zip"
 $embeddedZip = Join-Path $SrcDir "moggcord-dist.zip"
 $distDesktop = Join-Path $Root "dist\desktop"
 
-if (-not (Test-Path $distZip) -and (Test-Path (Join-Path $distDesktop "patcher.js"))) {
+& node (Join-Path $Root "scripts\build\verify-release.mjs")
+if ($LASTEXITCODE -ne 0) { throw "The desktop build does not match package.json. Build again before packaging." }
+
+if (Test-Path (Join-Path $distDesktop "patcher.js")) {
     Write-Host "  [info] Building moggcord-dist.zip from dist\desktop..." -ForegroundColor DarkGray
-    if (Test-Path $distZip) { Remove-Item $distZip -Force }
+    if (Test-Path -LiteralPath $distZip) {
+        $resolvedZip = [IO.Path]::GetFullPath($distZip)
+        if ([IO.Path]::GetDirectoryName($resolvedZip) -ne [IO.Path]::GetFullPath($OutDir)) { throw "Unexpected archive path" }
+        Remove-Item -LiteralPath $resolvedZip -Force
+    }
     Add-Type -Assembly System.IO.Compression.FileSystem
     [System.IO.Compression.ZipFile]::CreateFromDirectory(
         (Resolve-Path $distDesktop).Path,

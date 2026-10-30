@@ -13,6 +13,10 @@
   ---
 </div>
 
+## Community website installation
+
+Plugins and themes can be installed from a connected website into your chosen Discord channel, with automatic activation and restart. See the [setup commands, shareable install links, and update-loop fix](docs/COMMUNITY-INSTALL.md).
+
 Moggcord is a fork of [Equicord](https://github.com/Equicord/Equicord), which itself builds on top of [Vencord](https://github.com/Vendicated/Vencord). We stripped out the obfuscation, cleaned things up, added our own stuff, and kept what works. No bloat, no nonsense.
 
 ---
