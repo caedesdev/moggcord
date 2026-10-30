@@ -11,7 +11,7 @@ import { UserAreaButton, UserAreaRenderProps } from "@api/UserArea";
 import { classNameFactory } from "@utils/css";
 import definePlugin from "@utils/types";
 import type { User } from "@vencord/discord-types";
-import { ContextMenuApi, MediaEngineStore, Menu, React, ReactDOM, UserStore, VoiceActions } from "@webpack/common";
+import { ContextMenuApi, Menu, React, ReactDOM, UserStore } from "@webpack/common";
 
 interface VoiceStateUpdate {
     channelId?: string | null;
@@ -64,17 +64,14 @@ function showStatus() {
         id: ++noticeId,
         active: isGhostActive,
         title: isGhostActive ? `${modeName()} enabled` : "Fake Voice disabled",
-        body: !isGhostActive ? "Fake status cleared. Your microphone setting stays unchanged."
-            : configFakeDeafen ? `${MediaEngineStore.isSelfMute() ? "Microphone muted." : "Check your microphone control."} Your headphone setting stays unchanged.`
-                : !voiceState?.channelId ? "Ready for your next call. Your audio controls stay unchanged."
+        body: !isGhostActive ? "Your real voice status is restored."
+            : !voiceState?.channelId ? "Ready for your next call. Your audio controls stay unchanged."
                 : `You appear ${configFakeMute && configFakeDeafen ? "muted and deafened" : configFakeMute ? "muted" : "deafened"}. Your audio controls stay unchanged.`
     };
     noticeTimer = setTimeout(dismissNotice, NOTICE_DURATION_MS);
 }
 
 function syncState(announce = true) {
-    if (isGhostActive && configFakeDeafen && !MediaEngineStore.isSelfMute()) VoiceActions.toggleSelfMute();
-    if (voiceState) voiceState = { ...voiceState, selfMute: MediaEngineStore.isSelfMute() };
     if (voiceState?.channelId) voiceSocket?.voiceStateUpdate(voiceState);
     if (announce) showStatus();
     notify();
@@ -204,7 +201,7 @@ function FakeDeafenUserButton({ iconForeground, hideTooltips, nameplate }: UserA
 
 export default definePlugin({
     name: "FakeVoice",
-    description: "Fake Deafen with a muted microphone, plus optional Fake Mute. By mushzi.",
+    description: "Appear muted or deaf while listening. By mushzi.",
     authors: [{ name: "mushzi", id: 449282863582412850n }],
     dependencies: ["CommandsAPI", "UserAreaAPI"],
     enabledByDefault: true,
@@ -281,7 +278,7 @@ export default definePlugin({
         {
             inputType: ApplicationCommandInputType.BUILT_IN,
             name: "fakedeafen",
-            description: "Toggle Fake Deafen and mute your microphone.",
+            description: "Toggle Fake Deafen.",
             execute: async (_, ctx) => {
                 toggleMode(false, true);
                 sendBotMessage(ctx.channel.id, { content: `👻 **Fake Deafen** is ${isGhostActive ? "enabled" : "disabled"}.` });
