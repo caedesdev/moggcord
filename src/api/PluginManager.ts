@@ -31,12 +31,12 @@ import { disableStyle, enableStyle } from "@api/Styles";
 import { Logger } from "@utils/Logger";
 import { onlyOnce } from "@utils/onlyOnce";
 import { canonicalizeFind, canonicalizeReplacement } from "@utils/patches";
-import { DefinedSettings, Patch, Plugin, PluginDef, PluginSettingDef, ReporterTestable, StartAt } from "@utils/types";
+import { Patch, Plugin, PluginDef, ReporterTestable, StartAt } from "@utils/types";
 import { FluxEvents } from "@vencord/discord-types";
 import { FluxDispatcher, onFluxDispatcherReady } from "@webpack/common";
 import { patches } from "@webpack/patcher";
 
-import Plugins from "~plugins";
+import Plugins, { PluginMeta } from "~plugins";
 export { Plugins as plugins };
 
 import { traceFunction } from "../debug/Tracer";
@@ -55,8 +55,6 @@ const subscribedFluxEventsPlugins = new Set<string>();
 export function isPluginEnabled(p: string) {
     const plugin = Plugins[p];
     if (!plugin) return false;
-
-
 
     return (
         plugin.required ||
@@ -290,8 +288,6 @@ export const startPlugin = traceFunction("startPlugin", function startPlugin(p: 
     return true;
 }, p => `startPlugin ${p.name}`);
 
-
-
 export const stopPlugin = traceFunction("stopPlugin", function stopPlugin(p: Plugin) {
     const {
         name, commands, contextMenus, managedStyle, userProfileBadges,
@@ -387,6 +383,7 @@ export const initPluginManager = onlyOnce(function init() {
         let changed = 0;
         for (const key of Object.keys(Plugins)) {
             if (!key) continue;
+            if (PluginMeta[key]?.userPlugin) continue;
             const p = Plugins[key];
             if (!p?.name || p.required || p.enabledByDefault) continue;
 
@@ -423,6 +420,13 @@ export const initPluginManager = onlyOnce(function init() {
             SettingsStore.markAsChanged();
             logger.info(`Re-applied default-off after mistaken bulk restore (${changed} plugin(s) disabled).`);
         }
+    }
+
+    const FULL_CATALOG_FLAG = "__moggcord_full_catalog_defaults_v1__";
+    if (!plain[FULL_CATALOG_FLAG]) {
+        applyDefaultOffPlugins();
+        plain[FULL_CATALOG_FLAG] = true;
+        SettingsStore.markAsChanged();
     }
 
     if (!settings.MessageLoggerEnhanced?.enabled && settings.MessageLogger?.enabled) {
