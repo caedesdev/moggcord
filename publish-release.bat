@@ -65,10 +65,6 @@ echo.
 echo  [3/8] Build + obfuscation en cours...
 echo        (Les fichiers JS seront obfusques automatiquement)
 
-taskkill /F /IM Discord.exe /T >nul 2>&1
-taskkill /F /IM node.exe    /T >nul 2>&1
-timeout /t 2 /nobreak >nul
-
 call pnpm build
 if errorlevel 1 (
     echo  [ERREUR] pnpm build a echoue.
@@ -82,6 +78,9 @@ echo.
 echo  [4/8] Copie des assets (ffmpeg, node, modules...) vers %DIST_DIR%...
 
 node scripts\build\collect-assets.mjs
+
+node scripts\build\verify-release.mjs "%VERSION%"
+if errorlevel 1 exit /b 1
 
 echo  [4/8] Assets copies.
 
