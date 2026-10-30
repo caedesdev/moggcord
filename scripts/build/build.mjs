@@ -26,6 +26,7 @@ import { fileURLToPath } from "url";
 
 import { BUILD_TIMESTAMP, commonOpts, exists, globPlugins, IS_DEV, IS_REPORTER, IS_COMPANION_TEST, IS_STANDALONE, IS_UPDATER_DISABLED, resolvePluginName, VERSION, commonRendererPlugins, watch, buildOrWatchAll, stringifyValues, IS_ANTI_CRASH_TEST } from "./common.mjs";
 import { obfuscateDir } from "./obfuscate.mjs";
+import { writeBuildInfo } from "../lib/build-info.mjs";
 
 const defines = stringifyValues({
     IS_STANDALONE,
@@ -252,6 +253,10 @@ if (!watch && !IS_DEV) {
 }
 */
 console.log("[build] Obfuscation disabled (source left readable).");
+
+if (!watch) {
+    writeBuildInfo("dist/desktop", VERSION);
+}
 
 await Promise.all([
     createPackage("dist/desktop", "dist/desktop.asar"),

@@ -4,7 +4,7 @@ import style from "./style.css?managed";
 
 export default definePlugin({
     name: "CleanHomeSidebar",
-    description: "Removes Library, Nitro Home, and Quests from the home sidebar. Keeps the Shop slot for Moggcord Hub.",
+    description: "Removes Library, Nitro Home, and Quests from the home sidebar.",
     tags: ["Appearance", "Home"],
     authors: [{ name: "Moggcord", id: 0n }],
     enabledByDefault: true,

@@ -391,6 +391,7 @@ export const initPluginManager = onlyOnce(function init() {
             if (!p?.name || p.required || p.enabledByDefault) continue;
 
             const s = SettingsStore.plain.plugins[key];
+            if (s?.enabled && typeof s.communityInstallHash === "string" && /^[a-f0-9]{64}$/.test(s.communityInstallHash)) continue;
             if (!s) {
                 SettingsStore.plain.plugins[key] = { enabled: false };
                 changed++;

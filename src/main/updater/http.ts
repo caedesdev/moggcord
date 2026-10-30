@@ -5,26 +5,27 @@
 import { fetchBuffer, fetchJson } from "@main/utils/http";
 import { IpcEvents } from "@shared/IpcEvents";
 import { VENCORD_USER_AGENT } from "@shared/vencordUserAgent";
-import { ipcMain, app } from "electron";
-import { writeFileSync, rmSync, existsSync, readdirSync } from "original-fs";
-import { join } from "path";
-import { exec } from "child_process";
+import { execFile } from "child_process";
+import { app,ipcMain } from "electron";
+import { cpSync, existsSync, mkdtempSync,readdirSync, rmSync, writeFileSync } from "original-fs";
+import { dirname,join, resolve } from "path";
 
+import { verifyBuild } from "../../../scripts/lib/build-info.mjs";
+import { getMoggcordLocalDistDir,getPatcherInstallDir } from "../moggcordLoader";
 import { markPendingRelaunch } from "../postInstallRelaunch";
-import { syncDistToLocal } from "../moggcordLoader";
 import { serializeErrors } from "./common";
 
 const RELEASES_REPO = "caedesdev/moggcord";
-const API_BASE      = `https://api.github.com/repos/${RELEASES_REPO}`;
-const REPO_URL      = `https://github.com/${RELEASES_REPO}`;
+const API_BASE = `https://api.github.com/repos/${RELEASES_REPO}`;
+const REPO_URL = `https://github.com/${RELEASES_REPO}`;
 declare const VERSION: string;
-const CURRENT_VERSION = `v${VERSION}`;
+let currentVersion = `v${VERSION}`;
 const ZIP_FILE = "moggcord-dist.zip";
 
-let pendingDownloadUrl: string | null  = null;
-let pendingVersion:     string | null  = null;
-let pendingZipPath:     string | null  = null;
-let isApplying                         = false;
+let pendingDownloadUrl: string | null = null;
+let pendingVersion: string | null = null;
+let pendingZipPath: string | null = null;
+let isApplying = false;
 
 async function githubGet<T = any>(endpoint: string): Promise<T> {
     return fetchJson<T>(API_BASE + endpoint, {
@@ -52,7 +53,7 @@ function psQuote(p: string): string {
 
 function runPowerShell(command: string): Promise<void> {
     return new Promise((resolve, reject) => {
-        exec(`powershell -NoProfile -NonInteractive -Command "${command}"`, err => {
+        execFile("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], { windowsHide: true }, err => {
             if (err) reject(err);
             else resolve();
         });
@@ -76,7 +77,9 @@ async function fetchUpdates(force = false): Promise<boolean> {
             const data = await githubGet("/releases/latest");
             const latestTag: string = data.tag_name ?? "";
 
-            if (!latestTag || !isNewer(CURRENT_VERSION, latestTag)) {
+            if (!latestTag || !isNewer(currentVersion, latestTag)) {
+                pendingDownloadUrl = null;
+                pendingVersion = null;
                 cachedUpdateCheck = { at: Date.now(), hasUpdate: false };
                 return false;
             }
@@ -133,7 +136,7 @@ function resolveExtractRoot(extractDir: string): string {
         if (existsSync(join(dir, "patcher.js"))) return dir;
     }
 
-    return extractDir;
+    throw new Error("No Moggcord desktop build was found in the update archive.");
 }
 
 async function applyUpdates(): Promise<boolean> {
@@ -149,19 +152,29 @@ async function applyUpdates(): Promise<boolean> {
     isApplying = true;
 
     const zipPath = pendingZipPath;
-    const destPath = __dirname;
-    const tmpExtract = join(app.getPath("temp"), `moggcord-extract-${Date.now()}`);
+    const destPath = getPatcherInstallDir();
+    const tempRoot = resolve(app.getPath("temp"));
+    const workspace = mkdtempSync(join(tempRoot, "moggcord-update-"));
+    const tmpExtract = join(workspace, "extracted");
+    const destinations = [...new Set([resolve(destPath), resolve(getMoggcordLocalDistDir())])];
+    const copied: Array<{ destination: string; backup: string; }> = [];
 
     try {
         const psExtract = `Expand-Archive -LiteralPath '${psQuote(zipPath)}' -DestinationPath '${psQuote(tmpExtract)}' -Force`;
         await runPowerShell(psExtract);
 
         const sourceDir = resolveExtractRoot(tmpExtract);
-        const psMove = `Copy-Item -Path '${psQuote(join(sourceDir, "*"))}' -Destination '${psQuote(destPath)}' -Recurse -Force`;
-        await runPowerShell(psMove);
+        verifyBuild(sourceDir, pendingVersion);
+        for (const [index, destination] of destinations.entries()) {
+            const backup = join(workspace, `backup-${index}`);
+            if (existsSync(destination)) cpSync(destination, backup, { recursive: true });
+            copied.push({ destination, backup });
+            cpSync(sourceDir, destination, { recursive: true, force: true });
+            verifyBuild(destination, pendingVersion);
+        }
 
-        syncDistToLocal(destPath);
-        console.log("[Moggcord] Update applied to", destPath, "and synced to %LOCALAPPDATA%\\Moggcord\\dist\\desktop");
+        currentVersion = pendingVersion!;
+        cachedUpdateCheck = { at: Date.now(), hasUpdate: false };
 
         pendingDownloadUrl = null;
         pendingVersion = null;
@@ -170,10 +183,13 @@ async function applyUpdates(): Promise<boolean> {
         markPendingRelaunch();
         return true;
     } catch (err) {
+        for (const { destination, backup } of copied.reverse()) {
+            if (existsSync(backup)) cpSync(backup, destination, { recursive: true, force: true });
+        }
         console.warn("[Moggcord] Live apply failed (will retry on quit):", err);
         return false;
     } finally {
-        try { rmSync(tmpExtract, { recursive: true, force: true }); } catch {}
+        if (dirname(resolve(workspace)) === tempRoot) rmSync(workspace, { recursive: true, force: true });
         isApplying = false;
     }
 }
@@ -193,10 +209,10 @@ async function buildOrDefer(): Promise<boolean> {
     const applied = await applyUpdates();
     if (applied) return true;
 
-    return pendingZipPath !== null && existsSync(pendingZipPath);
+    return false;
 }
 
-app.on("before-quit", (event) => {
+app.on("before-quit", event => {
     // Only defer quit when a zip was actually downloaded — not when fetchUpdates()
     // merely stored a GitHub URL after a background update check.
     const hasPending = pendingZipPath && existsSync(pendingZipPath);
@@ -236,7 +252,7 @@ app.on("before-quit", (event) => {
     })();
 });
 
-ipcMain.handle(IpcEvents.GET_REPO,    serializeErrors(() => REPO_URL));
+ipcMain.handle(IpcEvents.GET_REPO, serializeErrors(() => REPO_URL));
 ipcMain.handle(IpcEvents.GET_UPDATES, serializeErrors(getUpdates));
-ipcMain.handle(IpcEvents.UPDATE,      serializeErrors(prepareUpdate));
-ipcMain.handle(IpcEvents.BUILD,       serializeErrors(buildOrDefer));
+ipcMain.handle(IpcEvents.UPDATE, serializeErrors(prepareUpdate));
+ipcMain.handle(IpcEvents.BUILD, serializeErrors(buildOrDefer));

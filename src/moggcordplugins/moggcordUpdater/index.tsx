@@ -2,12 +2,10 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import definePlugin from "@utils/types";
-import { checkForUpdates, update, rebuild, UpdateLogger } from "@utils/updater";
 import { relaunch } from "@utils/native";
-import { React, useState, useEffect, ReactDOM, createRoot } from "@webpack/common";
-
-import { openMoggcordHub } from "../moggcordHub/openHub";
+import definePlugin from "@utils/types";
+import { checkForUpdates, rebuild, update, UpdateLogger } from "@utils/updater";
+import { createRoot, React, useEffect, useState } from "@webpack/common";
 
 declare const VERSION: string;
 
@@ -113,7 +111,7 @@ function UpdateBanner() {
             <div style={{ display: "flex", gap: 8, flexShrink: 0 }}>
                 <button
                     type="button"
-                    onClick={e => { e.stopPropagation(); openMoggcordHub("changelog"); }}
+                    onClick={e => { e.stopPropagation(); void VencordNative.native.openExternal("https://github.com/caedesdev/moggcord/releases"); }}
                     disabled={loading}
                     style={{
                         background: "transparent",
@@ -182,12 +180,8 @@ function mountBanner() {
     document.body.appendChild(bannerContainer);
 
     try {
-        if (createRoot) {
-            bannerRoot = createRoot(bannerContainer);
-            bannerRoot.render(<UpdateBanner />);
-        } else {
-            ReactDOM.render(<UpdateBanner />, bannerContainer);
-        }
+        bannerRoot = createRoot(bannerContainer);
+        bannerRoot.render(<UpdateBanner />);
     } catch (e) {
         UpdateLogger.error("Failed to mount update banner", e);
     }
