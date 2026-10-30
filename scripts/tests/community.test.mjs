@@ -12,12 +12,13 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import http from "node:http";
 import { createBridge } from "../community/bridge.mjs";
-import { fetchManifest, findClient, installEntry, parseLink, repairClient, sourceLimit, trustedOrigin, validateManifest } from "../community/core.mjs";
+import { fetchManifest, findClient, installedEntries, installEntry, parseLink, repairClient, sourceLimit, trustedOrigin, validateManifest } from "../community/core.mjs";
 import { buildFiles, writeBuildInfo } from "../lib/build-info.mjs";
 import pluginPackage from "../../web/plugin-package.js";
 import { resolvePluginName } from "../build/common.mjs";
 
 const source = 'import definePlugin from "@utils/types"; export default definePlugin({ name: "CommunityExample", description: "An example.", authors: [], start() {} });';
+const compiled = 'let example;example=definePlugin({name:"CommunityExample",description:"Installed."});const plugins={[example.name]:example};const excluded=definePlugin({name:"NotRegistered"});';
 const entry = (kind = "plugin", code = source, filename = "example.ts") => ({ protocol: 1, id: randomUUID(), kind, name: "Example", file_name: filename, source_code: code, sha256: createHash("sha256").update(code).digest("hex") });
 const folderEntry = (main = "index.tsx") => {
     const files = [
@@ -80,6 +81,56 @@ test("installation manifests enforce size, type, origin, identity and file finge
     assert.throws(() => parseLink(link.href, "https://another.example"));
     link.searchParams.set("manifest", url.replace("/api/install/", "/api/other/"));
     assert.throws(() => parseLink(link.href, "https://moggcord.example"));
+});
+
+test("read-only checks distinguish compiled plugins, disabled modules, missing files and installed themes", async t => {
+    const f = await fixture(t), plugin = entry(), missing = entry(), theme = entry("theme", "body{}", "example.css");
+    await writeFile(join(f.client.installDir, "renderer.js"), compiled);
+    const settings = { ...f.original, plugins: { ...f.original.plugins, CommunityExample: { enabled: false } } };
+    await writeFile(f.settings, JSON.stringify(settings));
+    await mkdir(join(f.config.dataDir, "themes"));await writeFile(join(f.config.dataDir, "themes", `community-${theme.id}.theme.css`), theme.source_code);
+    const before = await readFile(f.settings);
+    const result = await installedEntries([
+        { id: plugin.id, kind: "plugin", file_name: "example.ts", plugin_name: "CommunityExample" },
+        { id: missing.id, kind: "plugin", file_name: "example.ts", plugin_name: "MissingPlugin" },
+        { id: theme.id, kind: "theme", file_name: "example.css" }
+    ], f.config, f.dependencies);
+    assert.deepEqual(result, [{ id: plugin.id, installed: true, enabled: false }, { id: missing.id, installed: false, enabled: false }, { id: theme.id, installed: true, enabled: false }]);
+    assert.equal((await installedEntries([{id:missing.id,kind:"plugin",file_name:"example.ts",plugin_name:"NotRegistered"}],f.config,f.dependencies))[0].installed,false);
+    assert.deepEqual(await readFile(f.settings), before);assert.deepEqual(f.events, []);
+    await writeFile(join(f.client.installDir, "renderer.js"), "official build without the community plugin");
+    assert.equal((await installedEntries([{ id: plugin.id, kind: "plugin", file_name: "index.ts", plugin_name: "CommunityExample" }], f.config, f.dependencies))[0].installed, false);
+    for (const change of [{ id: "../escape" }, { file_name: "../outside.ts" }, { plugin_name: "__proto__" }])
+        await assert.rejects(installedEntries([{ id: plugin.id, kind: "plugin", file_name: "index.ts", plugin_name: "CommunityExample", ...change }], f.config, f.dependencies));
+});
+
+test("reinstalling the same plugin or stylesheet skips the compiler, file writes and client restart", async t => {
+    for (const kind of ["plugin", "theme"]) {
+        const f = await fixture(t), data = kind === "plugin" ? entry() : entry("theme", "body{}", "example.css");
+        if (kind === "plugin") {
+            await writeFile(join(f.client.installDir, "renderer.js"), compiled);
+            await writeFile(f.settings, JSON.stringify({ ...f.original, plugins: { ...f.original.plugins, CommunityExample: { enabled: true, communityInstallHash: data.sha256 } } }));
+        } else {
+            await mkdir(join(f.config.dataDir, "themes"));await writeFile(join(f.config.dataDir, "themes", `community-${data.id}.theme.css`), data.source_code);
+        }
+        const before = await readFile(f.settings);
+        const result = await installEntry(data, f.config, f.dependencies);
+        assert.equal(result.alreadyInstalled, true);assert.deepEqual(f.events, []);assert.deepEqual(await readFile(f.settings), before);
+    }
+});
+
+test("installed-state HTTP queries keep the configured origin and custom-header restrictions", async t => {
+    const f = await fixture(t), id = randomUUID(), origin = "https://moggcord.example";
+    await writeFile(join(f.client.installDir, "renderer.js"), compiled);
+    const bridge = createBridge({ ...f.config, origin }, f.dependencies);
+    await new Promise(resolvePromise => bridge.server.listen(0, "127.0.0.1", resolvePromise));
+    t.after(() => new Promise(resolvePromise => bridge.server.close(resolvePromise)));
+    const base = `http://127.0.0.1:${bridge.server.address().port}`;
+    const send = headers => fetch(base + "/v1/installed", { method: "POST", headers, body: JSON.stringify({ entries: [{ id, kind: "plugin", file_name: "index.ts", plugin_name: "CommunityExample" }] }) });
+    assert.equal((await send({ Origin: "https://other.example" })).status, 403);
+    assert.equal((await send({ Origin: origin, "Content-Type": "application/json" })).status, 415);
+    const response = await send({ Origin: origin, "Content-Type": "application/json", "X-Moggcord-Install": "1" });
+    assert.equal(response.status, 200);assert.deepEqual(await response.json(), { entries: [{ id, installed: true, enabled: true }] });assert.deepEqual(f.events, []);
 });
 
 test("folder manifests fingerprint every nested file, reject traversal and keep protocol one backwards compatible", () => {

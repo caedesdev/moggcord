@@ -33,6 +33,10 @@ Allow the browser's local-network permission for your connected website if it as
 
 Click **Download** on a plugin or theme, including uploads on another member's profile. The connector downloads the selected source from that website, verifies its file fingerprint, installs and enables it, then restarts only your chosen Discord channel. The website waits for confirmation before showing success.
 
+The updated website checks the visitor's own connector when a library or profile opens and when the window regains focus. Available plugins show **Installed** instead of an active Download button. Detection reads the actual registered plugin definitions in the connected channel's compiled renderer, so a previous download or leftover setting alone does not count. Stylesheets are checked in that connector's theme directory. Disabled plugins remain installed. Checking this state changes no files or download totals and never restarts Discord. Reinstalling identical, already present content also skips compiling, writing and restarting.
+
+Each visitor needs their own connector configured for the public website's exact origin. A connector on the website server cannot inspect or update visitors' PCs. Without a reachable, updated connector, Download stays available and installation state is unknown. The local status endpoint returns only booleans for the requested public entries, with the same origin, host and custom-header restrictions as installation requests.
+
 If the connector is unavailable, the website saves the ordinary source file and shows setup help. **Open in Moggcord** can launch the registered connector. **Copy install link** produces a shareable `moggcord://install?manifest=…&sha256=…` link. Recipients need Moggcord and the one-time setup connected to the same website. Links refer to the exact file fingerprint, so changed or deleted uploads do not silently install a replacement.
 
 Themes accept one `.css` or `.style` file. A `.style` file is installed under a `.theme.css` filename so Moggcord can load it. CSS-only uploads in User Plugins also install as stylesheets.

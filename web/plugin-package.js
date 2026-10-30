@@ -9,6 +9,11 @@
   const codeExtension = /\.(?:[jt]sx?)$/i;
   const textExtension = /\.(?:[jt]sx?|css|json|svg|md|txt)$/i;
   const error = code => Object.assign(new Error(code), {code});
+  const validPluginName = name => typeof name==='string' && /^[A-Za-z0-9][A-Za-z0-9 ._-]{0,79}$/.test(name) && !['constructor','prototype','__proto__'].includes(name);
+  const pluginName = source => {
+    const name=typeof source==='string' ? source.match(/definePlugin\(\{\s*(["'])?name\1:\s*(["'`])(.+?)\2/)?.[3] : null;
+    return validPluginName(name) ? name : null;
+  };
   function validPath(path) {
     return typeof path === 'string' && path.length <= 240 && path.split('/').every(part =>
       /^[A-Za-z0-9_@()+ .-]{1,120}$/.test(part) && !/[. ]$/.test(part) && !['.','..','node_modules','.git'].includes(part.toLowerCase()) &&
@@ -59,5 +64,5 @@
     for (const part of [...locals,...central,end]) {output.set(part,position);position+=part.length;}
     return output;
   }
-  return Object.freeze({maxBytes,maxFiles,codeExtension,validPath,validate,canonical,zip});
+  return Object.freeze({maxBytes,maxFiles,codeExtension,validPath,validate,canonical,zip,pluginName,validPluginName});
 });
