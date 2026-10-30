@@ -9,7 +9,7 @@ Install Moggcord in your chosen Discord channel first. The connector checks the 
 Requirements: Windows, Node.js 24, Git, and pnpm 10. Keep this checkout in place after setup; it supplies the plugin compiler. Use a separate checkout if your usual checkout has personal changes.
 
 ```powershell
-git clone --branch codex/community-install-and-update-fix https://github.com/caedesdev/moggcord.git moggcord-community
+git clone https://github.com/caedesdev/moggcord.git moggcord-community
 cd moggcord-community
 pnpm install --frozen-lockfile
 pnpm community:setup --channel canary --site https://YOUR-MOGGCORD-WEBSITE.example
@@ -73,7 +73,7 @@ node scripts/build/verify-release.mjs
 pnpm test:community
 ```
 
-The installer packaging step also regenerates its embedded archive from the verified current build, preventing reuse of an older zip. Build and test these changes before publishing new release binaries; the existing GitHub installer does not acquire a fix merely because source code was committed. This change also removes the Moggcord Hub and its automatic onboarding page; the updater's release link opens GitHub.
+The installer packaging step also regenerates its embedded archive from the verified current build, preventing reuse of an older zip. Release 1.18.25 packages the corrected desktop files in the installer and update archive. The installer can validate its embedded version and file fingerprints without installing or restarting Discord with `Moggcord-Installer.exe --verify-bundle --report verification.json`. The community website connector still uses the one-time setup above. This release also removes the Moggcord Hub and its automatic onboarding page; the updater's release link opens GitHub.
 
 ## Remove the connector
 

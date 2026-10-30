@@ -2,7 +2,7 @@
 (() => {
   'use strict';
   const base = 'http://127.0.0.1:6469';
-  const documentation = 'https://github.com/caedesdev/moggcord/blob/codex/community-install-and-update-fix/docs/COMMUNITY-INSTALL.md';
+  const documentation = 'https://github.com/caedesdev/moggcord/blob/main/docs/COMMUNITY-INSTALL.md';
   const pause = duration => new Promise(resolve => setTimeout(resolve,duration));
   async function request(route, options = {}, timeout = 5000) {
     const response = await fetch(base+route,{...options,credentials:'omit',signal:AbortSignal.timeout(timeout)});
