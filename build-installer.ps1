@@ -37,10 +37,18 @@ Write-Host "  [1/1] dotnet publish (SDK $sdkVersion)..." -ForegroundColor DarkGr
 $distZip = Join-Path $Root "release\installer\moggcord-dist.zip"
 $embeddedZip = Join-Path $SrcDir "moggcord-dist.zip"
 $distDesktop = Join-Path $Root "dist\desktop"
+$packageVersion = (Get-Content -LiteralPath (Join-Path $Root "package.json") -Raw | ConvertFrom-Json).version
 
-if (-not (Test-Path $distZip) -and (Test-Path (Join-Path $distDesktop "patcher.js"))) {
+& node (Join-Path $Root "scripts\build\verify-release.mjs")
+if ($LASTEXITCODE -ne 0) { throw "The desktop build does not match package.json. Build again before packaging." }
+
+if (Test-Path (Join-Path $distDesktop "patcher.js")) {
     Write-Host "  [info] Building moggcord-dist.zip from dist\desktop..." -ForegroundColor DarkGray
-    if (Test-Path $distZip) { Remove-Item $distZip -Force }
+    if (Test-Path -LiteralPath $distZip) {
+        $resolvedZip = [IO.Path]::GetFullPath($distZip)
+        if ([IO.Path]::GetDirectoryName($resolvedZip) -ne [IO.Path]::GetFullPath($OutDir)) { throw "Unexpected archive path" }
+        Remove-Item -LiteralPath $resolvedZip -Force
+    }
     Add-Type -Assembly System.IO.Compression.FileSystem
     [System.IO.Compression.ZipFile]::CreateFromDirectory(
         (Resolve-Path $distDesktop).Path,
@@ -67,6 +75,7 @@ if (Test-Path $distZip) {
     -v quiet `
     -p:PublishSingleFile=true `
     -p:SelfContained=false `
+    -p:Version=$packageVersion `
     -r win-x64
 
 if ($LASTEXITCODE -ne 0) {
@@ -81,6 +90,19 @@ if ($built -and $built.FullName -ne $OutExe) {
 
 # Result
 if (Test-Path $OutExe) {
+    $verificationFile = Join-Path $OutDir "installer-verification.json"
+    $verificationProcess = Start-Process -FilePath $OutExe `
+        -ArgumentList @('--verify-bundle', '--report', ('"' + $verificationFile + '"')) `
+        -WindowStyle Hidden -PassThru
+    if (-not $verificationProcess.WaitForExit(30000)) {
+        $verificationProcess.Kill()
+        throw "Installer verification timed out."
+    }
+    if ($verificationProcess.ExitCode -ne 0 -or -not (Test-Path -LiteralPath $verificationFile)) {
+        throw "Installer verification failed."
+    }
+    $verification = Get-Content -LiteralPath $verificationFile -Raw | ConvertFrom-Json
+    if ($verification.version -ne $packageVersion) { throw "The embedded installer version is incorrect." }
     $size = [math]::Round((Get-Item $OutExe).Length / 1KB, 0)
     Write-Host ""
     Write-Host "  OK  Moggcord-Installer.exe compiled ($size KB)" -ForegroundColor Green
