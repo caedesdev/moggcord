@@ -31,6 +31,7 @@ import { fileURLToPath } from "url";
 import { promisify } from "util";
 
 import { getPluginTarget } from "../utils.mjs";
+import { pluginBundleKind } from "../lib/plugin-bundle.mjs";
 
 const PackageJSON = JSON.parse(readFileSync(join(dirname(fileURLToPath(import.meta.url)), "../../package.json"), "utf-8"));
 
@@ -173,6 +174,8 @@ export const globPlugins = kind => ({
                     const isDir = file.isDirectory();
                     const isSupportedFile = /\.(tsx?|jsx?|css)$/.test(fileName);
                     if (!isDir && !isSupportedFile) continue;
+                    const bundleKind = pluginBundleKind(dir, fileName);
+                    if (!bundleKind) continue;
 
                     const target = getPluginTarget(fileName);
 
@@ -202,6 +205,7 @@ export const globPlugins = kind => ({
                     } else {
                         code += `import ${mod} from "./${dir}/${fileName.replace(/\.tsx?$/, "")}";\n`;
                     }
+                    if (bundleKind === "internal") code += `${mod}.hidden = true;\n`;
 
                     pluginsCode += `[${mod}.name]:${mod},\n`;
                     metaCode += `[${mod}.name]:${JSON.stringify({ folderName, userPlugin })},\n`;

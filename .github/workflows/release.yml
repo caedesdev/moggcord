@@ -39,6 +39,9 @@ jobs:
       - name: Build renderer
         run: pnpm buildStandalone
 
+      - name: Test plugin bundle
+        run: pnpm test:plugins
+
       - name: Package Moggcord dist
         shell: pwsh
         run: |

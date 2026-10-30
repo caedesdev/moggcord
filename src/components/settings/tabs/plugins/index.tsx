@@ -44,7 +44,7 @@ import Plugins, { ExcludedPlugins, PluginMeta } from "~plugins";
 
 import { PluginCard } from "./PluginCard";
 import { openWarningModal } from "./PluginModal";
-import { StockPluginsCard, UserPluginsCard } from "./PluginStatCards";
+import { StockPluginsCard } from "./PluginStatCards";
 import { UIElementsButton } from "./UIElements";
 
 export const cl = classNameFactory("vc-plugins-");
@@ -215,7 +215,7 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
     }, []);
 
     const sortedPlugins = useMemo(() => Object.values(Plugins)
-        .filter(p => typeof p.name === "string")
+        .filter(p => typeof p.name === "string" && !p.hidden)
         .sort((a, b) => (a.name ?? "").localeCompare(b.name ?? "")), []);
 
     const hasUserPlugins = useMemo(() => !IS_STANDALONE && Object.values(PluginMeta).some(m => m.userPlugin), []);
@@ -445,7 +445,7 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
     return (
         <SettingsTab>
             {!premiumOnly && <ReloadRequiredCard required={changes.hasChanges} enabledPlugins={enabledPlugins} openWarningModal={openWarningModal} resetCheckAndDo={resetCheckAndDo} />}
-            
+
             {!premiumOnly && (
                 <div className={cl("stats-container")} style={{ display: "grid", gridTemplateColumns: "1fr" }}>
                     <StockPluginsCard
