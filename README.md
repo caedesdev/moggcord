@@ -23,6 +23,8 @@ Moggcord is a fork of [Equicord](https://github.com/Equicord/Equicord), which it
 
 ## What's in it
 
+The standard bundle includes **FakeVoice, ExportDM, CustomProfile and TokenImporter**, plus internal functions required by Moggcord. Other plugins can be added separately. See [Included plugins](docs/PLUGINS.md) for defaults and community plugin support.
+
 - **Faster startup** — no obfuscation means the client loads noticeably quicker and sits lighter on your CPU and RAM.
 - **Auto-updates** — checks for updates in the background on launch and applies them silently. You don't have to think about it.
 - **Plugin support** — compatible with the existing plugin ecosystem. Install community plugins straight from Git links.

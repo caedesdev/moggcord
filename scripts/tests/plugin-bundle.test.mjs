@@ -1,0 +1,153 @@
+/*
+ * Copyright (c) 2026 Moggcord contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+import test from "node:test";
+import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from "node:fs/promises";
+import { dirname, join, resolve } from "node:path";
+import { tmpdir } from "node:os";
+import vm from "node:vm";
+import ts from "typescript";
+import { transform } from "esbuild";
+import { exists, globPlugins, resolvePluginName } from "../build/common.mjs";
+import { bundledPlugins, internalPlugins, pluginBundleKind } from "../lib/plugin-bundle.mjs";
+
+const root = process.cwd();
+const wanted = ["CustomProfile", "ExportDM", "FakeVoice", "TokenImporter"];
+
+function pluginDefinition(filename) {
+    const file = ts.createSourceFile(filename, readFileSync(filename, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    let definition;
+    const visit = node => {
+        if (ts.isCallExpression(node) && node.expression.getText(file) === "definePlugin" && ts.isObjectLiteralExpression(node.arguments[0]))
+            definition = node.arguments[0];
+        ts.forEachChild(node, visit);
+    };
+    visit(file);
+    assert(definition, "A plugin definition must be present: " + filename);
+    const result = {};
+    for (const property of definition.properties) {
+        if (!ts.isPropertyAssignment(property)) continue;
+        const key = property.name.getText(file);
+        if (key === "name") result.name = property.initializer.text;
+        if (key === "dependencies") result.dependencies = property.initializer.elements.map(value => value.text);
+        if (["required", "enabledByDefault", "hidden"].includes(key))
+            result[key] = property.initializer.kind === ts.SyntaxKind.TrueKeyword;
+    }
+    return result;
+}
+
+async function loadGenerated(plugin) {
+    let load;
+    plugin.setup({ onResolve() {}, onLoad(options, callback) { load = callback; } });
+    return (await load()).contents;
+}
+
+async function registry(source, native = false) {
+    const file = ts.createSourceFile("registry.js", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const imports = new Map();
+    for (const statement of file.statements) {
+        if (!ts.isImportDeclaration(statement)) continue;
+        const specifier = statement.moduleSpecifier.text;
+        if (native) { imports.set(specifier, {}); continue; }
+        const base = resolve("src", specifier);
+        if (base.endsWith(".css")) imports.set(specifier, await readFile(base, "utf8"));
+        else {
+            const filename = [base + ".ts", base + ".tsx", join(base, "index.ts"), join(base, "index.tsx")].find(existsSync);
+            assert(filename, "Missing source for " + specifier);
+            imports.set(specifier, pluginDefinition(filename));
+        }
+    }
+    const compiled = await transform(source, { format: "cjs", target: "es2022" });
+    const module = { exports: {} };
+    vm.runInNewContext(compiled.code, { module, exports: module.exports, require: name => {
+        assert(imports.has(name), "Unexpected plugin import " + name);
+        return imports.get(name);
+    } });
+    return module.exports;
+}
+
+function nativeGenerator() {
+    const text = readFileSync(join(root, "scripts/build/build.mjs"), "utf8");
+    const file = ts.createSourceFile("build.mjs", text, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const declaration = file.statements.filter(ts.isVariableStatement)
+        .flatMap(statement => [...statement.declarationList.declarations])
+        .find(node => node.name.getText(file) === "globNativesPlugin");
+    assert(declaration);
+    return vm.runInNewContext("(" + declaration.initializer.getText(file) + ")", {
+        join, resolve, exists, readdir, resolvePluginName, pluginBundleKind
+    });
+}
+
+test("the bundle policy includes exactly the requested standard plugins and preserves community sources", () => {
+    assert.deepEqual(Object.values(bundledPlugins).sort(), wanted);
+    for (const folder of Object.keys(bundledPlugins)) assert.equal(pluginBundleKind("moggcordplugins", folder), "standard");
+    for (const folder of Object.keys(internalPlugins)) assert.equal(pluginBundleKind("moggcordplugins", folder), "internal");
+    for (const folder of ["ghostClient", "massDM", "messageLogger", "themeLibrary", "moggcordUpdater", "unrecognized"])
+        assert.equal(pluginBundleKind("moggcordplugins", folder), null);
+    assert.equal(pluginBundleKind("plugins", "alwaysAnimate"), null);
+    assert.equal(pluginBundleKind("plugins/_api", "sharedModal.css"), null);
+    assert.equal(pluginBundleKind("plugins/_api", "commands.ts"), "internal");
+    assert.equal(pluginBundleKind("plugins/_core", "settings.tsx"), "internal");
+    for (const name of ["example.ts", "styles.css", "customNativePlugin"])
+        assert.equal(pluginBundleKind("userplugins", name), "user");
+});
+
+test("the real renderer registry exposes four standard plugins with complete internal dependencies", async () => {
+    const result = await registry(await loadGenerated(globPlugins("discordDesktop")));
+    const plugins = result.default;
+    const visible = Object.values(plugins).filter(plugin => !plugin.hidden && !result.PluginMeta[plugin.name].userPlugin);
+    assert.deepEqual(visible.map(plugin => plugin.name).sort(), wanted);
+    for (const plugin of visible) assert.equal(plugin.enabledByDefault, true);
+    for (const plugin of Object.values(plugins))
+        for (const dependency of plugin.dependencies ?? []) assert(plugins[dependency], plugin.name + " is missing " + dependency);
+    for (const name of ["Settings", "NoTrack", "CommandsAPI", "HeaderBarAPI", "ContextMenuAPI", "UserAreaAPI", ...Object.values(internalPlugins)])
+        assert.equal(plugins[name].hidden, true, name + " must stay internal");
+    const settings = JSON.parse(readFileSync(join(root, "installer-src/default-settings.json"), "utf8"));
+    for (const name of Object.keys(settings.plugins)) assert(plugins[name], "Installer defaults include a removed plugin: " + name);
+    for (const name of wanted) assert.equal(settings.plugins[name].enabled, true);
+});
+
+test("the real native registry includes only the two standard plugins that need native helpers", async () => {
+    const result = await registry(await loadGenerated(nativeGenerator()), true);
+    const names = Object.keys(result.default).filter(name => Object.values(bundledPlugins).includes(name));
+    assert.deepEqual(names.sort(), ["ExportDM", "TokenImporter"]);
+    for (const name of ["GhostClient", "MassDM", "VoiceDownload", "MoggcordAI"])
+        assert.equal(result.default[name], undefined);
+});
+
+test("community TypeScript, CSS and native plugins still build while other built-ins are excluded", async t => {
+    const directory = await mkdtemp(join(tmpdir(), "moggcord-bundle-test-"));
+    t.after(async () => {
+        process.chdir(root);
+        assert.equal(dirname(resolve(directory)), resolve(tmpdir()));
+        assert(directory.includes("moggcord-bundle-test-"));
+        await rm(directory, { recursive: true, force: true });
+    });
+    const files = {
+        "moggcordplugins/FakeVoice/index.ts": 'definePlugin({name:"FakeVoice",enabledByDefault:true})',
+        "moggcordplugins/FakeVoice/native.ts": "export function helper() {}",
+        "moggcordplugins/massDM/index.ts": 'definePlugin({name:"MassDM"})',
+        "moggcordplugins/massDM/native.ts": "export function unwanted() {}",
+        "plugins/extra/index.ts": 'definePlugin({name:"Extra"})',
+        "plugins/extra/native.ts": "export function unwanted() {}",
+        "userplugins/community.ts": 'definePlugin({name:"CommunityExample"})',
+        "userplugins/styles.css": ".example {color:red}",
+        "userplugins/nativeExample/index.ts": 'definePlugin({name:"CommunityNative"})',
+        "userplugins/nativeExample/native.ts": "export function helper() {}"
+    };
+    for (const [name, contents] of Object.entries(files)) {
+        const filename = join(directory, "src", name);
+        await mkdir(dirname(filename), { recursive: true });
+        await writeFile(filename, contents);
+    }
+    process.chdir(directory);
+    const renderer = await registry(await loadGenerated(globPlugins("discordDesktop")));
+    assert.deepEqual(Object.keys(renderer.default).sort(), ["CommunityExample", "CommunityNative", "FakeVoice", "styles"]);
+    for (const name of ["CommunityExample", "CommunityNative", "styles"]) assert.equal(renderer.PluginMeta[name].userPlugin, true);
+    const native = await registry(await loadGenerated(nativeGenerator()), true);
+    assert.deepEqual(Object.keys(native.default).sort(), ["CommunityNative", "FakeVoice"]);
+});

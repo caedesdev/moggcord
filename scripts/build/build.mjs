@@ -27,6 +27,7 @@ import { fileURLToPath } from "url";
 import { BUILD_TIMESTAMP, commonOpts, exists, globPlugins, IS_DEV, IS_REPORTER, IS_COMPANION_TEST, IS_STANDALONE, IS_UPDATER_DISABLED, resolvePluginName, VERSION, commonRendererPlugins, watch, buildOrWatchAll, stringifyValues, IS_ANTI_CRASH_TEST } from "./common.mjs";
 import { obfuscateDir } from "./obfuscate.mjs";
 import { writeBuildInfo } from "../lib/build-info.mjs";
+import { pluginBundleKind } from "../lib/plugin-bundle.mjs";
 
 const defines = stringifyValues({
     IS_STANDALONE,
@@ -93,6 +94,7 @@ const globNativesPlugin = {
                 const plugins = await readdir(dirPath, { withFileTypes: true });
                 for (const file of plugins) {
                     const fileName = file.name;
+                    if (!pluginBundleKind(dir, fileName)) continue;
                     const nativePath = join(dirPath, fileName, "native.ts");
                     const indexNativePath = join(dirPath, fileName, "native/index.ts");
 
