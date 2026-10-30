@@ -8,6 +8,8 @@ Download the current [Windows installer](https://github.com/caedesdev/moggcord/r
 
 After choosing an action, select Discord, PTB, Canary or Development and press the action button to continue. The selected Discord closes and restarts during the operation. A detected third-party mod needs explicit replacement confirmation before Install can proceed.
 
+Installer notifications appear at the top right on dark surfaces with green success, red error, yellow warning and blue information accents. They animate in and out and automatically disappear after five seconds. Hovering or keyboard focus pauses the timer. Each notification includes an icon, heading, details and a dismiss button. The result screen's **View details** button can show the result notification again. Dismissing a notification never starts an operation or bypasses a required replacement confirmation.
+
 For a custom location, use **Custom path** below the installation list. Press **Browse…** to select a folder, or paste a Discord installation folder, an app folder, its resources folder or the full path to Discord.exe, then press **Use path**. A versioned installation root resolves to the newest valid numeric app version. The selected target shows the original icon extracted from its Discord executable.
 
 Install, Repair and Uninstall close only matching Discord processes inside the selected installation directory. Protected DiscordSystemHelper processes are not shutdown targets. If Windows still refuses to close the selected Discord, the error includes the process ID and Windows error details.
