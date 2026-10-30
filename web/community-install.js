@@ -38,11 +38,15 @@
     setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
   function connectionHelp(element,data,installed = false) {
+    const toast = element.matches('[data-library-feedback], [data-profile-feedback]');
+    if (!element.querySelector('.rr-alert__body') && window.MoggUI?.setAlert) window.MoggUI.setAlert(element, {
+      tone:installed ? 'success' : 'info', title:installed ? 'Installed' : 'Downloaded',
+      message:installed ? 'Moggcord has been restarted.' : 'File downloaded. Connect Moggcord for automatic installation.', toast
+    });
     const row=document.createElement('p');row.className='installer-help';
     if (!installed) {
-      row.append(document.createTextNode('File downloaded. Connect Moggcord for automatic installation and restart. '));
       const setup=document.createElement('a');setup.href=documentation;setup.target='_blank';setup.rel='noopener noreferrer';setup.textContent='Set up Moggcord';row.append(setup);
-    } else row.append(document.createTextNode('Share this installation: '));
+    }
     if(data.install_manifest && /^[a-f0-9]{64}$/.test(data.sha256 || '')) {
       const link=new URL('moggcord://install');link.searchParams.set('manifest',new URL(data.install_manifest,location.origin).href);link.searchParams.set('sha256',data.sha256);
       const open=document.createElement('a');open.href=link.href;open.textContent='Open in Moggcord';row.append(document.createTextNode(installed ? '' : ' · '),open);
@@ -50,7 +54,7 @@
       copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(link.href);copy.textContent='Link copied';}catch{copy.textContent='Could not copy link';}});
       row.append(document.createTextNode(' · '),copy);
     }
-    element.hidden=false;element.append(row);
+    element.hidden=false;(element.querySelector('.rr-alert__body') || element).append(row);
   }
   window.moggcordInstaller = Object.freeze({install,download,connectionHelp});
 })();
