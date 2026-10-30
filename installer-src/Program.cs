@@ -15,6 +15,7 @@ using Microsoft.Web.WebView2.WinForms;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Reflection;
+using System.Security.Cryptography;
 
 namespace MoggcordInstaller
 {
@@ -23,6 +24,24 @@ namespace MoggcordInstaller
         [STAThread]
         static void Main(string[] args)
         {
+            if (HasFlag(args, "--verify-bundle"))
+            {
+                try
+                {
+                    var report = VerifyBundledBuild();
+                    int output = Array.IndexOf(args, "--report");
+                    if (output >= 0 && output + 1 < args.Length) File.WriteAllText(args[output + 1], report);
+                    Console.WriteLine(report);
+                    Environment.ExitCode = 0;
+                }
+                catch (Exception error)
+                {
+                    Console.Error.WriteLine(error.Message);
+                    Environment.ExitCode = 1;
+                }
+                return;
+            }
+
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
@@ -33,6 +52,33 @@ namespace MoggcordInstaller
             }
 
             Application.Run(new LauncherForm());
+        }
+
+        static string VerifyBundledBuild()
+        {
+            var assembly = Assembly.GetExecutingAssembly();
+            var version = assembly.GetName().Version.ToString(3);
+            using var resource = assembly.GetManifestResourceStream("MoggcordInstaller.moggcord-dist.zip");
+            if (resource == null) throw new InvalidDataException("The installer contains no desktop archive.");
+            using var archive = new ZipArchive(resource, ZipArchiveMode.Read);
+            var marker = archive.GetEntry("build-info.json");
+            if (marker == null) throw new InvalidDataException("The desktop archive has no build information.");
+            using var stream = marker.Open();
+            using var manifest = JsonDocument.Parse(stream);
+            if (manifest.RootElement.GetProperty("version").GetString() != version)
+                throw new InvalidDataException("The installer and embedded desktop versions do not match.");
+            var fingerprints = new Dictionary<string, string>();
+            foreach (var file in new[] { "patcher.js", "preload.js", "renderer.js", "renderer.css" })
+            {
+                var entry = archive.GetEntry(file);
+                if (entry == null) throw new InvalidDataException($"Missing desktop file: {file}");
+                using var contents = entry.Open();
+                var fingerprint = Convert.ToHexString(SHA256.HashData(contents)).ToLowerInvariant();
+                if (fingerprint != manifest.RootElement.GetProperty("files").GetProperty(file).GetString())
+                    throw new InvalidDataException($"The embedded desktop file is damaged: {file}");
+                fingerprints.Add(file, fingerprint);
+            }
+            return JsonSerializer.Serialize(new { version, files = fingerprints });
         }
 
         static bool HasFlag(string[] args, string flag)
