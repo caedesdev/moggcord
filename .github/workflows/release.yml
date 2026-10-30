@@ -51,6 +51,12 @@ jobs:
         shell: pwsh
         run: .\build-installer.ps1
 
+      - name: Test installer
+        run: |
+          pnpm test:installer
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          dotnet run --project scripts/tests/installer-native --configuration Release
+
       - name: Create version metadata
         shell: pwsh
         run: |
