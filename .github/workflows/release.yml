@@ -21,7 +21,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "24"
 
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
@@ -45,27 +45,11 @@ jobs:
           node scripts/build/collect-assets.mjs
           Remove-Item "dist\desktop\*.map","dist\desktop\*.LEGAL.txt" -Force -ErrorAction SilentlyContinue
           node scripts/build/verify-dist.mjs
-          New-Item -ItemType Directory -Path "release\installer" -Force | Out-Null
-          Add-Type -AssemblyName System.IO.Compression.FileSystem
-          [System.IO.Compression.ZipFile]::CreateFromDirectory(
-            (Resolve-Path "dist\desktop").Path,
-            (Resolve-Path "release\installer").Path + "\moggcord-dist.zip",
-            [System.IO.Compression.CompressionLevel]::Optimal,
-            $false
-          )
-          Copy-Item "release\installer\moggcord-dist.zip" "installer-src\moggcord-dist.zip" -Force
-          Write-Host "moggcord-dist.zip created ($([Math]::Round((Get-Item release\installer\moggcord-dist.zip).Length / 1MB, 2)) MB)"
+          node scripts/build/verify-release.mjs
 
       - name: Build installer
         shell: pwsh
-        run: |
-          dotnet publish "installer-src\MoggcordInstaller.csproj" `
-            -c Release `
-            -o "release\installer" `
-            --nologo `
-            -p:PublishSingleFile=true `
-            -p:SelfContained=false `
-            -r win-x64
+        run: .\build-installer.ps1
 
       - name: Create version metadata
         shell: pwsh
@@ -83,7 +67,7 @@ jobs:
             installerUrl = "https://github.com/caedesdev/moggcord/releases/latest/download/Moggcord-Installer.exe"
             distUrl = "https://github.com/caedesdev/moggcord/releases/latest/download/moggcord-dist.zip"
             downloadUrl = "https://github.com/caedesdev/moggcord/releases/latest/download/desktop.asar"
-            moggcordAsarUrl = "https://github.com/caedesdev/moggcord/releases/latest/download/Moggcord.asar"
+            moggcordAsarUrl = "https://github.com/caedesdev/moggcord/releases/latest/download/moggcord.asar"
             changelog = "Moggcord $version"
           }
           $meta | ConvertTo-Json | Set-Content "release\installer\version.json"
@@ -92,6 +76,16 @@ jobs:
         run: node scripts/build/validate-release.mjs
         env:
           GITHUB_REF_NAME: ${{ github.ref_name }}
+
+      - name: Create release checksums
+        shell: pwsh
+        run: |
+          $files = @("release\installer\Moggcord-Installer.exe", "release\installer\moggcord-dist.zip", "release\installer\version.json", "dist\desktop.asar", "dist\moggcord.asar", "release\installer\installer-verification.json")
+          $lines = foreach ($file in $files) {
+            $fingerprint = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
+            "$fingerprint  $([IO.Path]::GetFileName($file))"
+          }
+          $lines | Set-Content -LiteralPath "release\installer\SHA256SUMS.txt" -Encoding ascii
 
       - name: Upload release assets
         uses: softprops/action-gh-release@v2
@@ -102,5 +96,7 @@ jobs:
             release/installer/version.json
             dist/desktop.asar
             dist/moggcord.asar
+            release/installer/SHA256SUMS.txt
+            release/installer/installer-verification.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
