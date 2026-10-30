@@ -21,6 +21,7 @@ export function pluginBundleKind(directory, filename) {
     if (directory === "userplugins") return "user";
     if (filename.endsWith(".css")) return null;
     if (internalDirectories.has(directory)) return "internal";
+    if (directory === "plugins") return "optional";
     if (directory !== "moggcordplugins") return null;
     if (Object.hasOwn(bundledPlugins, filename)) return "standard";
     if (Object.hasOwn(internalPlugins, filename)) return "internal";

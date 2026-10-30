@@ -90,7 +90,8 @@ test("the bundle policy includes the full catalog with four default plugins and 
     for (const folder of Object.keys(internalPlugins)) assert.equal(pluginBundleKind("moggcordplugins", folder), "internal");
     for (const folder of ["ghostClient", "massDM", "messageLogger", "themeLibrary", "moggcordUpdater", "unrecognized"])
         assert.equal(pluginBundleKind("moggcordplugins", folder), "optional");
-    assert.equal(pluginBundleKind("plugins", "alwaysAnimate"), null);
+    assert.equal(pluginBundleKind("plugins", "alwaysAnimate"), "optional");
+    assert.equal(pluginBundleKind("plugins", "consoleShortcuts"), "optional");
     assert.equal(pluginBundleKind("plugins/_api", "sharedModal.css"), null);
     assert.equal(pluginBundleKind("plugins/_api", "commands.ts"), "internal");
     assert.equal(pluginBundleKind("plugins/_core", "settings.tsx"), "internal");
@@ -98,24 +99,30 @@ test("the bundle policy includes the full catalog with four default plugins and 
         assert.equal(pluginBundleKind("userplugins", name), "user");
 });
 
-test("the full renderer catalog exposes every desktop Moggcord plugin with only four enabled defaults", async () => {
+test("the full renderer catalog exposes both desktop plugin collections with only four enabled defaults", async t => {
     const result = await registry(await loadGenerated(globPlugins("discordDesktop")));
     const plugins = result.default;
     const visible = Object.values(plugins).filter(plugin => !plugin.hidden && !result.PluginMeta[plugin.name].userPlugin);
-    assert(visible.length > 90);
+    const vencord = visible.filter(plugin => result.PluginMeta[plugin.name].folderName.startsWith("src/plugins/"));
+    t.diagnostic(`Selectable built-ins: ${visible.length}; Vencord: ${vencord.length}; Moggcord: ${visible.length - vencord.length}.`);
+    assert(visible.length > 350);
     assert.deepEqual(visible.filter(plugin => plugin.enabledByDefault).map(plugin => plugin.name).sort(), wanted);
     for (const plugin of visible) assert.equal(Boolean(plugin.required), false, plugin.name + " must be optional");
-    for (const name of ["GhostClient", "MassDM", "VoiceDownload", "ThemeLibrary", "MoggcordUpdater", "MessageLoggerEnhanced"])
+    for (const name of ["AlwaysAnimate", "ConsoleShortcuts", "OpenInApp", "ZipPreview", "GhostClient", "MassDM", "VoiceDownload", "ThemeLibrary", "MoggcordUpdater", "MessageLoggerEnhanced"])
         assert(plugins[name], name + " must be present in the catalog");
-    for (const entry of await readdir(join(root, "src/moggcordplugins"), { withFileTypes: true })) {
+    for (const directory of ["plugins", "moggcordplugins"]) for (const entry of await readdir(join(root, "src", directory), { withFileTypes: true })) {
         if (entry.name.startsWith("_") || entry.name.startsWith(".") || entry.name.endsWith(".ini")) continue;
         if (!entry.isDirectory() && !/\.[jt]sx?$/.test(entry.name)) continue;
-        const name = await resolvePluginName("src/moggcordplugins", entry);
+        const base = join(root, "src", directory, entry.name);
+        const filename = entry.isDirectory() ? ["index.ts", "index.tsx"].map(name => join(base, name)).find(existsSync) : base;
+        const { name } = pluginDefinition(filename);
         if (result.ExcludedPlugins[name]) continue;
-        assert(plugins[name], name + " is missing from src/moggcordplugins");
+        assert(plugins[name], name + " is missing from src/" + directory);
     }
+    const missingDependencies = [];
     for (const plugin of Object.values(plugins))
-        for (const dependency of plugin.dependencies ?? []) assert(plugins[dependency], plugin.name + " is missing " + dependency);
+        for (const dependency of plugin.dependencies ?? []) if (!plugins[dependency]) missingDependencies.push(plugin.name + " is missing " + dependency);
+    assert.deepEqual(missingDependencies, []);
     for (const name of ["Settings", "NoTrack", "CommandsAPI", "HeaderBarAPI", "ContextMenuAPI", "UserAreaAPI", ...Object.values(internalPlugins)])
         assert.equal(plugins[name].hidden, true, name + " must stay internal");
     const settings = JSON.parse(readFileSync(join(root, "installer-src/default-settings.json"), "utf8"));
@@ -130,8 +137,39 @@ test("the full native registry includes the optional plugin helpers and all four
     const result = await registry(await loadGenerated(nativeGenerator()), true);
     const names = Object.keys(result.default).filter(name => Object.values(bundledPlugins).includes(name));
     assert.deepEqual(names.sort(), ["ExportDM", "TokenImporter"]);
-    for (const name of ["GhostClient", "VoiceMessages", "ThemeLibrary"])
+    for (const name of ["ConsoleShortcuts", "OpenInApp", "ZipPreview", "GhostClient", "VoiceMessages", "ThemeLibrary"])
         assert(result.default[name], name + " native helpers must be included");
+});
+
+test("the plugin page initially shows both collections and can filter Vencord plugins separately", async () => {
+    const text = await readFile(join(root, "src/components/settings/tabs/plugins/index.tsx"), "utf8");
+    const file = ts.createSourceFile("plugins.tsx", text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    let initialStatus, filter;
+    const visit = node => {
+        if (ts.isVariableDeclaration(node) && ts.isArrayBindingPattern(node.name) && node.name.elements[0]?.name?.getText(file) === "searchValue") {
+            const initial = node.initializer.arguments[0];
+            initialStatus = initial.properties.find(property => property.name?.getText(file) === "status")?.initializer.getText(file);
+        }
+        if (ts.isVariableDeclaration(node) && node.name.getText(file) === "pluginFilter") filter = node.initializer.arguments[0].getText(file);
+        ts.forEachChild(node, visit);
+    };
+    visit(file);
+    assert.equal(initialStatus, "SearchStatus.ALL");
+    assert(filter);
+    const SearchStatus = Object.fromEntries(["ALL", "ENABLED", "DISABLED", "MOGGCORD", "OTHERS", "VENCORD", "NEW", "USER_PLUGINS", "API_PLUGINS", "TUTORIAL"].map((value, index) => [value, index]));
+    const searchValue = { status: SearchStatus.ALL };
+    const PluginMeta = {
+        Moggcord: { folderName: "src/moggcordplugins/example" },
+        Vencord: { folderName: "src/plugins/example" },
+        Community: { folderName: "src/userplugins/example", userPlugin: true }
+    };
+    const compiled = await transform(`(${filter})`, { loader: "ts" });
+    const predicate = vm.runInNewContext(compiled.code, { SearchStatus, searchValue, PluginMeta, premiumOnly: false, search: "", isPluginEnabled: () => false });
+    for (const name of Object.keys(PluginMeta)) assert.equal(predicate({ name }), true);
+    searchValue.status = SearchStatus.VENCORD;
+    assert.equal(predicate({ name: "Vencord" }), true);
+    assert.equal(predicate({ name: "Moggcord" }), false);
+    assert.equal(predicate({ name: "Community" }), false);
 });
 
 test("community sources and optional built-in plugins build together without enabling optional defaults", async t => {
@@ -161,14 +199,53 @@ test("community sources and optional built-in plugins build together without ena
     }
     process.chdir(directory);
     const renderer = await registry(await loadGenerated(globPlugins("discordDesktop")));
-    assert.deepEqual(Object.keys(renderer.default).sort(), ["CommunityExample", "CommunityNative", "FakeVoice", "MassDM", "styles"]);
-    for (const name of ["MassDM"]) {
+    assert.deepEqual(Object.keys(renderer.default).sort(), ["CommunityExample", "CommunityNative", "Extra", "FakeVoice", "MassDM", "styles"]);
+    for (const name of ["Extra", "MassDM"]) {
         assert.equal(renderer.default[name].enabledByDefault, false);
         assert.equal(renderer.default[name].required, false);
     }
     for (const name of ["CommunityExample", "CommunityNative", "styles"]) assert.equal(renderer.PluginMeta[name].userPlugin, true);
     const native = await registry(await loadGenerated(nativeGenerator()), true);
-    assert.deepEqual(Object.keys(native.default).sort(), ["CommunityNative", "FakeVoice", "MassDM"]);
+    assert.deepEqual(Object.keys(native.default).sort(), ["CommunityNative", "Extra", "FakeVoice", "MassDM"]);
+});
+
+test("restoring the Vencord catalog disables only its stale activations once and preserves later choices", async () => {
+    const text = await readFile(join(root, "src/api/PluginManager.ts"), "utf8");
+    const file = ts.createSourceFile("PluginManager.ts", text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    let apply, transition;
+    const visit = node => {
+        if (ts.isFunctionDeclaration(node) && node.name?.text === "applyDefaultOffPlugins") apply = node.getText(file);
+        if (ts.isIfStatement(node) && node.expression.getText(file) === "!plain[VENCORD_CATALOG_FLAG]") transition = node.getText(file);
+        ts.forEachChild(node, visit);
+    };
+    visit(file);
+    assert(apply && transition);
+    const Plugins = {
+        FakeVoice: { name: "FakeVoice", enabledByDefault: true },
+        VencordOptional: { name: "VencordOptional", enabledByDefault: false },
+        MoggcordOptional: { name: "MoggcordOptional", enabledByDefault: false },
+        Settings: { name: "Settings", required: true },
+        Community: { name: "Community" }
+    };
+    const PluginMeta = {
+        FakeVoice: { folderName: "src/moggcordplugins/FakeVoice" },
+        VencordOptional: { folderName: "src/plugins/optional" },
+        MoggcordOptional: { folderName: "src/moggcordplugins/optional" },
+        Settings: { folderName: "src/plugins/_core/settings.tsx" },
+        Community: { folderName: "src/userplugins/example", userPlugin: true }
+    };
+    const plain = { plugins: Object.fromEntries(Object.keys(Plugins).map(name => [name, { enabled: true, preference: "keep" }])) };
+    let changes = 0;
+    const context = vm.createContext({ Plugins, PluginMeta, plain, VENCORD_CATALOG_FLAG: "vencord_catalog", SettingsStore: { plain, markAsChanged: () => changes++ } });
+    const { code } = await transform(apply + "\n" + transition, { loader: "ts" });
+    vm.runInContext(code, context);
+    assert.equal(plain.plugins.VencordOptional.enabled, false);
+    assert.equal(plain.plugins.VencordOptional.preference, "keep");
+    for (const name of ["FakeVoice", "MoggcordOptional", "Settings", "Community"]) assert.equal(plain.plugins[name].enabled, true);
+    plain.plugins.VencordOptional.enabled = true;
+    vm.runInContext(code, context);
+    assert.equal(plain.plugins.VencordOptional.enabled, true);
+    assert.equal(changes, 1);
 });
 
 test("catalog activation migration disables other built-ins once while preserving community settings and later user choices", async () => {

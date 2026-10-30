@@ -1,6 +1,6 @@
 # Included plugins
 
-Moggcord includes the full built-in plugin catalog. Four plugins are enabled by default:
+Moggcord includes the built-in Moggcord and Vencord plugin collections. Four plugins are enabled by default:
 
 | Plugin | Purpose |
 | --- | --- |
@@ -9,9 +9,13 @@ Moggcord includes the full built-in plugin catalog. Four plugins are enabled by 
 | CustomProfile | Local profile appearance |
 | TokenImporter | Manage and switch imported accounts |
 
-All other Moggcord plugins from `src/moggcordplugins`, including their native helpers, are included and can be enabled individually in settings. Optional plugins start disabled even if their source originally declared them required or enabled by default. Internal APIs, core settings, the required UI fix and TokenImporter's account bridge remain available and do not appear as selectable plugins.
+Plugins from both `src/moggcordplugins` and `src/plugins`, including their native helpers, are included and can be enabled individually in settings. Platform-specific plugins retain their existing platform restrictions. Optional plugins start disabled even if their source originally declared them required or enabled by default. Internal APIs, core settings, the required UI fix and TokenImporter's account bridge remain available and do not appear as selectable plugins.
+
+Version 1.18.35 restores the Vencord collection and opens the plugin page with Show All selected. Use Show Vencord Plugins or Show Moggcord Plugins to filter either collection. Plugins with the same name appear once, with the Moggcord implementation taking precedence. Installed community plugins with matching names retain their existing implementation and settings unless a built-in Moggcord plugin overrides that name.
 
 These four plugins are enabled for fresh installations. The first start with version 1.18.32 or later disables the other built-in plugins once, preserving their configuration values and community plugin activation. After that transition, manually enabled plugins remain enabled across restarts and updates. The four default plugins retain any previously saved individual on/off preferences.
+
+On the first start with version 1.18.35, stale activations for the restored Vencord plugins are disabled once. Existing Moggcord and community-plugin choices are preserved. Vencord plugins that you enable after this transition remain enabled across subsequent starts. FriendsSince and VoiceStats include the required profile-section API, based on the [upstream integration](https://github.com/Equicord/Equicord/blob/main/src/equicordplugins/_api/profileSections.ts).
 
 Community plugins installed from the website remain supported. The source build still accepts TypeScript, JavaScript, CSS and native helpers from src/userplugins. See [Community installation](COMMUNITY-INSTALL.md).
 
