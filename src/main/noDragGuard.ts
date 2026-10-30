@@ -7,19 +7,6 @@ import type { WebContents } from "electron";
 
 const guarded = new WeakSet<WebContents>();
 
-const INLINE_NO_DRAG_JS = `(function () {
-    function fix() {
-        try {
-            for (var sel of ["html", "body", "#app-mount"]) {
-                var n = document.querySelector(sel);
-                if (n) n.style.setProperty("-webkit-app-region", "no-drag", "important");
-            }
-        } catch (e) {}
-    }
-    fix();
-    document.addEventListener("DOMContentLoaded", fix, { once: true });
-})();`;
-
 export function injectNoDragGuard(webContents: WebContents) {
     if (guarded.has(webContents)) return;
     guarded.add(webContents);
@@ -27,7 +14,6 @@ export function injectNoDragGuard(webContents: WebContents) {
     const run = () => {
         if (webContents.isDestroyed()) return;
         webContents.insertCSS(NO_DRAG_GUARD_CSS).catch(() => { });
-        webContents.executeJavaScript(INLINE_NO_DRAG_JS, true).catch(() => { });
     };
 
     webContents.on("dom-ready", run);

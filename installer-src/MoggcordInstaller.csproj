@@ -11,7 +11,7 @@
     <Nullable>disable</Nullable>
     <ApplicationIcon>icon.ico</ApplicationIcon>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.18.32</Version>
+    <Version>1.18.33</Version>
     
     <!-- Single File configuration -->
     <PublishSingleFile>true</PublishSingleFile>

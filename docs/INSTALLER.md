@@ -28,3 +28,7 @@ pnpm buildStandalone
 ```
 
 The native tests use temporary resources fixtures and an isolated file cache. They check existing-install skips, third-party mod protection, path resolution and invalid targets. Shutdown checks start temporary test processes, close only the selected fixture and verify that an unrelated installation and helper remain running. They do not install into or stop a real Discord installation. The packaging script also checks the embedded desktop version and file fingerprints using the installer's read-only `--verify-bundle` command.
+
+## Window dragging
+
+Version 1.18.33 restores dragging from Discord's title bar while keeping buttons, inputs, dialogs and the rest of the application outside the window drag region. Fully restart Discord after installing or repairing so the main-process stylesheet is refreshed.
