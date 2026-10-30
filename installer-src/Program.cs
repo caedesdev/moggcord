@@ -160,10 +160,10 @@ namespace MoggcordInstaller
         public LauncherForm()
         {
             this.Text = "Moggcord Installer";
-            this.Size = new Size(740, 620); // Enlarged to prevent text clipping
+            this.Size = new Size(960, 720); // Enlarged to prevent text clipping
             this.FormBorderStyle = FormBorderStyle.None;
             this.StartPosition = FormStartPosition.CenterScreen;
-            this.BackColor = Color.FromArgb(5, 5, 6); // matching HTML root
+            this.BackColor = Color.FromArgb(9, 10, 16); // matching HTML root
             var iconStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MoggcordInstaller.icon.ico");
             if (iconStream != null) this.Icon = new Icon(iconStream);
 
@@ -268,7 +268,9 @@ namespace MoggcordInstaller
                     hasThirdPartyMod: async (path) => await chrome.webview.hostObjects.backend.HasThirdPartyMod(path),
                     inject: async (path) => JSON.parse(await chrome.webview.hostObjects.backend.Inject(path)),
                     startInject: (path) => JSON.parse(chrome.webview.hostObjects.sync.backend.StartInject(path)),
+                    startOperation: (action, path, replaceOtherMod) => JSON.parse(chrome.webview.hostObjects.sync.backend.StartOperation(action, path, replaceOtherMod)),
                     getInjectStatus: () => JSON.parse(chrome.webview.hostObjects.sync.backend.GetInjectStatus()),
+                    getInstallerVersion: () => chrome.webview.hostObjects.sync.backend.GetInstallerVersion(),
                     uninject: async (path) => JSON.parse(await chrome.webview.hostObjects.backend.Uninject(path)),
                     minimizeApp: () => chrome.webview.hostObjects.backend.MinimizeApp(),
                     closeApp: () => chrome.webview.hostObjects.backend.CloseApp(),
@@ -280,7 +282,7 @@ namespace MoggcordInstaller
                     const titlebar = document.querySelector('.titlebar');
                     if (titlebar) {
                         titlebar.addEventListener('mousedown', (e) => {
-                            if(e.target.tagName !== 'BUTTON' && !e.target.classList.contains('titlebar-title')) {
+                            if (!e.target.closest('button, a')) {
                                 window.chrome.webview.postMessage('drag');
                             }
                         });
@@ -296,6 +298,12 @@ namespace MoggcordInstaller
             using (var reader = new StreamReader(stream))
             {
                 var html = reader.ReadToEnd();
+                using (var font = Assembly.GetExecutingAssembly().GetManifestResourceStream("MoggcordInstaller.fonts.InterVariable.woff2"))
+                using (var bytes = new MemoryStream())
+                {
+                    font.CopyTo(bytes);
+                    html = html.Replace("{{FONT_BASE64}}", Convert.ToBase64String(bytes.ToArray()));
+                }
 
                 // Convert Icon to Base64 PNG for HTML
                 try {
@@ -351,6 +359,8 @@ namespace MoggcordInstaller
 
         public void StartDiscordPublic(string resPath) => StartDiscord(resPath);
 
+        public string GetInstallerVersion() => Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
+
         public void MinimizeApp()
         {
             if (_form == null) return;
@@ -386,8 +396,7 @@ namespace MoggcordInstaller
             RunOnUiThread(() =>
             {
                 if (_webView.CoreWebView2 == null) return;
-                var safeText = text.Replace("'", "\\'").Replace("\n", " ");
-                _ = _webView.CoreWebView2.ExecuteScriptAsync($"if(typeof setStatus === 'function') setStatus('{type}', '{safeText}');");
+                _ = _webView.CoreWebView2.ExecuteScriptAsync($"if(typeof setStatus === 'function') setStatus({JsonSerializer.Serialize(type)}, {JsonSerializer.Serialize(text)});");
             });
         }
 
@@ -428,11 +437,23 @@ namespace MoggcordInstaller
 
         public async Task<bool> IsInjected(string path)
         {
-            return await Task.Run(() => {
-                var appDir = System.IO.Path.Combine(path, "app");
-                var pkgPath = System.IO.Path.Combine(appDir, "package.json");
-                return Directory.Exists(appDir) && File.Exists(pkgPath) && File.ReadAllText(pkgPath).Contains("\"moggcord\"");
-            });
+            return await Task.Run(() => IsMoggcordPackage(Path.Combine(path, "app", "package.json")));
+        }
+
+        private static bool IsMoggcordPackage(string packagePath)
+        {
+            if (!File.Exists(packagePath)) return false;
+            try
+            {
+                using var package = JsonDocument.Parse(File.ReadAllText(packagePath));
+                return package.RootElement.TryGetProperty("name", out var name)
+                    && name.ValueKind == JsonValueKind.String
+                    && string.Equals(name.GetString(), "moggcord", StringComparison.OrdinalIgnoreCase);
+            }
+            catch (JsonException)
+            {
+                return false;
+            }
         }
 
         /// <summary>
@@ -441,13 +462,15 @@ namespace MoggcordInstaller
         /// </summary>
         public async Task<bool> HasThirdPartyMod(string path)
         {
+            // Already Moggcord → not a third-party mod
+            if (await IsInjected(path)) return false;
             return await Task.Run(() => {
                 var appDir = System.IO.Path.Combine(path, "app");
                 var pkgPath = System.IO.Path.Combine(appDir, "package.json");
-                if (!Directory.Exists(appDir) || !File.Exists(pkgPath)) return false;
-                var content = File.ReadAllText(pkgPath);
-                // Already Moggcord → not a third-party mod
-                if (content.Contains("\"moggcord\"")) return false;
+                var content = File.Exists(pkgPath) ? File.ReadAllText(pkgPath) : "";
+                var appAsar = Path.Combine(path, "app.asar");
+                if (File.Exists(appAsar) && new FileInfo(appAsar).Length < 2_000_000)
+                    content += File.ReadAllText(appAsar);
                 return content.Contains("vencord", StringComparison.OrdinalIgnoreCase)
                     || content.Contains("equicord", StringComparison.OrdinalIgnoreCase)
                     || content.Contains("openasar", StringComparison.OrdinalIgnoreCase);
@@ -490,64 +513,97 @@ namespace MoggcordInstaller
         }
 
         // Job state for async inject (avoids WebView2 COM proxy timeout on large downloads)
-        private string _injectJobState = "idle"; // idle | running | done | error
+        private volatile string _injectJobState = "idle"; // idle | running | done | error
         private string _injectJobError = "";
+        private string _injectJobResult = "";
+        private readonly object _operationLock = new object();
 
-        public string StartInject(string resourcesPath)
+        public string StartInject(string resourcesPath) => StartOperation("install", resourcesPath, false);
+
+        public string StartOperation(string action, string resourcesPath, bool replaceOtherMod)
         {
-            if (_injectJobState == "running")
-                return JsonSerializer.Serialize(new { started = false, error = "Already running" });
-
-            _injectJobState = "running";
-            _injectJobError = "";
-
-            Task.Run(async () =>
+            lock (_operationLock)
             {
-                try
-                {
-                    await EnsureDistAsync();
-                    await Task.Run(() => DoInject(resourcesPath));
-                    _injectJobState = "done";
-                }
-                catch (Exception ex)
-                {
-                    _injectJobError = ex.Message;
-                    _injectJobState = "error";
-                }
-            });
+                if (_injectJobState == "running")
+                    return JsonSerializer.Serialize(new { started = false, error = "An operation is already running." });
 
-            return JsonSerializer.Serialize(new { started = true });
+                _injectJobState = "running";
+                _injectJobError = "";
+                _injectJobResult = "";
+                Task.Run(async () =>
+                {
+                    try
+                    {
+                        _injectJobResult = await RunOperationAsync(action, resourcesPath, replaceOtherMod);
+                        _injectJobState = "done";
+                    }
+                    catch (Exception ex)
+                    {
+                        _injectJobError = ex.Message;
+                        _injectJobState = "error";
+                    }
+                });
+                return JsonSerializer.Serialize(new { started = true });
+            }
         }
 
         public string GetInjectStatus()
         {
+            var state = _injectJobState;
             return JsonSerializer.Serialize(new
             {
-                state = _injectJobState,
-                error = _injectJobError
+                state,
+                error = _injectJobError,
+                result = _injectJobResult
             });
         }
 
         // Keep old Inject for compat but it just delegates
-        public async Task<string> Inject(string resourcesPath)
+        public Task<string> Inject(string resourcesPath) => RunOperationResultAsync("install", resourcesPath);
+
+        public Task<string> Uninject(string resourcesPath) => RunOperationResultAsync("uninstall", resourcesPath);
+
+        private async Task<string> RunOperationResultAsync(string action, string resourcesPath)
         {
-            try {
-                await EnsureDistAsync();
-                await Task.Run(() => DoInject(resourcesPath));
-                return JsonSerializer.Serialize(new { success = true });
-            } catch (Exception ex) {
+            try
+            {
+                var result = await RunOperationAsync(action, resourcesPath, false);
+                return JsonSerializer.Serialize(new { success = true, result });
+            }
+            catch (Exception ex)
+            {
                 return JsonSerializer.Serialize(new { success = false, error = ex.Message });
             }
         }
 
-        public async Task<string> Uninject(string resourcesPath)
+        private async Task<string> RunOperationAsync(string action, string resourcesPath, bool replaceOtherMod)
         {
-            try {
-                await Task.Run(() => DoUninject(resourcesPath));
-                return JsonSerializer.Serialize(new { success = true });
-            } catch (Exception ex) {
-                return JsonSerializer.Serialize(new { success = false, error = ex.Message });
+            if (action != "install" && action != "repair" && action != "uninstall")
+                throw new InvalidOperationException("Choose Install, Repair or Uninstall.");
+            var path = Path.GetFullPath(resourcesPath);
+            if (!Directory.Exists(path) || !string.Equals(Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)), "resources", StringComparison.OrdinalIgnoreCase)
+                || (!File.Exists(Path.Combine(path, "app.asar")) && !File.Exists(Path.Combine(path, "_app.asar"))))
+                throw new InvalidOperationException("Choose the resources folder of a Discord installation.");
+
+            var installed = await IsInjected(path);
+            if (action == "install" && installed) return "alreadyInstalled";
+            if (action != "install" && !installed)
+                throw new InvalidOperationException("Moggcord is not installed here. Choose another Discord installation or use Install.");
+            if (action == "install" && !replaceOtherMod && await HasThirdPartyMod(path))
+                throw new InvalidOperationException("Another mod is installed here. Confirm that you want to replace it first.");
+            if (!File.Exists(Path.Combine(Path.GetDirectoryName(path), GetDiscordProcessName(path) + ".exe")))
+                throw new InvalidOperationException("The Discord executable is missing next to this resources folder. Check the selected path.");
+
+            if (action == "uninstall")
+            {
+                await Task.Run(() => DoUninject(path));
+                return "uninstalled";
             }
+
+            await EnsureDistAsync();
+            if (action == "install" && await IsInjected(path)) return "alreadyInstalled";
+            await Task.Run(() => DoInject(path));
+            return action == "repair" ? "repaired" : "installed";
         }
 
         private async Task EnsureDistAsync()
@@ -905,7 +961,7 @@ namespace MoggcordInstaller
             if (Directory.Exists(appDir))
             {
                 var pkg = Path.Combine(appDir, "package.json");
-                if (File.Exists(pkg) && File.ReadAllText(pkg).Contains("\"moggcord\""))
+                if (IsMoggcordPackage(pkg))
                 {
                     Directory.Delete(appDir, true);
                 }
@@ -1138,12 +1194,31 @@ namespace MoggcordInstaller
         {
             SetStatus("loading", "Closing Discord...");
             var procName = GetDiscordProcessName(resPath);
+            var channelRoot = Directory.GetParent(Path.GetDirectoryName(Path.GetFullPath(resPath))).FullName + Path.DirectorySeparatorChar;
 
             foreach (var name in new[] { procName, "DiscordSystemHelper" })
             {
                 foreach (var process in Process.GetProcessesByName(name))
                 {
-                    try { process.Kill(); process.WaitForExit(5000); } catch { }
+                    try
+                    {
+                        var executable = process.MainModule?.FileName;
+                        if (executable == null || !Path.GetFullPath(executable).StartsWith(channelRoot, StringComparison.OrdinalIgnoreCase)) continue;
+                        process.Kill();
+                        process.WaitForExit(5000);
+                    }
+                    catch (InvalidOperationException) when (process.HasExited)
+                    {
+                        continue;
+                    }
+                    catch (Exception error)
+                    {
+                        throw new IOException("Could not close the selected Discord installation. Close it manually and try again.", error);
+                    }
+                    finally
+                    {
+                        process.Dispose();
+                    }
                 }
             }
 
