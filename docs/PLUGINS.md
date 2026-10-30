@@ -1,6 +1,6 @@
 # Included plugins
 
-Moggcord includes four standard plugins:
+Moggcord includes the full built-in plugin catalog. Four plugins are enabled by default:
 
 | Plugin | Purpose |
 | --- | --- |
@@ -9,9 +9,9 @@ Moggcord includes four standard plugins:
 | CustomProfile | Local profile appearance |
 | TokenImporter | Manage and switch imported accounts |
 
-Other optional built-in plugins and their native helpers are excluded from the distributed plugin registries. Internal APIs, core settings, the required UI fix and TokenImporter's account bridge remain available and do not appear as selectable plugins.
+All other Moggcord plugins from `src/moggcordplugins`, including their native helpers, are included and can be enabled individually in settings. Optional plugins start disabled even if their source originally declared them required or enabled by default. Internal APIs, core settings, the required UI fix and TokenImporter's account bridge remain available and do not appear as selectable plugins.
 
-These four plugins are enabled for fresh installations. Updating an existing installation preserves its saved settings; an individually disabled plugin stays disabled. Settings for removed plugins are not deleted, but those plugins are no longer loaded.
+These four plugins are enabled for fresh installations. The first start with version 1.18.32 or later disables the other built-in plugins once, preserving their configuration values and community plugin activation. After that transition, manually enabled plugins remain enabled across restarts and updates. The four default plugins retain any previously saved individual on/off preferences.
 
 Community plugins installed from the website remain supported. The source build still accepts TypeScript, JavaScript, CSS and native helpers from src/userplugins. See [Community installation](COMMUNITY-INSTALL.md).
 

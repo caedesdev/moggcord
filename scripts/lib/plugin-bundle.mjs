@@ -24,5 +24,5 @@ export function pluginBundleKind(directory, filename) {
     if (directory !== "moggcordplugins") return null;
     if (Object.hasOwn(bundledPlugins, filename)) return "standard";
     if (Object.hasOwn(internalPlugins, filename)) return "internal";
-    return null;
+    return "optional";
 }

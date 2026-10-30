@@ -26,18 +26,6 @@ import plugins from "~plugins";
 
 const logger = new Logger("Settings");
 
-export const FORCE_DISABLED_DEFAULT_PLUGIN_KEYS = new Set([
-    "activityspoofer",
-    "audiolimiter",
-    "antigroup",
-    "cursormacos",
-    "fakeperm",
-    "translucence",
-    "rolecoloreverywhere",
-    "voicechatutilities",
-    "macosbuttons"
-]);
-
 export interface SettingsPluginUiElement {
     enabled: boolean;
     // TODO
@@ -169,22 +157,12 @@ mergeDefaults(settings, DefaultSettings);
 
 if (!IS_REPORTER && settings.plugins && plugins) {
     for (const [pluginKey, pluginDef] of Object.entries(plugins as Record<string, any>)) {
-        const forceOff =
-            FORCE_DISABLED_DEFAULT_PLUGIN_KEYS.has(pluginKey.toLowerCase())
-            || FORCE_DISABLED_DEFAULT_PLUGIN_KEYS.has(String(pluginDef?.name ?? "").toLowerCase());
-
-        if (forceOff) {
-            if (settings.plugins[pluginKey]) settings.plugins[pluginKey].enabled = false;
-            continue;
-        }
-
         const shouldBeEnabled = Boolean(pluginDef?.required) || Boolean(pluginDef?.enabledByDefault);
         if (!settings.plugins[pluginKey]) {
             settings.plugins[pluginKey] = { enabled: shouldBeEnabled };
         }
     }
 }
-
 
 export const SettingsStore = new SettingsStoreClass(settings, {
     readOnly: true,
@@ -199,18 +177,10 @@ export const SettingsStore = new SettingsStoreClass(settings, {
         if (path === "plugins" && key in plugins) {
             const pluginKey = String(key);
             const pluginDef = (plugins as Record<string, any>)[pluginKey];
-            const forceOff =
-                FORCE_DISABLED_DEFAULT_PLUGIN_KEYS.has(pluginKey.toLowerCase())
-                || FORCE_DISABLED_DEFAULT_PLUGIN_KEYS.has(String(pluginDef?.name ?? "").toLowerCase());
-
-            const shouldBeEnabled = !forceOff && (IS_REPORTER || Boolean(pluginDef?.required) || Boolean(pluginDef?.enabledByDefault));
+            const shouldBeEnabled = IS_REPORTER || Boolean(pluginDef?.required) || Boolean(pluginDef?.enabledByDefault);
 
             if (!target[key]) {
                 return target[key] = { enabled: shouldBeEnabled };
-            }
-
-            if (forceOff) {
-                target[key].enabled = false;
             }
 
             return target[key];

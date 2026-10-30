@@ -22,8 +22,10 @@ function pluginDefinition(filename) {
     const file = ts.createSourceFile(filename, readFileSync(filename, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
     let definition;
     const visit = node => {
-        if (ts.isCallExpression(node) && node.expression.getText(file) === "definePlugin" && ts.isObjectLiteralExpression(node.arguments[0]))
-            definition = node.arguments[0];
+        if (ts.isCallExpression(node) && node.expression.getText(file) === "definePlugin") {
+            const argument = ts.isAsExpression(node.arguments[0]) ? node.arguments[0].expression : node.arguments[0];
+            if (ts.isObjectLiteralExpression(argument)) definition = argument;
+        }
         ts.forEachChild(node, visit);
     };
     visit(file);
@@ -33,7 +35,7 @@ function pluginDefinition(filename) {
         if (!ts.isPropertyAssignment(property)) continue;
         const key = property.name.getText(file);
         if (key === "name") result.name = property.initializer.text;
-        if (key === "dependencies") result.dependencies = property.initializer.elements.map(value => value.text);
+        if (key === "dependencies" && ts.isArrayLiteralExpression(property.initializer)) result.dependencies = property.initializer.elements.map(value => value.text);
         if (["required", "enabledByDefault", "hidden"].includes(key))
             result[key] = property.initializer.kind === ts.SyntaxKind.TrueKeyword;
     }
@@ -82,12 +84,12 @@ function nativeGenerator() {
     });
 }
 
-test("the bundle policy includes exactly the requested standard plugins and preserves community sources", () => {
+test("the bundle policy includes the full catalog with four default plugins and preserves community sources", () => {
     assert.deepEqual(Object.values(bundledPlugins).sort(), wanted);
     for (const folder of Object.keys(bundledPlugins)) assert.equal(pluginBundleKind("moggcordplugins", folder), "standard");
     for (const folder of Object.keys(internalPlugins)) assert.equal(pluginBundleKind("moggcordplugins", folder), "internal");
     for (const folder of ["ghostClient", "massDM", "messageLogger", "themeLibrary", "moggcordUpdater", "unrecognized"])
-        assert.equal(pluginBundleKind("moggcordplugins", folder), null);
+        assert.equal(pluginBundleKind("moggcordplugins", folder), "optional");
     assert.equal(pluginBundleKind("plugins", "alwaysAnimate"), null);
     assert.equal(pluginBundleKind("plugins/_api", "sharedModal.css"), null);
     assert.equal(pluginBundleKind("plugins/_api", "commands.ts"), "internal");
@@ -96,30 +98,43 @@ test("the bundle policy includes exactly the requested standard plugins and pres
         assert.equal(pluginBundleKind("userplugins", name), "user");
 });
 
-test("the real renderer registry exposes four standard plugins with complete internal dependencies", async () => {
+test("the full renderer catalog exposes every desktop Moggcord plugin with only four enabled defaults", async () => {
     const result = await registry(await loadGenerated(globPlugins("discordDesktop")));
     const plugins = result.default;
     const visible = Object.values(plugins).filter(plugin => !plugin.hidden && !result.PluginMeta[plugin.name].userPlugin);
-    assert.deepEqual(visible.map(plugin => plugin.name).sort(), wanted);
-    for (const plugin of visible) assert.equal(plugin.enabledByDefault, true);
+    assert(visible.length > 90);
+    assert.deepEqual(visible.filter(plugin => plugin.enabledByDefault).map(plugin => plugin.name).sort(), wanted);
+    for (const plugin of visible) assert.equal(Boolean(plugin.required), false, plugin.name + " must be optional");
+    for (const name of ["GhostClient", "MassDM", "VoiceDownload", "ThemeLibrary", "MoggcordUpdater", "MessageLoggerEnhanced"])
+        assert(plugins[name], name + " must be present in the catalog");
+    for (const entry of await readdir(join(root, "src/moggcordplugins"), { withFileTypes: true })) {
+        if (entry.name.startsWith("_") || entry.name.startsWith(".") || entry.name.endsWith(".ini")) continue;
+        if (!entry.isDirectory() && !/\.[jt]sx?$/.test(entry.name)) continue;
+        const name = await resolvePluginName("src/moggcordplugins", entry);
+        if (result.ExcludedPlugins[name]) continue;
+        assert(plugins[name], name + " is missing from src/moggcordplugins");
+    }
     for (const plugin of Object.values(plugins))
         for (const dependency of plugin.dependencies ?? []) assert(plugins[dependency], plugin.name + " is missing " + dependency);
     for (const name of ["Settings", "NoTrack", "CommandsAPI", "HeaderBarAPI", "ContextMenuAPI", "UserAreaAPI", ...Object.values(internalPlugins)])
         assert.equal(plugins[name].hidden, true, name + " must stay internal");
     const settings = JSON.parse(readFileSync(join(root, "installer-src/default-settings.json"), "utf8"));
-    for (const name of Object.keys(settings.plugins)) assert(plugins[name], "Installer defaults include a removed plugin: " + name);
+    for (const [name, value] of Object.entries(settings.plugins)) {
+        assert(plugins[name], "Installer defaults include a missing plugin: " + name);
+        if (!plugins[name].hidden && !wanted.includes(name)) assert.equal(value.enabled, false, name + " is unexpectedly enabled in installer defaults");
+    }
     for (const name of wanted) assert.equal(settings.plugins[name].enabled, true);
 });
 
-test("the real native registry includes only the two standard plugins that need native helpers", async () => {
+test("the full native registry includes the optional plugin helpers and all four default plugin requirements", async () => {
     const result = await registry(await loadGenerated(nativeGenerator()), true);
     const names = Object.keys(result.default).filter(name => Object.values(bundledPlugins).includes(name));
     assert.deepEqual(names.sort(), ["ExportDM", "TokenImporter"]);
-    for (const name of ["GhostClient", "MassDM", "VoiceDownload", "MoggcordAI"])
-        assert.equal(result.default[name], undefined);
+    for (const name of ["GhostClient", "VoiceMessages", "ThemeLibrary"])
+        assert(result.default[name], name + " native helpers must be included");
 });
 
-test("community TypeScript, CSS and native plugins still build while other built-ins are excluded", async t => {
+test("community sources and optional built-in plugins build together without enabling optional defaults", async t => {
     const directory = await mkdtemp(join(tmpdir(), "moggcord-bundle-test-"));
     t.after(async () => {
         process.chdir(root);
@@ -146,8 +161,61 @@ test("community TypeScript, CSS and native plugins still build while other built
     }
     process.chdir(directory);
     const renderer = await registry(await loadGenerated(globPlugins("discordDesktop")));
-    assert.deepEqual(Object.keys(renderer.default).sort(), ["CommunityExample", "CommunityNative", "FakeVoice", "styles"]);
+    assert.deepEqual(Object.keys(renderer.default).sort(), ["CommunityExample", "CommunityNative", "FakeVoice", "MassDM", "styles"]);
+    for (const name of ["MassDM"]) {
+        assert.equal(renderer.default[name].enabledByDefault, false);
+        assert.equal(renderer.default[name].required, false);
+    }
     for (const name of ["CommunityExample", "CommunityNative", "styles"]) assert.equal(renderer.PluginMeta[name].userPlugin, true);
     const native = await registry(await loadGenerated(nativeGenerator()), true);
-    assert.deepEqual(Object.keys(native.default).sort(), ["CommunityNative", "FakeVoice"]);
+    assert.deepEqual(Object.keys(native.default).sort(), ["CommunityNative", "FakeVoice", "MassDM"]);
+});
+
+test("catalog activation migration disables other built-ins once while preserving community settings and later user choices", async () => {
+    const text = await readFile(join(root, "src/api/PluginManager.ts"), "utf8");
+    const file = ts.createSourceFile("PluginManager.ts", text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    let apply, transition;
+    const visit = node => {
+        if (ts.isFunctionDeclaration(node) && node.name?.text === "applyDefaultOffPlugins") apply = node.getText(file);
+        if (ts.isIfStatement(node) && node.expression.getText(file) === "!plain[FULL_CATALOG_FLAG]") transition = node.getText(file);
+        ts.forEachChild(node, visit);
+    };
+    visit(file);
+    assert(apply && transition);
+    const Plugins = {
+        FakeVoice: { name: "FakeVoice", enabledByDefault: true },
+        Optional: { name: "Optional", enabledByDefault: false, required: false },
+        Settings: { name: "Settings", required: true },
+        Community: { name: "Community" }
+    };
+    const plain = { plugins: { FakeVoice: { enabled: true }, Optional: { enabled: true, preference: "keep" }, Settings: { enabled: true }, Community: { enabled: true } } };
+    let changes = 0;
+    const context = vm.createContext({ Plugins, PluginMeta: { Community: { userPlugin: true } }, plain, FULL_CATALOG_FLAG: "full_catalog", SettingsStore: { plain, markAsChanged: () => changes++ } });
+    const { code } = await transform(apply + "\n" + transition, { loader: "ts" });
+    vm.runInContext(code, context);
+    assert.equal(plain.plugins.Optional.enabled, false);
+    assert.equal(plain.plugins.Optional.preference, "keep");
+    assert.equal(plain.plugins.FakeVoice.enabled, true);
+    assert.equal(plain.plugins.Settings.enabled, true);
+    assert.equal(plain.plugins.Community.enabled, true);
+    plain.plugins.Optional.enabled = true;
+    vm.runInContext(code, context);
+    assert.equal(plain.plugins.Optional.enabled, true);
+    assert.equal(changes, 1);
+});
+
+test("saved plugin choices override disabled defaults and missing optional plugins start disabled", async () => {
+    const text = await readFile(join(root, "src/api/Settings.ts"), "utf8");
+    const file = ts.createSourceFile("Settings.ts", text, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const initialization = file.statements.find(node => ts.isIfStatement(node) && node.expression.getText(file) === "!IS_REPORTER && settings.plugins && plugins");
+    assert(initialization);
+    const settings = { plugins: { FakePerm: { enabled: true }, FakeVoice: { enabled: false } } };
+    const plugins = { FakePerm: { enabledByDefault: false }, MacOsButtons: { enabledByDefault: false }, FakeVoice: { enabledByDefault: true }, TokenImporter: { enabledByDefault: true } };
+    const { code } = await transform(initialization.getText(file), { loader: "ts" });
+    vm.runInNewContext(code, { settings, plugins, IS_REPORTER: false });
+    assert.equal(settings.plugins.FakePerm.enabled, true);
+    assert.equal(settings.plugins.MacOsButtons.enabled, false);
+    assert.equal(settings.plugins.FakeVoice.enabled, false);
+    assert.equal(settings.plugins.TokenImporter.enabled, true);
+    assert(!text.includes("FORCE_DISABLED_DEFAULT_PLUGIN_KEYS"));
 });

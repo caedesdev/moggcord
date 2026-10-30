@@ -212,6 +212,7 @@ export const globPlugins = kind => ({
                         code += `import ${mod} from "./${dir}/${fileName.replace(/\.tsx?$/, "")}";\n`;
                     }
                     if (bundleKind === "internal") code += `${mod}.hidden = true;\n`;
+                    if (bundleKind === "optional") code += `${mod}.enabledByDefault = false;${mod}.required = false;\n`;
 
                     pluginsCode += `[${mod}.name]:${mod},\n`;
                     metaCode += `[${mod}.name]:${JSON.stringify({ folderName, userPlugin })},\n`;
