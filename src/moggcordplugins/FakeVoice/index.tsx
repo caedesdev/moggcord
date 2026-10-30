@@ -1,21 +1,55 @@
-import { findByProps } from "@webpack";
-import definePlugin from "@utils/types";
+/*
+ * Vencord, a Discord client mod
+ * Copyright (c) 2026 mushzi
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
 import { ApplicationCommandInputType, sendBotMessage } from "@api/Commands";
 import { UserAreaButton, UserAreaRenderProps } from "@api/UserArea";
-import { React, ContextMenuApi, Menu } from "@webpack/common";
+import definePlugin from "@utils/types";
+import { ContextMenuApi, Menu, React } from "@webpack/common";
+
+interface VoiceStateUpdate {
+    channelId?: string | null;
+    selfMute?: boolean;
+    selfDeaf?: boolean;
+    selfVideo?: boolean;
+}
+
+interface VoiceSocket {
+    voiceStateUpdate(state: VoiceStateUpdate): void;
+}
 
 let isGhostActive = false;
-let configFakeMute = true;
+let configFakeMute = false;
 let configFakeDeafen = true;
+let voiceSocket: VoiceSocket | undefined;
+let voiceState: VoiceStateUpdate | undefined;
+const listeners = new Set<() => void>();
 
-const syncState = () => {
-    const SelectedChannelStore = findByProps("getVoiceChannelId");
-    const vm = findByProps("toggleSelfMute");
-    if (vm && SelectedChannelStore?.getVoiceChannelId()) {
-        vm.toggleSelfMute();
-        vm.toggleSelfMute();
-    }
-};
+function notify() {
+    for (const listener of listeners) listener();
+}
+
+function syncState() {
+    if (voiceState?.channelId) voiceSocket?.voiceStateUpdate(voiceState);
+    notify();
+}
+
+function useVoiceState() {
+    const [, forceUpdate] = React.useReducer((value: number) => value + 1, 0);
+    React.useEffect(() => {
+        listeners.add(forceUpdate);
+        return () => { listeners.delete(forceUpdate); };
+    }, []);
+}
+
+function toggleMode(mute: boolean, deafen: boolean) {
+    isGhostActive = !(isGhostActive && configFakeMute === mute && configFakeDeafen === deafen);
+    configFakeMute = mute;
+    configFakeDeafen = deafen;
+    syncState();
+}
 
 function FakeDeafenIcon({ className }: { className?: string }) {
     return (
@@ -31,9 +65,9 @@ function FakeDeafenIcon({ className }: { className?: string }) {
 }
 
 function GhostContextMenu() {
-    const [, forceUpdate] = React.useReducer((x: number) => x + 1, 0);
+    useVoiceState();
     return (
-        <Menu.Menu navId="fake-voice-menu" aria-label="Fake Voice Configuration">
+        <Menu.Menu navId="fake-voice-menu" aria-label="Fake Voice Configuration" onClose={ContextMenuApi.closeContextMenu}>
             <Menu.MenuGroup label="Ghost Options">
                 <Menu.MenuCheckboxItem
                     id="opt-both"
@@ -43,7 +77,8 @@ function GhostContextMenu() {
                         const nextState = !(configFakeMute && configFakeDeafen);
                         configFakeMute = nextState;
                         configFakeDeafen = nextState;
-                        forceUpdate();
+                        if (!nextState) isGhostActive = false;
+                        syncState();
                     }}
                 />
                 <Menu.MenuSeparator />
@@ -53,7 +88,8 @@ function GhostContextMenu() {
                     checked={configFakeMute}
                     action={() => {
                         configFakeMute = !configFakeMute;
-                        forceUpdate();
+                        if (!configFakeMute && !configFakeDeafen) isGhostActive = false;
+                        syncState();
                     }}
                 />
                 <Menu.MenuCheckboxItem
@@ -62,7 +98,8 @@ function GhostContextMenu() {
                     checked={configFakeDeafen}
                     action={() => {
                         configFakeDeafen = !configFakeDeafen;
-                        forceUpdate();
+                        if (!configFakeMute && !configFakeDeafen) isGhostActive = false;
+                        syncState();
                     }}
                 />
             </Menu.MenuGroup>
@@ -70,17 +107,17 @@ function GhostContextMenu() {
     );
 }
 
-function FakeDeafenUserButton({ iconForeground, hideTooltips, nameplate }: UserAreaRenderProps & { hideTooltips?: boolean }) {
-    const [, forceUpdate] = React.useReducer((x: number) => x + 1, 0);
+function FakeDeafenUserButton({ iconForeground, hideTooltips, nameplate }: UserAreaRenderProps) {
+    useVoiceState();
     return (
         <UserAreaButton
             onClick={() => {
                 isGhostActive = !isGhostActive;
+                if (isGhostActive && !configFakeMute && !configFakeDeafen) configFakeDeafen = true;
                 syncState();
-                forceUpdate();
             }}
             onContextMenu={(e: React.MouseEvent) => ContextMenuApi.openContextMenu(e, () => <GhostContextMenu />)}
-            tooltipText={hideTooltips ? undefined : isGhostActive ? "Disable Fake Voice" : "Enable Fake Voice (right click: config)"}
+            tooltipText={hideTooltips ? undefined : isGhostActive ? "Disable Fake Voice" : "Enable Fake Deafen (right click: config)"}
             icon={<FakeDeafenIcon className={iconForeground} />}
             role="switch"
             aria-checked={isGhostActive}
@@ -100,20 +137,40 @@ export default definePlugin({
     patches: [
         {
             find: "}voiceStateUpdate(",
-            replacement: {
-                match: /self_mute:([^,]+),self_deaf:([^,]+),self_video:([^,]+)/,
-                replace: "self_mute:$self.toggle($1,'mute'),self_deaf:$self.toggle($2,'deaf'),self_video:$self.toggle($3,'video')"
-            }
+            group: true,
+            replacement: [
+                {
+                    match: /voiceStateUpdate\(\i\)\{/,
+                    replace: "$&$self.rememberVoiceState(this,arguments[0]);"
+                },
+                {
+                    match: /self_mute:(\i),self_deaf:(\i)/,
+                    replace: "self_mute:$self.toggle($1,'mute'),self_deaf:$self.toggle($2,'deaf')"
+                }
+            ]
         }
     ],
 
-    toggle(val: any, what: string) {
+    rememberVoiceState(socket: VoiceSocket, state: VoiceStateUpdate) {
+        voiceSocket = socket;
+        voiceState = { ...state };
+        if (state.channelId == null && isGhostActive) {
+            isGhostActive = false;
+            notify();
+        }
+    },
+
+    toggle(val: boolean, what: "mute" | "deaf") {
         if (!isGhostActive) return val;
         switch (what) {
             case "mute": return configFakeMute ? true : val;
             case "deaf": return configFakeDeafen ? true : val;
-            case "video": return val;
         }
+    },
+
+    stop() {
+        isGhostActive = false;
+        syncState();
     },
 
     userAreaButton: {
@@ -125,35 +182,27 @@ export default definePlugin({
         {
             inputType: ApplicationCommandInputType.BUILT_IN,
             name: "fakemute",
-            description: "Toggle Fake Mute",
+            description: "Toggle Fake Mute.",
             execute: async (_, ctx) => {
-                configFakeMute = !configFakeMute;
-                isGhostActive = configFakeMute;
-                syncState();
+                toggleMode(true, false);
                 sendBotMessage(ctx.channel.id, { content: `👻 **Fake Mute** is ${isGhostActive ? "enabled" : "disabled"}.` });
             },
         },
         {
             inputType: ApplicationCommandInputType.BUILT_IN,
             name: "fakedeafen",
-            description: "Toggle Fake Deafen",
+            description: "Toggle Fake Deafen.",
             execute: async (_, ctx) => {
-                configFakeDeafen = !configFakeDeafen;
-                isGhostActive = configFakeDeafen;
-                syncState();
+                toggleMode(false, true);
                 sendBotMessage(ctx.channel.id, { content: `👻 **Fake Deafen** is ${isGhostActive ? "enabled" : "disabled"}.` });
             },
         },
         {
             inputType: ApplicationCommandInputType.BUILT_IN,
             name: "fakedeafen_mute",
-            description: "Toggle Fake Deafen & Mute simultanément",
+            description: "Toggle Fake Deafen and Mute together.",
             execute: async (_, ctx) => {
-                const next = !(configFakeMute && configFakeDeafen);
-                configFakeMute = next;
-                configFakeDeafen = next;
-                isGhostActive = next;
-                syncState();
+                toggleMode(true, true);
                 sendBotMessage(ctx.channel.id, { content: `👻 **Fake Deafen & Mute** are ${isGhostActive ? "enabled" : "disabled"}.` });
             },
         },

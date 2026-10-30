@@ -1,7 +1,7 @@
 {
     "name": "moggcord",
     "private": "true",
-    "version": "1.18.30",
+    "version": "1.18.31",
     "description": "Everything Discord doesn't build, we create",
     "main": "dist/js/main.js",
     "homepage": "https://github.com/caedesdev/moggcord",
@@ -19,7 +19,7 @@
         "community:start": "node scripts/community/bridge.mjs",
         "test:community": "node --test scripts/tests/community.test.mjs scripts/tests/release.test.mjs scripts/tests/updater.test.mjs scripts/tests/developer-team.test.mjs",
         "test:installer": "node --test scripts/tests/installer-ui.test.mjs",
-        "test:plugins": "node --test scripts/tests/plugin-bundle.test.mjs",
+        "test:plugins": "node --test scripts/tests/plugin-bundle.test.mjs scripts/tests/user-area.test.mjs scripts/tests/fake-voice.test.mjs scripts/tests/commands.test.mjs",
         "build": "pnpm depCheck && node --require=./scripts/suppressExperimentalWarnings.js scripts/build/build.mjs",
         "buildStandalone": "pnpm build --standalone",
         "buildDesktop": "tsx scripts/build/buildDesktop.mts",
