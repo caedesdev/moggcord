@@ -11,7 +11,6 @@ import { Heading } from "@components/Heading";
 import { FolderIcon, LogIcon, PaintbrushIcon, RestartIcon, OwnerCrownIcon, WebsiteIcon, OpenExternalIcon, PlanetIcon, HeartIcon } from "@components/Icons";
 import { Notice } from "@components/Notice";
 import { Paragraph } from "@components/Paragraph";
-import { Card } from "@components/Card";
 import { openPluginModal, SettingsTab, wrapTab } from "@components/settings";
 import { QuickAction, QuickActionCard } from "@components/settings/QuickAction";
 import { IS_MAC, IS_WINDOWS } from "@utils/constants";
@@ -19,30 +18,14 @@ import { classNameFactory } from "@utils/css";
 import { Margins } from "@utils/margins";
 import { identity } from "@utils/misc";
 import { relaunch } from "@utils/native";
-import { React, Select, UserStore, NavigationRouter, Avatar } from "@webpack/common";
+import { React, Select, UserStore, NavigationRouter } from "@webpack/common";
 import { _notifyStealthChange, isStealthModeEnabled, syncStealthBodyClass, toggleStealthMode } from "@api/HeaderBar";
 import { openNotificationSettingsModal } from "./NotificationSettings";
 import { openModal } from "@utils/modal";
 import { ContributeModal } from "../../../../moggcord/renderer/components/ContributeModal";
+import DeveloperTeam from "./DeveloperTeam";
 
 const cl = classNameFactory("vc-vencord-tab-");
-
-const DEV_TEAM = [
-    {
-        id: "caedesxd",
-        name: "Caedes",
-        role: "Owner / Main Developer",
-        pfp: "https://cdn.discordapp.com/avatars/285824493748748299/001c9ae53b052ca9e0799da328127d40.webp?size=1024",
-        description: "Founder and Owner of Moggcord."
-    },
-    {
-        id: "ninifxe",
-        name: "Ninifxe",
-        role: "Co-Owner / Developer",
-        pfp: "https://cdn.discordapp.com/avatars/726084725441036310/a_e64d5b4721d7b450a77179412f1f6a20.gif?size=1024&animated=true",
-        description: "Founder and Developer of Moggcord."
-    }
-];
 
 function DevTeamSection() {
     const [showDevs, setShowDevs] = React.useState(false);
@@ -79,33 +62,7 @@ function DevTeamSection() {
                 />
             </QuickActionCard>
 
-            {showDevs && (
-                <div style={{ marginTop: "16px", display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: "10px", animation: "slideIn 0.3s ease-out" }}>
-                    <style>{`
-                        @keyframes slideIn {
-                            from { opacity: 0; transform: translateY(-10px); }
-                            to { opacity: 1; transform: translateY(0); }
-                        }
-                    `}</style>
-                    {DEV_TEAM.map(dev => {
-                        return (
-                            <Card key={dev.id} variant="primary" outline style={{ padding: "10px" }}>
-                                <Flex align={Flex.Align.CENTER} gap="10px">
-                                    <Avatar
-                                        src={dev.pfp}
-                                        size="SIZE_48"
-                                    />
-                                    <Flex direction={Flex.Direction.VERTICAL} style={{ flex: 1, gap: "0px" }}>
-                                        <Heading tag="h3" style={{ marginBottom: "-2px" }}>{dev.name}</Heading>
-                                        <Heading tag="h4" style={{ opacity: 0.6, marginBottom: "2px" }}>{dev.role}</Heading>
-                                        <Paragraph size="xs" style={{ lineHeight: "1.2" }}>{dev.description}</Paragraph>
-                                    </Flex>
-                                </Flex>
-                            </Card>
-                        );
-                    })}
-                </div>
-            )}
+            {showDevs && <DeveloperTeam />}
         </>
     );
 }

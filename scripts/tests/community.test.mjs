@@ -123,6 +123,15 @@ test("failed builds restore source and never stop the client or replace installe
     assert(!existsSync(directory)); assert.deepEqual(JSON.parse(await readFile(f.settings, "utf8")), f.original);
 });
 
+test("a stop failure reopens the previous client and leaves settings and installed files unchanged", async t => {
+    const f = await fixture(t);
+    f.dependencies.stop = async () => { throw new Error("Stop failed after closing the window"); };
+    await assert.rejects(installEntry(entry(), f.config, f.dependencies), /Stop failed/);
+    assert.deepEqual(f.events, ["build", "start canary"]);
+    assert.equal(await readFile(join(f.client.installDir, "renderer.js"), "utf8"), "old renderer");
+    assert.deepEqual(JSON.parse(await readFile(f.settings, "utf8")), f.original);
+});
+
 test("failed restarts restore settings, plugin source and installed bundles before reopening the previous client", async t => {
     const f = await fixture(t); let attempts = 0;
     f.dependencies.start = async () => { if (!attempts++) throw new Error("Start failed"); f.events.push("recovered"); };
