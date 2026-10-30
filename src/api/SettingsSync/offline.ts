@@ -5,11 +5,15 @@
  */
 
 import { PlainSettings } from "@api/Settings";
+import { reviewPluginImport } from "@components/settings/tabs/sync/ImportPreview";
 import { Logger } from "@utils/Logger";
 import { chooseFile, saveFile } from "@utils/web";
 import { moment, Toasts } from "@webpack/common";
 
+import Plugins, { ExcludedPlugins } from "~plugins";
+
 import { DataStore } from "..";
+import { inspectPluginImport } from "./pluginImport";
 
 type BackupType = "all" | "plugins" | "css" | "datastore";
 
@@ -204,6 +208,18 @@ export async function downloadSettingsBackup(type: BackupType = "all", { minify 
 }
 
 export async function uploadSettingsBackup(type: BackupType = "all", showToast = true): Promise<void> {
+    async function applyBackup(data: string) {
+        const parsed = JSON.parse(data);
+        if (!isSafeObject(parsed)) throw new Error("Unsafe Settings");
+        const apply = async () => {
+            await importSettings(data, type);
+            if (showToast) toastSuccess(type);
+        };
+        if ((type === "all" || type === "plugins") && parsed?.settings?.plugins != null) {
+            const report = inspectPluginImport(parsed.settings.plugins, Plugins, ExcludedPlugins, PlainSettings.plugins);
+            await reviewPluginImport(report, apply);
+        } else await apply();
+    }
     if (IS_DISCORD_DESKTOP) {
         const [file] = await DiscordNative.fileManager.openFiles({
             filters: [
@@ -214,8 +230,7 @@ export async function uploadSettingsBackup(type: BackupType = "all", showToast =
 
         if (file) {
             try {
-                await importSettings(new TextDecoder().decode(file.data), type);
-                if (showToast) toastSuccess(type);
+                await applyBackup(new TextDecoder().decode(file.data));
             } catch (err) {
                 logger.error(err);
                 if (showToast) toastFailure();
@@ -228,8 +243,7 @@ export async function uploadSettingsBackup(type: BackupType = "all", showToast =
         const reader = new FileReader();
         reader.onload = async () => {
             try {
-                await importSettings(reader.result as string, type);
-                if (showToast) toastSuccess(type);
+                await applyBackup(reader.result as string);
             } catch (err) {
                 logger.error(err);
                 if (showToast) toastFailure();

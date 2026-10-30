@@ -55,12 +55,24 @@ test("blank messages get readable fallbacks and custom content and pop remain co
     assert.equal(popped.length, 1);
 });
 
-async function loadImport({ file, type = "all", notify = true, rejectWrite = false } = {}) {
+async function loadImport({ file, type = "all", notify = true, rejectWrite = false, cancelReview = false } = {}) {
     const toastApi = await loadToast();
     const plain = { plugins: { Existing: { enabled: true } } };
-    const writes = [], css = [], data = [], errors = [];
+    const writes = [], css = [], data = [], errors = [], reviews = [];
+    const inspection = await transform(await readFile("src/api/SettingsSync/pluginImport.ts", "utf8"), { loader: "ts", format: "cjs" });
+    const inspectionModule = { exports: {} };
+    vm.runInNewContext(inspection.code, { module: inspectionModule, exports: inspectionModule.exports });
     const imports = {
         "@api/Settings": { PlainSettings: plain },
+        "./pluginImport": inspectionModule.exports,
+        "~plugins": { __esModule: true, default: { Example: {} }, ExcludedPlugins: {} },
+        "@components/settings/tabs/sync/ImportPreview": { reviewPluginImport: async (report, apply) => {
+            assert.equal(writes.length, 0);
+            reviews.push(report);
+            if (cancelReview) return false;
+            await apply();
+            return true;
+        } },
         "@utils/Logger": { Logger: class { error(...values) { errors.push(values); } } },
         "@utils/web": {},
         "@webpack/common": { Toasts: toastApi.Toasts },
@@ -74,12 +86,14 @@ async function loadImport({ file, type = "all", notify = true, rejectWrite = fal
         require: name => { assert(Object.hasOwn(imports, name), name); return imports[name]; }
     });
     await module.exports.uploadSettingsBackup(type, notify);
-    return { ...toastApi, plain, writes, css, data, errors };
+    return { ...toastApi, plain, writes, css, data, errors, reviews };
 }
 
 test("Vencord settings import reports completion and restart instructions after the write", async () => {
     const state = await loadImport({ file: JSON.stringify({ settings: { plugins: { Example: { enabled: true } } } }) });
     assert.equal(state.writes.length, 1);
+    assert.equal(state.reviews.length, 1);
+    assert.equal(state.reviews[0].ready[0], "Example");
     assert.equal(state.plain.plugins.Example.enabled, true);
     assert.equal(state.shown.at(-1).variant, "success");
     assert.match(state.shown.at(-1).text, /Settings imported.*close Discord.*reopen/);
@@ -88,6 +102,7 @@ test("Vencord settings import reports completion and restart instructions after 
     assert.match(plugins.shown.at(-1).text, /Plugin settings imported/);
     const css = await loadImport({ file: JSON.stringify({ quickCss: "body {}" }), type: "css" });
     assert.equal(css.css[0], "body {}");
+    assert.equal(css.reviews.length, 0);
     assert.match(css.shown.at(-1).text, /QuickCSS imported/);
 });
 
@@ -101,6 +116,11 @@ test("failed or malformed imports show a useful error while cancel and silent im
     }
     assert.equal((await loadImport()).shown.length, 0);
     assert.equal((await loadImport({ file: '{"settings":{}}', notify: false })).shown.length, 0);
+    const cancelled = await loadImport({ file: '{"settings":{"plugins":{"Example":{"enabled":true}}}}', cancelReview: true });
+    assert.equal(cancelled.reviews.length, 1);
+    assert.equal(cancelled.writes.length, 0);
+    assert.equal(cancelled.plain.plugins.Example, undefined);
+    assert.equal(cancelled.shown.length, 0);
 });
 
 const updaterText = await readFile("src/components/settings/tabs/updater/index.tsx", "utf8");
