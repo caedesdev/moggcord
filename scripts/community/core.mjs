@@ -132,7 +132,7 @@ export const defaultBuild = sourceRoot => run(process.execPath, ["scripts/build/
 }).catch(() => { throw new Error("Moggcord could not build this plugin. Your installed version was kept. Check the plugin source."); });
 
 export async function stopClient(client) {
-    const command = "$base=$env:MOGGCORD_COMMUNITY_CLIENT_BASE+'\\'; $items=@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -and $_.ExecutablePath.StartsWith($base,[StringComparison]::OrdinalIgnoreCase) -and $_.Name -like 'Discord*.exe'}); foreach($item in $items){ $p=Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue; if($p){[void]$p.CloseMainWindow()} }; Start-Sleep -Milliseconds 1000; foreach($item in $items){Stop-Process -Id $item.ProcessId -Force -ErrorAction SilentlyContinue}";
+    const command = "$base=$env:MOGGCORD_COMMUNITY_CLIENT_BASE+'\\'; $items=@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -and $_.ExecutablePath.StartsWith($base,[StringComparison]::OrdinalIgnoreCase) -and $_.Name -like 'Discord*.exe'}); foreach($item in $items){ $p=Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue; if($p){[void]$p.CloseMainWindow()} }; Start-Sleep -Milliseconds 1000; foreach($item in $items){Stop-Process -Id $item.ProcessId -Force -ErrorAction SilentlyContinue}; Start-Sleep -Milliseconds 100; $remaining=@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -and $_.ExecutablePath.StartsWith($base,[StringComparison]::OrdinalIgnoreCase) -and $_.Name -like 'Discord*.exe'}); if($remaining.Count){throw 'Discord could not be closed. Please close the selected channel and try again.'}; exit 0";
     await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], {
         windowsHide: true, timeout: 20_000, env: { ...process.env, MOGGCORD_COMMUNITY_CLIENT_BASE: client.base }
     });
@@ -171,7 +171,8 @@ export async function repairClient(config, dependencies = {}) {
     const backups = new Map(); let stopped = false;
     const start = dependencies.start ?? startClient;
     try {
-        await (dependencies.stop ?? stopClient)(client); stopped = true;
+        stopped = true;
+        await (dependencies.stop ?? stopClient)(client);
         await deployBuild(client, config, backups);
         await start(client);
     } catch (error) {
@@ -205,7 +206,8 @@ export async function installEntry(entry, config, dependencies = {}, progress = 
             verifyBuild(join(sourceRoot, "dist", "desktop"), version);
         }
         progress("installing", "Installing in Moggcord…");
-        await stop(client); stopped = true;
+        stopped = true;
+        await stop(client);
         const settingsFile = join(config.dataDir, "settings", "settings.json");
         await snapshot(settingsFile, backups);
         const settings = existsSync(settingsFile) ? JSON.parse(await readFile(settingsFile, "utf8")) : {};
