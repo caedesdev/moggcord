@@ -15,10 +15,12 @@ const patchModule = { exports: {} };
 vm.runInNewContext(patchUtils.code, { module: patchModule, exports: patchModule.exports, require: () => ({}) });
 const { canonicalizeMatch, canonicalizeReplace } = patchModule.exports;
 
-function setup() {
+function setup(initialMute = false) {
     const messages = [], packets = [], effects = [];
     const timers = new Map();
     let now = 0, timerId = 0, updates = 0;
+    let actualMute = initialMute;
+    const microphoneActions = [];
     let menu;
     const module = { exports: {} };
     const imports = {
@@ -31,6 +33,8 @@ function setup() {
             React: { Fragment: "fragment", createElement: (type, props, ...children) => ({ type, props: { ...props, children } }), useReducer: () => [0, () => { updates++; }], useEffect: effect => effects.push(effect()) },
             ReactDOM: { createPortal: (element, target) => ({ element, target }) },
             UserStore: { getCurrentUser: () => ({ id: "self" }) },
+            MediaEngineStore: { isSelfMute: () => actualMute },
+            VoiceActions: { toggleSelfMute: () => { actualMute = !actualMute; microphoneActions.push(actualMute); } },
             ContextMenuApi: { openContextMenu: (_, render) => { menu = render(); }, closeContextMenu() {} },
             Menu: { Menu: "menu", MenuGroup: "group", MenuCheckboxItem: "checkbox", MenuSeparator: "separator" }
         }
@@ -62,7 +66,9 @@ function setup() {
     };
     const command = name => plugin.commands.find(command => command.name === name).execute([], { channel: { id: "test" } });
     const item = (element, id) => element.props.id === id ? element : element.props.children.flat().map(child => child && typeof child === "object" ? item(child, id) : undefined).find(Boolean);
-    return { plugin, packets, messages, socket, button, command, effects, notification, body, timers,
+    return { plugin, packets, messages, socket, button, command, effects, notification, body, timers, microphoneActions,
+        get actualMute() { return actualMute; },
+        manualMute(value) { actualMute = value; },
         get updates() { return updates; },
         advance(ms) {
             const end = now + ms;
@@ -83,18 +89,21 @@ function setup() {
     };
 }
 
-test("the default button fakes only deafen, keeps video and restores the actual voice state", () => {
+test("the default button really mutes the microphone, keeps audio output and video unchanged and never auto-unmutes", () => {
     const state = setup();
     state.socket.voiceStateUpdate({ channelId: "voice", selfMute: false, selfDeaf: false, selfVideo: true, flags: 4 });
     state.button().props.onClick();
     assert.equal(state.button().props["aria-checked"], true);
     const active = state.packets.at(-1);
     assert.equal(active.self_deaf, true);
-    assert.equal(active.self_mute, false);
+    assert.equal(active.self_mute, true);
     assert.equal(active.self_video, true);
     assert.equal(active.flags, 4);
     state.button().props.onClick();
     assert.equal(state.packets.at(-1).self_deaf, false);
+    assert.equal(state.packets.at(-1).self_mute, true);
+    assert.equal(state.actualMute, true);
+    assert.deepEqual(state.microphoneActions, [true]);
     assert.equal(state.button().props["aria-checked"], false);
 });
 
@@ -113,6 +122,8 @@ test("voice icons show fake status only for this user and call without mutating 
     assert.equal(displayed.serverMute, false);
     assert.equal(own.deaf, false);
     assert.equal(actual.selfDeaf, false);
+    assert.equal(actual.selfMute, false);
+    assert.equal(state.actualMute, true);
     assert.equal(state.plugin.useDisplayedVoiceStatus(peer), peer);
     const elsewhere = { ...own, channelId: "other-call" };
     assert.equal(state.plugin.useDisplayedVoiceStatus(elsewhere), elsewhere);
@@ -211,10 +222,11 @@ test("the first deafen command enables the requested mode and the second disable
     state.socket.voiceStateUpdate({ channelId: "voice" });
     await state.command("fakedeafen");
     assert.equal(state.packets.at(-1).self_deaf, true);
-    assert.equal(state.packets.at(-1).self_mute, false);
+    assert.equal(state.packets.at(-1).self_mute, true);
     assert.match(state.messages.at(-1).content, /enabled/);
     await state.command("fakedeafen");
     assert.equal(state.packets.at(-1).self_deaf, false);
+    assert.equal(state.packets.at(-1).self_mute, true);
     assert.match(state.messages.at(-1).content, /disabled/);
 });
 
@@ -228,7 +240,7 @@ test("switching modes never carries an unrelated fake flag into the next mode", 
     assert.equal(state.packets.at(-1).self_mute, true);
     assert.equal(state.packets.at(-1).self_deaf, false);
     await state.command("fakedeafen");
-    assert.equal(state.packets.at(-1).self_mute, false);
+    assert.equal(state.packets.at(-1).self_mute, true);
     assert.equal(state.packets.at(-1).self_deaf, true);
 });
 
@@ -241,12 +253,12 @@ test("context menu changes apply immediately while active and clear the switch w
     state.menuItem("opt-deafen").props.action();
     assert.equal(state.packets.at(-1).self_deaf, false);
     state.menuItem("opt-mute").props.action();
-    assert.equal(state.packets.at(-1).self_mute, false);
+    assert.equal(state.packets.at(-1).self_mute, true);
     assert.equal(state.button().props["aria-checked"], false);
 });
 
 test("disconnecting clears fake status and disabling the plugin restores real mute/deafen flags", async () => {
-    const state = setup();
+    const state = setup(true);
     state.socket.voiceStateUpdate({ channelId: "voice", selfMute: true, selfDeaf: false });
     await state.command("fakedeafen");
     state.plugin.stop();
@@ -263,8 +275,53 @@ test("preselecting deafen outside a call sends nothing until joining and subscri
     const state = setup();
     state.button().props.onClick();
     assert.equal(state.packets.length, 0);
-    state.socket.voiceStateUpdate({ channelId: "voice" });
+    assert.equal(state.actualMute, true);
+    state.socket.voiceStateUpdate({ channelId: "voice", selfMute: state.actualMute });
     assert.equal(state.packets.at(-1).self_deaf, true);
     for (const cleanup of state.effects) assert.equal(typeof cleanup, "function");
     for (const cleanup of state.effects) cleanup();
+});
+
+test("a previously muted microphone stays muted through mode changes, shutdown and disconnect", async () => {
+    const state = setup(true);
+    state.socket.voiceStateUpdate({ channelId: "voice", selfMute: true, selfDeaf: false });
+    state.button().props.onClick();
+    state.menuItem("opt-mute").props.action();
+    await state.command("fakedeafen_mute");
+    state.plugin.stop();
+    state.socket.voiceStateUpdate({ channelId: null, selfMute: true });
+    assert.equal(state.actualMute, true);
+    assert.deepEqual(state.microphoneActions, []);
+    assert.equal(state.packets.at(-1).self_mute, true);
+});
+
+test("Fake Mute alone keeps the real microphone unchanged and adding Fake Deafen mutes it once", async () => {
+    const state = setup();
+    state.socket.voiceStateUpdate({ channelId: "voice", selfMute: false, selfDeaf: false });
+    await state.command("fakemute");
+    assert.equal(state.actualMute, false);
+    assert.deepEqual(state.microphoneActions, []);
+    state.menuItem("opt-deafen").props.action();
+    assert.equal(state.actualMute, true);
+    assert.deepEqual(state.microphoneActions, [true]);
+    state.menuItem("opt-mute").props.action();
+    assert.deepEqual(state.microphoneActions, [true]);
+    state.plugin.stop();
+    assert.equal(state.packets.at(-1).self_deaf, false);
+    assert.equal(state.packets.at(-1).self_mute, true);
+});
+
+test("manual microphone changes remain under user control when Fake Deafen is turned off", () => {
+    const state = setup();
+    state.socket.voiceStateUpdate({ channelId: "voice", selfMute: false });
+    state.button().props.onClick();
+    state.manualMute(false);
+    state.socket.voiceStateUpdate({ channelId: "voice", selfMute: false });
+    state.button().props.onClick();
+    assert.equal(state.actualMute, false);
+    assert.equal(state.packets.at(-1).self_mute, false);
+    assert.deepEqual(state.microphoneActions, [true]);
+    state.button().props.onClick();
+    assert.equal(state.actualMute, true);
+    assert.deepEqual(state.microphoneActions, [true, true]);
 });
