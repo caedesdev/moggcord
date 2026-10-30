@@ -63,6 +63,9 @@ jobs:
       - name: Create version metadata
         shell: pwsh
         run: |
+          node scripts/build/catalog-stats.mjs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $catalog = Get-Content "dist\plugin-catalog.json" -Raw | ConvertFrom-Json
           $tagVersion = "${{ github.ref_name }}" -replace '^v',''
           $pkgVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
           if ($tagVersion -ne $pkgVersion) {
@@ -72,6 +75,7 @@ jobs:
           $version = $pkgVersion
           $meta = [ordered]@{
             version = $version
+            pluginCatalog = $catalog
             releaseDate = (Get-Date -Format "yyyy-MM-dd")
             installerUrl = "https://github.com/caedesdev/moggcord/releases/latest/download/Moggcord-Installer.exe"
             distUrl = "https://github.com/caedesdev/moggcord/releases/latest/download/moggcord-dist.zip"
@@ -79,7 +83,7 @@ jobs:
             moggcordAsarUrl = "https://github.com/caedesdev/moggcord/releases/latest/download/moggcord.asar"
             changelog = "Moggcord $version"
           }
-          $meta | ConvertTo-Json | Set-Content "release\installer\version.json"
+          $meta | ConvertTo-Json -Depth 5 | Set-Content "release\installer\version.json"
 
       - name: Validate release assets
         run: node scripts/build/validate-release.mjs

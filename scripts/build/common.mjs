@@ -145,9 +145,9 @@ export const makeAllPackagesExternalPlugin = {
 };
 
 /**
- * @type {(kind: "web" | "discordDesktop" | "vesktop" | "equibop") => import("esbuild").Plugin}
+ * @type {(kind: "web" | "discordDesktop" | "vesktop" | "equibop", options?: { includeUserPlugins?: boolean }) => import("esbuild").Plugin}
  */
-export const globPlugins = kind => ({
+export const globPlugins = (kind, { includeUserPlugins = true } = {}) => ({
     name: "glob-plugins",
     setup: build => {
         const filter = /^~plugins$/;
@@ -167,6 +167,7 @@ export const globPlugins = kind => ({
             let i = 0;
             for (const dir of pluginDirs) {
                 const userPlugin = dir === "userplugins";
+                if (userPlugin && !includeUserPlugins) continue;
 
                 const fullDir = `./src/${dir}`;
                 if (!await exists(fullDir)) continue;

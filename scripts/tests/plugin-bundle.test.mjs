@@ -14,9 +14,43 @@ import ts from "typescript";
 import { transform } from "esbuild";
 import { exists, globPlugins, resolvePluginName } from "../build/common.mjs";
 import { bundledPlugins, internalPlugins, pluginBundleKind } from "../lib/plugin-bundle.mjs";
+import { catalogCounts, generateCatalogStats } from "../lib/plugin-catalog.mjs";
 
 const root = process.cwd();
 const wanted = ["CustomProfile", "ExportDM", "FakeVoice", "TokenImporter"];
+
+test("public catalog statistics follow the desktop registry without personal plugins", async () => {
+    const source = await loadGenerated(globPlugins("discordDesktop", { includeUserPlugins: false }));
+    assert(!source.includes('./userplugins/'));
+    const counts = await generateCatalogStats();
+    assert(counts.total > 350);
+    assert(counts.vencord > 250);
+    assert(counts.moggcord > 100);
+    assert.equal(counts.total, counts.vencord + counts.moggcord);
+    assert.deepEqual(counts, await catalogCounts(source));
+});
+
+test("catalog statistics exclude hidden entries, deduplicate names and never execute plugin code", async t => {
+    const temp = await mkdtemp(join(tmpdir(), "moggcord-catalog-"));
+    assert(resolve(temp).startsWith(resolve(tmpdir()) + "/") || resolve(temp).startsWith(resolve(tmpdir()) + "\\"));
+    t.after(() => rm(temp, { recursive: true, force: true }));
+    await writeFile(join(temp, "first.ts"), 'throw new Error("Must not execute"); export default definePlugin({name:"Same",hidden:false});');
+    await writeFile(join(temp, "second.ts"), 'export default definePlugin({description:"Name comes later",name:"Same"});');
+    await writeFile(join(temp, "internal.ts"), 'export default definePlugin({name:"Internal"});');
+    await writeFile(join(temp, "extra.ts"), 'export default definePlugin({name:"Other",hidden:true});');
+    const counts = await catalogCounts(`
+        import a from "./first"; import b from "./second"; import c from "./internal"; import d from "./extra";
+        c.hidden=true;
+        export default {[a.name]:a,[b.name]:b,[c.name]:c,[d.name]:d};
+        export const PluginMeta={
+            [a.name]:{folderName:"src/plugins/first",userPlugin:false},
+            [b.name]:{folderName:"src/moggcordplugins/second",userPlugin:false},
+            [c.name]:{folderName:"src/plugins/_core/internal",userPlugin:false},
+            [d.name]:{folderName:"src/plugins/extra",userPlugin:false}
+        };
+    `, temp);
+    assert.deepEqual(counts, { total: 1, vencord: 0, moggcord: 1 });
+});
 
 function pluginDefinition(filename) {
     const file = ts.createSourceFile(filename, readFileSync(filename, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
