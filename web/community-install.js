@@ -25,11 +25,55 @@
     for (let attempt=0; attempt<400; attempt++) {
       const current = await request(`/v1/jobs/${job.id}`);
       if (current.state === 'failed') throw new Error(current.message || 'Installation failed.');
-      if (current.state === 'complete') { progress('Installed. Moggcord has been restarted.'); return true; }
+      if (current.state === 'complete') {
+        window.dispatchEvent(new CustomEvent('moggcord:installationchange'));
+        if (current.alreadyInstalled) { progress('Already installed. No changes were needed.'); return 'already-installed'; }
+        progress('Installed. Moggcord has been restarted.'); return true;
+      }
       progress(current.message || 'Installing in Moggcord…');
       await pause(500);
     }
     throw new Error('Installation is taking longer than expected. Check Moggcord before trying again.');
+  }
+  async function inspect(entries) {
+    try {
+      const status=await request('/v1/status',{},3000);
+      if (status.name!=='moggcord-community' || status.protocol!==1 || !status.capabilities?.includes('installed-status')) return null;
+      const valid=entries.filter(entry=>/^[a-f0-9-]{36}$/.test(entry.id || '') && ['plugin','theme'].includes(entry.kind));
+      const results=[];
+      for (let start=0;start<valid.length;start+=24) {
+        const batch=valid.slice(start,start+24);
+        const response=await request('/v1/installed',{method:'POST',headers:{'Content-Type':'application/json','X-Moggcord-Install':'1'},body:JSON.stringify({entries:batch.map(entry=>({id:entry.id,kind:entry.kind,file_name:entry.file_name,plugin_name:entry.plugin_name ?? null}))})});
+        if (!Array.isArray(response.entries) || response.entries.length!==batch.length || response.entries.some(item=>!batch.some(entry=>entry.id===item.id) || typeof item.installed!=='boolean')) return null;
+        results.push(...response.entries);
+      }
+      return results;
+    } catch { return null; }
+  }
+  function watchButtons(bindings) {
+    if (!bindings.length) return () => {};
+    let stopped=false,ticket=0;
+    const originals=new Map(bindings.map(({button})=>[button,{icon:button.querySelector('svg,i')?.cloneNode(true),label:button.getAttribute('aria-label'),title:button.title}]));
+    async function refresh() {
+      const current=++ticket;
+      const results=await inspect(bindings.map(({entry})=>entry));
+      if (stopped || current!==ticket) return;
+      for (const {entry,button} of bindings) {
+        const installed=results?.find(item=>item.id===entry.id)?.installed === true;
+        button.dataset.installationState=results===null?'unknown':installed?'installed':'not-installed';
+        button.dataset.installed=String(installed); button.classList.toggle('is-installed',installed);
+        if (button.getAttribute('aria-busy')!=='true') button.disabled=installed;
+        const label=button.querySelector('span'); if (label) label.textContent=installed?'Installed':'Download';
+        button.setAttribute('aria-label',installed ? `${entry.name} is installed` : originals.get(button).label || `Download ${entry.name}`);
+        button.title=installed ? 'Already installed in your connected Moggcord' : originals.get(button).title;
+        const icon=button.querySelector('svg,i');
+        if (installed && window.MoggUI?.createIcon) icon?.replaceWith(window.MoggUI.createIcon('check'));
+        else if (originals.get(button).icon) icon?.replaceWith(originals.get(button).icon.cloneNode(true));
+      }
+    }
+    window.addEventListener('focus',refresh);window.addEventListener('moggcord:installationchange',refresh);
+    void refresh();
+    return () => {stopped=true;ticket++;window.removeEventListener('focus',refresh);window.removeEventListener('moggcord:installationchange',refresh);};
   }
   function download(data) {
     const blob=data.files ? new Blob([window.MoggcordPackage.zip(data.files,data.file_name)],{type:'application/zip'}) : new Blob([data.source_code],{type:'text/plain;charset=utf-8'});
@@ -56,5 +100,5 @@
     }
     element.hidden=false;(element.querySelector('.rr-alert__body') || element).append(row);
   }
-  window.moggcordInstaller = Object.freeze({install,download,connectionHelp});
+  window.moggcordInstaller = Object.freeze({install,download,connectionHelp,inspect,watchButtons});
 })();

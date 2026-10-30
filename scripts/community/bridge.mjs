@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { bridgeName, bridgePort, fetchManifest, installEntry, manifestAddress, parseLink, trustedOrigin } from "./core.mjs";
+import { bridgeName, bridgePort, fetchManifest, installedEntries, installEntry, manifestAddress, parseLink, trustedOrigin } from "./core.mjs";
 
 export function createBridge(config, dependencies = {}) {
     const origin = trustedOrigin(config.origin);
@@ -29,8 +29,8 @@ export function createBridge(config, dependencies = {}) {
         while (jobs.size > 20) jobs.delete(jobs.keys().next().value);
         Promise.resolve().then(async () => {
             const entry = await (dependencies.fetchManifest ?? fetchManifest)(input, origin);
-            await (dependencies.install ?? installEntry)(entry, config, dependencies, (state, message) => Object.assign(job, { state, message }));
-            Object.assign(job, { state: "complete", message: "Installed. Moggcord has been restarted." });
+            const result = await (dependencies.install ?? installEntry)(entry, config, dependencies, (state, message) => Object.assign(job, { state, message }));
+            Object.assign(job, { state: "complete", alreadyInstalled: result?.alreadyInstalled === true, message: result?.alreadyInstalled ? "Already installed. No changes were needed." : "Installed. Moggcord has been restarted." });
         }).catch(error => Object.assign(job, { state: "failed", message: error.message || "Installation failed. Your previous installation was kept." }))
             .finally(() => { if (active === job) active = null; });
         return job;
@@ -47,16 +47,20 @@ export function createBridge(config, dependencies = {}) {
             res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Moggcord-Install");
             return res.writeHead(204).end();
         }
-        if (req.method === "GET" && req.url === "/v1/status") return json(res, 200, { name: bridgeName, protocol: 1, channel: config.channel, capabilities: ["plugin-folders"] });
+        if (req.method === "GET" && req.url === "/v1/status") return json(res, 200, { name: bridgeName, protocol: 1, channel: config.channel, capabilities: ["plugin-folders", "installed-status"] });
         const match = req.url?.match(/^\/v1\/jobs\/([a-f0-9-]{36})$/);
         if (req.method === "GET" && match) return jobs.has(match[1]) ? json(res, 200, jobs.get(match[1])) : json(res, 404, { error: "Installation not found." });
-        if (req.method !== "POST" || req.url !== "/v1/install") return json(res, 404, { error: "Not found." });
+        if (req.method !== "POST" || !["/v1/install", "/v1/installed"].includes(req.url)) return json(res, 404, { error: "Not found." });
         if (req.headers["x-moggcord-install"] !== "1" || !/^application\/json(?:;|$)/i.test(req.headers["content-type"] ?? ""))
             return json(res, 415, { error: "Use the Moggcord installation button." });
         const chunks = []; let size = 0;
         try {
-            for await (const chunk of req) { size += chunk.length; if (size > 8192) return json(res, 413, { error: "Request too large." }); chunks.push(chunk); }
+            for await (const chunk of req) { size += chunk.length; if (size > (req.url === "/v1/installed" ? 32768 : 8192)) return json(res, 413, { error: "Request too large." }); chunks.push(chunk); }
             const input = JSON.parse(Buffer.concat(chunks).toString("utf8"));
+            if (req.url === "/v1/installed") {
+                const entries = await (dependencies.installedEntries ?? installedEntries)(input.entries, config, dependencies);
+                return json(res, 200, { entries });
+            }
             return json(res, 202, submit(input));
         } catch (error) { return json(res, 400, { error: error.message }); }
     });

@@ -236,10 +236,73 @@ export async function repairClient(config, dependencies = {}) {
     }
 }
 
+function compiledPluginNames(renderer) {
+    const source = ts.createSourceFile("renderer.js", renderer, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
+    const variables = new Set(), names = new Set();
+    const registry = node => {
+        if (ts.isPropertyAssignment(node) && ts.isComputedPropertyName(node.name) && ts.isPropertyAccessExpression(node.name.expression)
+            && node.name.expression.name.text === "name" && ts.isIdentifier(node.name.expression.expression)
+            && ts.isIdentifier(node.initializer) && node.initializer.text === node.name.expression.expression.text)
+            variables.add(node.initializer.text);
+        ts.forEachChild(node, registry);
+    };
+    registry(source);
+    const definition = node => {
+        const variable = ts.isVariableDeclaration(node) && ts.isIdentifier(node.name) ? node.name
+            : ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.EqualsToken && ts.isIdentifier(node.left) ? node.left : null;
+        const initializer = ts.isVariableDeclaration(node) ? node.initializer : ts.isBinaryExpression(node) ? node.right : null;
+        if (variable && variables.has(variable.text) && initializer) {
+            const value = ts.isCallExpression(initializer) ? initializer.arguments[0] : initializer;
+            if (value && ts.isObjectLiteralExpression(value)) {
+                const name = value.properties.find(property => ts.isPropertyAssignment(property) && (ts.isIdentifier(property.name) || ts.isStringLiteral(property.name)) && property.name.text === "name");
+                if (name && ts.isPropertyAssignment(name) && ts.isStringLiteral(name.initializer)) names.add(name.initializer.text);
+            }
+        }
+        ts.forEachChild(node, definition);
+    };
+    definition(source);
+    return names;
+}
+
+export async function installedEntries(entries, config, dependencies = {}) {
+    if (!Array.isArray(entries) || !entries.length || entries.length > 24 || entries.some(entry =>
+        !identifier.test(entry?.id ?? "") || !["plugin", "theme"].includes(entry.kind)
+        || typeof entry.file_name !== "string" || (!pluginPackage.validPath(entry.file_name) && !/^[A-Za-z0-9_. -]+\.style$/i.test(entry.file_name))
+        || (entry.sha256 != null && !/^[a-f0-9]{64}$/.test(entry.sha256))
+        || (entry.plugin_name != null && !pluginPackage.validPluginName(entry.plugin_name))))
+        throw new Error("Choose up to 24 valid community entries to check.");
+    const client = await (dependencies.findClient ?? findClient)(config.channel);
+    const settingsFile = join(config.dataDir, "settings", "settings.json");
+    const settings = existsSync(settingsFile) ? JSON.parse(await readFile(settingsFile, "utf8")) : {};
+    const renderer = entries.some(entry => entry.kind === "plugin" && !/\.css$/i.test(entry.file_name))
+        ? await readFile(join(client.installDir, "renderer.js"), "utf8") : "";
+    const available = compiledPluginNames(renderer);
+    return Promise.all(entries.map(async entry => {
+        if (entry.kind === "theme" || /\.css$/i.test(entry.file_name)) {
+            const filename = `community-${entry.id}.theme.css`, path = join(config.dataDir, "themes", filename);
+            const installed = existsSync(path) && lstatSync(path).isFile();
+            return { id: entry.id, installed, enabled: installed && (settings.enabledThemes ?? []).includes(filename),
+                ...(entry.sha256 ? { current: installed && hash(await readFile(path)) === entry.sha256 } : {}) };
+        }
+        let name = entry.plugin_name;
+        if (!name) for (const filename of ["index.ts", "index.tsx", entry.file_name]) {
+            const path = join(config.sourceRoot, "src", "userplugins", `community-${entry.id}`, filename);
+            if (existsSync(path)) { name = pluginPackage.pluginName(await readFile(path, "utf8")); if (name) break; }
+        }
+        const installed = available.has(name);
+        const saved = settings.plugins?.[name];
+        return { id: entry.id, installed, enabled: installed && saved?.enabled !== false,
+            ...(entry.sha256 ? { current: installed && (!saved?.communityInstallHash || saved.communityInstallHash === entry.sha256) } : {}) };
+    }));
+}
+
 export async function installEntry(entry, config, dependencies = {}, progress = () => {}) {
     validateManifest(entry, `https://moggcord.invalid/api/install/${entry?.id}`, entry?.sha256);
     const sourceRoot = resolve(config.sourceRoot);
     const client = await (dependencies.findClient ?? findClient)(config.channel);
+    const plugin_name = pluginPackage.pluginName(entry.source_code);
+    const [existing] = await installedEntries([{ id: entry.id, kind: entry.kind, file_name: entry.file_name, plugin_name, sha256: entry.sha256 }], config, { ...dependencies, findClient: async () => client });
+    if (existing.installed && existing.current) return { name: entry.name, channel: config.channel, sha256: entry.sha256, alreadyInstalled: true };
     const stylesheet = entry.protocol === 1 && /\.(css|style)$/i.test(entry.file_name);
     const pluginDirectory = join(sourceRoot, "src", "userplugins", `community-${entry.id}`);
     const pluginFiles = entry.files ?? [{ path: /\.[jt]sx$/i.test(entry.file_name) ? "index.tsx" : "index.ts", content: entry.source_code }];
