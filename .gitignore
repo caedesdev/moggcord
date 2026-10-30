@@ -21,6 +21,8 @@ dist/Installer/
 Equilotl.app/
 installer-src/bin/
 installer-src/obj/
+scripts/tests/installer-native/bin/
+scripts/tests/installer-native/obj/
 installer-src/moggcord-dist.zip
 
 # .NET / Visual Studio

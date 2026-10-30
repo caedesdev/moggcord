@@ -5,1607 +5,448 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Moggcord Installer</title>
   <style>
-    :root {
-      --bg: #050506;
-      --bg-soft: #0a0a0c;
-      --glass: rgba(255, 255, 255, 0.065);
-      --glass-strong: rgba(255, 255, 255, 0.105);
-      --border: rgba(255, 255, 255, 0.14);
-      --border-strong: rgba(255, 255, 255, 0.24);
-      --text: #f7f7f7;
-      --muted: #a5a5aa;
-      --dim: #6d6d74;
-      --accent: #ffffff;
-      --accent-soft: rgba(255, 255, 255, 0.18);
-      --success: #7ff0a4;
-      --warn: #f5cd75;
-      --error: #ff7676;
-      --shadow: rgba(0, 0, 0, 0.45);
-      --font: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
-      --font-mono: "JetBrains Mono", "SFMono-Regular", Consolas, monospace;
-    }
-
-    * {
-      box-sizing: border-box;
-      margin: 0;
-      padding: 0;
-    }
-
-    html,
-    body {
-      width: 100%;
-      height: 100%;
-    }
-
-    body {
-      background: var(--bg);
-      color: var(--text);
-      font-family: var(--font);
-      overflow: hidden;
-      user-select: none;
-      -webkit-app-region: no-drag;
-    }
-
-    body::before {
-      content: "";
-      position: fixed;
-      inset: 0;
-      background:
-        linear-gradient(135deg, rgba(255, 255, 255, 0.07), transparent 34%),
-        radial-gradient(circle at 78% 16%, rgba(255, 255, 255, 0.10), transparent 24%),
-        radial-gradient(circle at 18% 82%, rgba(120, 255, 184, 0.09), transparent 22%),
-        #050506;
-      pointer-events: none;
-      z-index: 0;
-    }
-
-    body::after {
-      content: "";
-      position: fixed;
-      inset: 0;
-      background-image:
-        linear-gradient(rgba(255, 255, 255, 0.035) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(255, 255, 255, 0.035) 1px, transparent 1px);
-      background-size: 48px 48px;
-      mask-image: radial-gradient(circle at center, black 0, transparent 72%);
-      pointer-events: none;
-      z-index: 0;
-    }
-
-    button,
-    input {
-      font: inherit;
-    }
-
-    button {
-      -webkit-app-region: no-drag;
-    }
-
-    .wrapper {
-      position: relative;
-      z-index: 1;
-      display: grid;
-      grid-template-rows: 44px minmax(0, 1fr) 42px;
-      height: 100vh;
-    }
-
-    .titlebar {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      height: 44px;
-      padding: 0 16px;
-      background: rgba(5, 5, 6, 0.72);
-      border-bottom: 1px solid var(--border);
-      backdrop-filter: blur(24px) saturate(150%);
-      -webkit-app-region: drag;
-    }
-
-    .titlebar-left,
-    .titlebar-right,
-    .brand-lockup,
-    .nav-pills,
-    .titlebar-controls {
-      display: flex;
-      align-items: center;
-    }
-
-    .titlebar-left {
-      gap: 14px;
-    }
-
-    .brand-lockup {
-      gap: 9px;
-      cursor: pointer;
-      -webkit-app-region: no-drag;
-    }
-
-    .logo-mark {
-      width: 26px;
-      height: 26px;
-      border-radius: 50%;
-      overflow: hidden;
-      border: 1px solid var(--border-strong);
-      box-shadow: 0 0 28px rgba(255, 255, 255, 0.16);
-      flex: 0 0 auto;
-    }
-
-    .logo-mark img {
-      width: 100%;
-      height: 100%;
-      display: block;
-      object-fit: cover;
-    }
-
-    .titlebar-title {
-      font-size: 13px;
-      font-weight: 800;
-      color: var(--text);
-    }
-
-    .nav-pills {
-      gap: 6px;
-    }
-
-    .nav-pill,
-    .titlebar-version {
-      height: 24px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border-radius: 999px;
-      padding: 0 10px;
-      color: var(--muted);
-      background: rgba(255, 255, 255, 0.045);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      font-size: 11px;
-      font-weight: 700;
-    }
-
-    .titlebar-version {
-      opacity: 0;
-      transition: opacity 0.2s ease;
-      font-family: var(--font-mono);
-    }
-
-    .titlebar-version.loaded {
-      opacity: 1;
-    }
-
-    .titlebar-right {
-      gap: 10px;
-      -webkit-app-region: no-drag;
-    }
-
-    .icon-btn {
-      width: 30px;
-      height: 30px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      border: 1px solid transparent;
-      border-radius: 8px;
-      color: var(--muted);
-      background: transparent;
-      cursor: pointer;
-      transition: color 0.16s ease, border-color 0.16s ease, background 0.16s ease;
-    }
-
-    .icon-btn:hover {
-      color: var(--text);
-      background: rgba(255, 255, 255, 0.07);
-      border-color: var(--border);
-    }
-
-    .titlebar-controls {
-      gap: 8px;
-    }
-
-    .titlebar-controls button {
-      width: 12px;
-      height: 12px;
-      border: 0;
-      border-radius: 50%;
-      cursor: pointer;
-      opacity: 0.9;
-      transition: transform 0.16s ease, opacity 0.16s ease;
-    }
-
-    .titlebar-controls button:hover {
-      opacity: 1;
-      transform: scale(1.08);
-    }
-
-    .btn-minimize {
-      background: #d8d8df;
-    }
-
-    .btn-close {
-      background: #ff6b6b;
-    }
-
-    .content {
-      min-height: 0;
-      display: grid;
-      grid-template-rows: 188px minmax(0, 1fr);
-      gap: 14px;
-      padding: 18px 20px 16px;
-      overflow: hidden;
-    }
-
-    .hero {
-      position: relative;
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 204px;
-      gap: 14px;
-      min-height: 0;
-    }
-
-    .hero-copy {
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      justify-content: center;
-      min-width: 0;
-      padding: 22px 24px;
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.052);
-      border: 1px solid var(--border);
-      box-shadow: 0 24px 60px var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(30px) saturate(150%);
-      overflow: hidden;
-    }
-
-    .hero-copy::before,
-    .liquid-panel::before,
-    .progress-container::before,
-    .settings-container::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      border-radius: inherit;
-      background:
-        linear-gradient(120deg, rgba(255, 255, 255, 0.18), transparent 34%),
-        radial-gradient(circle at 84% 18%, rgba(255, 255, 255, 0.12), transparent 28%);
-      opacity: 0.75;
-      pointer-events: none;
-    }
-
-    .hero-copy::after {
-      content: "";
-      position: absolute;
-      width: 240px;
-      height: 240px;
-      right: -78px;
-      bottom: -130px;
-      background: radial-gradient(circle, rgba(255, 255, 255, 0.15), transparent 68%);
-      filter: blur(14px);
-      pointer-events: none;
-    }
-
-    .eyebrow {
-      position: relative;
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 800;
-      margin-bottom: 8px;
-    }
-
-    .spark {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--accent);
-      box-shadow: 0 0 18px rgba(255, 255, 255, 0.9);
-    }
-
-    h1 {
-      position: relative;
-      font-size: 48px;
-      line-height: 0.95;
-      font-weight: 900;
-      color: var(--text);
-      margin-bottom: 10px;
-    }
-
-    .hero-copy p {
-      position: relative;
-      width: min(430px, 100%);
-      color: var(--muted);
-      font-size: 14px;
-      line-height: 1.45;
-      font-weight: 600;
-    }
-
-    .hero-actions {
-      position: relative;
-      display: flex;
-      gap: 10px;
-      margin-top: 16px;
-    }
-
-    .hero-portrait {
-      position: relative;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      justify-content: space-between;
-      padding: 16px;
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.058);
-      border: 1px solid var(--border);
-      box-shadow: 0 24px 60px var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(28px) saturate(155%);
-      overflow: hidden;
-    }
-
-    .hero-portrait::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background:
-        linear-gradient(150deg, rgba(255, 255, 255, 0.16), transparent 38%),
-        radial-gradient(circle at 50% 8%, rgba(255, 255, 255, 0.16), transparent 30%);
-      pointer-events: none;
-    }
-
-    .hero-portrait .profile-avatar {
-      position: relative;
-      align-self: center;
-      width: 112px;
-      height: 112px;
-      margin-top: 3px;
-    }
-
-    .portrait-meta {
-      position: relative;
-      display: grid;
-      gap: 8px;
-    }
-
-    .portrait-name {
-      font-size: 20px;
-      line-height: 1;
-      font-weight: 900;
-      text-align: center;
-    }
-
-    .status-chip {
-      height: 30px;
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      border-radius: 8px;
-      color: var(--text);
-      background: rgba(255, 255, 255, 0.08);
-      border: 1px solid var(--border);
-      font-size: 12px;
-      font-weight: 800;
-    }
-
-    .status-chip::before {
-      content: "";
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      background: var(--success);
-      box-shadow: 0 0 14px var(--success);
-    }
-
-    .install-grid {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) 238px;
-      gap: 14px;
-      min-height: 0;
-    }
-
-    .liquid-panel {
-      position: relative;
-      min-height: 0;
-      padding: 14px;
-      border-radius: 8px;
-      background: rgba(255, 255, 255, 0.058);
-      border: 1px solid var(--border);
-      box-shadow: 0 22px 58px var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.08);
-      backdrop-filter: blur(26px) saturate(150%);
-      overflow: hidden;
-    }
-
-    .panel-content {
-      position: relative;
-      display: flex;
-      flex-direction: column;
-      min-height: 0;
-      height: 100%;
-    }
-
-    .section-row {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 11px;
-    }
-
-    .section-label {
-      color: var(--text);
-      font-size: 13px;
-      font-weight: 900;
-    }
-
-    .section-subtitle {
-      color: var(--dim);
-      font-size: 11px;
-      font-weight: 700;
-      margin-top: 3px;
-    }
-
-    .btn,
-    .btn-manual,
-    .manual-input-row button,
-    .btn-setting-link,
-    .btn-check-update {
-      border-radius: 8px;
-      cursor: pointer;
-      transition: transform 0.16s ease, border-color 0.16s ease, background 0.16s ease, opacity 0.16s ease, box-shadow 0.16s ease;
-    }
-
-    .btn:disabled,
-    .btn-check-update:disabled {
-      cursor: not-allowed;
-      opacity: 0.42;
-      transform: none;
-      box-shadow: none;
-    }
-
-    .btn-manual {
-      height: 32px;
-      padding: 0 12px;
-      color: var(--text);
-      background: rgba(255, 255, 255, 0.075);
-      border: 1px solid var(--border);
-      font-size: 12px;
-      font-weight: 800;
-    }
-
-    .btn-manual:hover {
-      background: rgba(255, 255, 255, 0.12);
-      border-color: var(--border-strong);
-    }
-
-    .manual-input-row {
-      display: none;
-      grid-template-columns: minmax(0, 1fr) 54px;
-      gap: 8px;
-      margin-bottom: 10px;
-    }
-
-    .manual-input-row.visible {
-      display: grid;
-    }
-
-    .manual-input-row input {
-      width: 100%;
-      height: 38px;
-      color: var(--text);
-      background: rgba(0, 0, 0, 0.35);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      outline: none;
-      padding: 0 12px;
-      font-family: var(--font-mono);
-      font-size: 11px;
-    }
-
-    .manual-input-row input:focus {
-      border-color: var(--border-strong);
-      box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.08);
-    }
-
-    .manual-input-row button {
-      height: 38px;
-      color: #050506;
-      background: var(--text);
-      border: 1px solid var(--text);
-      font-size: 12px;
-      font-weight: 900;
-    }
-
-    .discord-list {
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-      overflow-y: auto;
-      padding-right: 4px;
-    }
-
-    .discord-list::-webkit-scrollbar {
-      width: 6px;
-    }
-
-    .discord-list::-webkit-scrollbar-track {
-      background: transparent;
-    }
-
-    .discord-list::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.12);
-      border-radius: 999px;
-    }
-
-    .discord-card {
-      position: relative;
-      min-height: 70px;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      padding: 11px 12px;
-      border-radius: 8px;
-      background: rgba(0, 0, 0, 0.28);
-      border: 1px solid rgba(255, 255, 255, 0.09);
-      cursor: pointer;
-      overflow: hidden;
-      animation: fadeSlide 0.24s ease both;
-    }
-
-    .discord-card::before {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(90deg, rgba(255, 255, 255, 0.12), transparent 55%);
-      opacity: 0;
-      transition: opacity 0.18s ease;
-      pointer-events: none;
-    }
-
-    .discord-card:hover,
-    .discord-card.selected {
-      border-color: var(--border-strong);
-      background: rgba(255, 255, 255, 0.085);
-    }
-
-    .discord-card:hover::before,
-    .discord-card.selected::before {
-      opacity: 1;
-    }
-
-    .card-left,
-    .card-right {
-      position: relative;
-      display: flex;
-      align-items: center;
-      min-width: 0;
-    }
-
-    .card-left {
-      gap: 11px;
-    }
-
-    .card-right {
-      gap: 7px;
-      flex: 0 0 auto;
-    }
-
-    .card-icon,
-    .profile-avatar {
-      overflow: hidden;
-      border-radius: 50%;
-      border: 1px solid rgba(255, 255, 255, 0.22);
-      background: #f5f5f5;
-      box-shadow:
-        inset 0 1px 0 rgba(255, 255, 255, 0.75),
-        0 14px 34px rgba(0, 0, 0, 0.38);
-    }
-
-    .card-icon {
-      width: 42px;
-      height: 42px;
-      flex: 0 0 auto;
-    }
-
-    .card-icon img,
-    .profile-avatar img {
-      display: block;
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .card-info {
-      min-width: 0;
-    }
-
-    .card-info h3 {
-      color: var(--text);
-      font-size: 14px;
-      font-weight: 900;
-      line-height: 1.1;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 220px;
-    }
-
-    .card-path {
-      margin-top: 5px;
-      color: var(--dim);
-      font-family: var(--font-mono);
-      font-size: 10px;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      max-width: 285px;
-    }
-
-    .badge {
-      height: 22px;
-      display: inline-flex;
-      align-items: center;
-      border-radius: 999px;
-      padding: 0 8px;
-      border: 1px solid rgba(255, 255, 255, 0.09);
-      background: rgba(255, 255, 255, 0.075);
-      color: var(--muted);
-      font-family: var(--font-mono);
-      font-size: 9px;
-      font-weight: 900;
-      white-space: nowrap;
-    }
-
-    .badge-version {
-      color: var(--text);
-    }
-
-    .badge-injected {
-      color: var(--success);
-      border-color: rgba(127, 240, 164, 0.28);
-      background: rgba(127, 240, 164, 0.10);
-    }
-
-    .badge-clean {
-      color: var(--muted);
-    }
-
-    .radio {
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      border: 2px solid rgba(255, 255, 255, 0.20);
-      box-shadow: inset 0 0 0 3px rgba(0, 0, 0, 0.35);
-      transition: background 0.16s ease, border-color 0.16s ease;
-      flex: 0 0 auto;
-    }
-
-    .discord-card.selected .radio {
-      border-color: var(--text);
-      background: var(--text);
-    }
-
-    .empty-state {
-      display: grid;
-      place-items: center;
-      min-height: 120px;
-      color: var(--muted);
-      text-align: center;
-      font-size: 13px;
-      font-weight: 700;
-      line-height: 1.5;
-      border: 1px dashed rgba(255, 255, 255, 0.14);
-      border-radius: 8px;
-      background: rgba(0, 0, 0, 0.22);
-      padding: 16px;
-    }
-
-    .side-panel .panel-content {
-      gap: 12px;
-    }
-
-    .selected-box {
-      display: grid;
-      gap: 10px;
-      padding: 12px;
-      border-radius: 8px;
-      border: 1px solid rgba(255, 255, 255, 0.10);
-      background: rgba(0, 0, 0, 0.28);
-    }
-
-    .selected-box-top {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .selected-box .profile-avatar {
-      width: 44px;
-      height: 44px;
-      flex: 0 0 auto;
-    }
-
-    .selected-kicker {
-      color: var(--dim);
-      font-size: 11px;
-      font-weight: 800;
-    }
-
-    .selected-name {
-      margin-top: 3px;
-      color: var(--text);
-      font-size: 17px;
-      line-height: 1;
-      font-weight: 900;
-    }
-
-    .selected-path {
-      color: var(--muted);
-      font-family: var(--font-mono);
-      font-size: 10px;
-      line-height: 1.45;
-      word-break: break-all;
-      min-height: 43px;
-    }
-
-    .actions {
-      display: grid;
-      gap: 8px;
-      margin-top: auto;
-    }
-
-    .btn {
-      min-height: 42px;
-      border: 1px solid var(--border);
-      padding: 0 14px;
-      font-size: 13px;
-      font-weight: 900;
-    }
-
-    .btn-primary {
-      color: #050506;
-      background:
-        linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(215, 215, 220, 0.92));
-      border-color: rgba(255, 255, 255, 0.9);
-      box-shadow: 0 16px 42px rgba(255, 255, 255, 0.13);
-    }
-
-    .btn-primary:not(:disabled):hover {
-      transform: translateY(-1px);
-      box-shadow: 0 18px 48px rgba(255, 255, 255, 0.19);
-    }
-
-    .btn-secondary,
-    .btn-danger {
-      color: var(--text);
-      background: rgba(255, 255, 255, 0.07);
-    }
-
-    .btn-secondary:not(:disabled):hover,
-    .btn-danger:not(:disabled):hover {
-      transform: translateY(-1px);
-      background: rgba(255, 255, 255, 0.11);
-      border-color: var(--border-strong);
-    }
-
-    .btn-danger {
-      color: #ffdede;
-      border-color: rgba(255, 118, 118, 0.26);
-    }
-
-    .tiny-links {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 8px;
-    }
-
-    .tiny-link {
-      min-height: 34px;
-      border: 1px solid rgba(255, 255, 255, 0.10);
-      border-radius: 8px;
-      color: var(--muted);
-      background: rgba(0, 0, 0, 0.20);
-      font-size: 12px;
-      font-weight: 800;
-      cursor: pointer;
-    }
-
-    .tiny-link:hover {
-      color: var(--text);
-      border-color: var(--border-strong);
-      background: rgba(255, 255, 255, 0.08);
-    }
-
-    .status-bar {
-      display: flex;
-      align-items: center;
-      gap: 9px;
-      padding: 0 20px;
-      background: rgba(5, 5, 6, 0.76);
-      border-top: 1px solid var(--border);
-      backdrop-filter: blur(20px) saturate(145%);
-      font-family: var(--font-mono);
-      font-size: 11px;
-      min-width: 0;
-    }
-
-    .status-dot {
-      width: 7px;
-      height: 7px;
-      border-radius: 50%;
-      flex: 0 0 auto;
-    }
-
-    .status-dot.idle {
-      background: var(--dim);
-    }
-
-    .status-dot.success {
-      background: var(--success);
-      box-shadow: 0 0 12px var(--success);
-    }
-
-    .status-dot.error {
-      background: var(--error);
-      box-shadow: 0 0 12px var(--error);
-    }
-
-    .status-dot.loading {
-      background: var(--accent);
-      animation: pulse 1s infinite;
-    }
-
-    .status-text {
-      color: var(--muted);
-      min-width: 0;
-      white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-    }
-
-    .progress-overlay,
-    .settings-overlay {
-      position: fixed;
-      top: 44px;
-      left: 0;
-      right: 0;
-      bottom: 0;
-      z-index: 100;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: rgba(0, 0, 0, 0.58);
-      backdrop-filter: blur(18px) saturate(130%);
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.2s ease;
-    }
-
-    .progress-overlay.visible,
-    .settings-overlay.visible {
-      opacity: 1;
-      pointer-events: all;
-    }
-
-    .progress-container,
-    .settings-container {
-      position: relative;
-      overflow: hidden;
-      width: min(460px, calc(100vw - 56px));
-      padding: 22px;
-      border-radius: 8px;
-      background: rgba(12, 12, 14, 0.82);
-      border: 1px solid var(--border);
-      box-shadow: 0 28px 80px rgba(0, 0, 0, 0.62), inset 0 1px 0 rgba(255, 255, 255, 0.09);
-      backdrop-filter: blur(30px) saturate(150%);
-      animation: popIn 0.2s ease both;
-    }
-
-    .progress-inner,
-    .settings-inner {
-      position: relative;
-    }
-
-    .progress-label {
-      display: block;
-      margin-bottom: 10px;
-      color: var(--text);
-      font-size: 15px;
-      font-weight: 900;
-      text-align: center;
-    }
-
-    .progress-stats {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      margin-bottom: 8px;
-      color: var(--muted);
-      font-family: var(--font-mono);
-      font-size: 10px;
-      font-variant-numeric: tabular-nums;
-    }
-
-    .progress-bar-bg {
-      width: 100%;
-      height: 8px;
-      border-radius: 999px;
-      overflow: hidden;
-      background: rgba(255, 255, 255, 0.10);
-    }
-
-    .progress-bar-fill {
-      width: 0%;
-      height: 100%;
-      border-radius: inherit;
-      background: linear-gradient(90deg, #ffffff, #9ef7bf);
-      box-shadow: 0 0 22px rgba(158, 247, 191, 0.35);
-      transition: width 0.28s ease;
-    }
-
-    .settings-header {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 10px;
-    }
-
-    .settings-heading {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-    }
-
-    .settings-heading .profile-avatar {
-      width: 40px;
-      height: 40px;
-      flex: 0 0 auto;
-    }
-
-    .settings-header h2 {
-      color: var(--text);
-      font-size: 19px;
-      font-weight: 900;
-      line-height: 1;
-    }
-
-    .settings-close-btn {
-      width: 30px;
-      height: 30px;
-      border: 1px solid rgba(255, 255, 255, 0.10);
-      border-radius: 8px;
-      color: var(--muted);
-      background: rgba(255, 255, 255, 0.05);
-      cursor: pointer;
-    }
-
-    .settings-close-btn:hover {
-      color: var(--text);
-      border-color: var(--border-strong);
-    }
-
-    .settings-desc {
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.45;
-      font-weight: 650;
-      margin-bottom: 16px;
-    }
-
-    .settings-buttons {
-      display: grid;
-      gap: 9px;
-    }
-
-    .btn-setting-link,
-    .btn-check-update {
-      min-height: 42px;
-      display: flex;
-      align-items: center;
-      gap: 11px;
-      width: 100%;
-      padding: 0 13px;
-      color: var(--text);
-      background: rgba(255, 255, 255, 0.06);
-      border: 1px solid rgba(255, 255, 255, 0.10);
-      text-align: left;
-      font-size: 13px;
-      font-weight: 850;
-    }
-
-    .btn-setting-link:hover,
-    .btn-check-update:hover {
-      transform: translateY(-1px);
-      border-color: var(--border-strong);
-      background: rgba(255, 255, 255, 0.105);
-    }
-
-    .btn-link-icon {
-      width: 18px;
-      height: 18px;
-      flex: 0 0 auto;
-    }
-
-    .update-result {
-      display: none;
-      margin-top: 2px;
-      padding: 10px 12px;
-      border-radius: 8px;
-      font-family: var(--font-mono);
-      font-size: 11px;
-    }
-
-    .update-result.visible {
-      display: block;
-    }
-
-    .update-result.success {
-      color: var(--success);
-      background: rgba(127, 240, 164, 0.09);
-      border: 1px solid rgba(127, 240, 164, 0.24);
-    }
-
-    .update-result.error {
-      color: var(--error);
-      background: rgba(255, 118, 118, 0.09);
-      border: 1px solid rgba(255, 118, 118, 0.24);
-    }
-
-    .settings-dev-footer {
-      margin-top: 16px;
-      color: var(--dim);
-      font-family: var(--font-mono);
-      font-size: 10px;
-      text-align: center;
-    }
-
-    @keyframes pulse {
-      0%,
-      100% {
-        opacity: 1;
-      }
-      50% {
-        opacity: 0.35;
-      }
-    }
-
-    @keyframes popIn {
-      from {
-        opacity: 0;
-        transform: translateY(8px) scale(0.985);
-      }
-      to {
-        opacity: 1;
-        transform: none;
-      }
-    }
-
-    @keyframes fadeSlide {
-      from {
-        opacity: 0;
-        transform: translateY(6px);
-      }
-      to {
-        opacity: 1;
-        transform: none;
-      }
-    }
-
-    @media (max-width: 680px) {
-      body {
-        overflow: auto;
-      }
-
-      .wrapper {
-        min-height: 100vh;
-        height: auto;
-      }
-
-      .content {
-        overflow: visible;
-        grid-template-rows: auto auto;
-      }
-
-      .hero,
-      .install-grid {
-        grid-template-columns: 1fr;
-      }
-
-      .hero-portrait {
-        min-height: 176px;
-      }
-
-      .nav-pills {
-        display: none;
-      }
-    }
+    @font-face { font-family: Inter; src: url('data:font/woff2;base64,{{FONT_BASE64}}') format('woff2'); font-style: normal; font-weight: 100 900; font-display: swap; }
+    :root { color-scheme: dark; font-family: Inter, 'Segoe UI Variable', 'Segoe UI', sans-serif; --bg: #090a10; --text: #f1f2fb; --muted: #9298af; --line: #b6baff16; }
+    * { box-sizing: border-box; }
+    [hidden] { display: none !important; }
+    body { margin: 0; background: var(--bg); color: var(--text); font-size: 13px; -webkit-font-smoothing: antialiased; }
+    button, input { font: inherit; }
+    button { cursor: pointer; color: inherit; -webkit-app-region: no-drag; }
+    button:disabled { cursor: default; opacity: .42; }
+    button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid #aab6ff; outline-offset: 4px; }
+    svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
+    .shell { display: flex; flex-direction: column; height: 100vh; overflow: hidden; border: 1px solid #aab4ff2b; background: radial-gradient(ellipse at 82% 12%, #5f43bb14, transparent 48%), var(--bg); }
+    .titlebar { display: flex; align-items: center; justify-content: space-between; min-height: 55px; padding-left: 25px; border-bottom: 1px solid var(--line); user-select: none; }
+    .brand { display: flex; align-items: center; gap: 9px; font-size: 15px; font-weight: 750; letter-spacing: -.5px; }
+    .brand img { width: 23px; height: 23px; border-radius: 7px; }
+    .brand span { margin-left: 6px; padding-left: 15px; border-left: 1px solid #c4c8ff24; color: var(--muted); font-size: 11px; font-weight: 500; letter-spacing: 0; }
+    .window-actions { display: flex; align-self: stretch; }
+    .window-actions button { display: grid; place-items: center; width: 48px; border: 0; background: transparent; color: #9a9eb4; }
+    .window-actions button:hover { background: #ffffff09; color: white; }
+    .window-actions #close:hover { background: #b6425f33; color: #ffc3d0; }
+    .window-actions svg { width: 17px; height: 17px; }
+    main { flex: 1; min-height: 0; overflow: auto; scrollbar-width: thin; scrollbar-color: #3e405b transparent; }
+    .page { padding: 46px 48px 32px; animation: arrive 260ms ease both; }
+    .eyebrow { display: flex; align-items: center; gap: 8px; margin: 0 0 17px; color: #a6afe3; font-size: 10px; font-weight: 650; letter-spacing: 1.8px; text-transform: uppercase; }
+    .eyebrow::before { content: ''; width: 5px; height: 5px; border-radius: 50%; background: #a5afff; box-shadow: 0 0 12px #8a8dff; }
+    h1 { margin: 0; font-size: 43px; line-height: 1.13; font-weight: 650; letter-spacing: -2px; white-space: pre-line; }
+    h1 em { color: #b9c2ff; font-style: normal; }
+    .intro { max-width: 510px; margin: 17px 0 0; color: var(--muted); font-size: 13px; line-height: 1.85; }
+    .hero { display: flex; align-items: center; justify-content: space-between; }
+    .orbit { position: relative; display: grid; place-items: center; flex: 0 0 170px; height: 155px; margin-right: 10px; }
+    .orbit::before, .orbit::after { content: ''; position: absolute; width: 148px; height: 148px; border: 1px solid #acaaff22; border-radius: 50%; }
+    .orbit::before { transform: rotate(-28deg) scaleY(.55); border-top-color: #a6b7ff9c; box-shadow: 0 -8px 35px #7c77ed12; }
+    .orbit::after { transform: rotate(46deg) scaleY(.55); border-bottom-color: #a18cea8c; }
+    .orbit-core { display: grid; place-items: center; width: 78px; height: 78px; border: 1px solid #bec6ff44; border-radius: 24px; background: linear-gradient(140deg, #8085e92b, #47375f14); box-shadow: 0 0 65px #8676fc28, inset 0 1px #ffffff10; transform: rotate(-9deg); }
+    .orbit-core img { width: 45px; height: 45px; border-radius: 13px; transform: rotate(9deg); }
+    .actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; margin-top: 39px; }
+    .action-card { position: relative; display: flex; flex-direction: column; align-items: flex-start; min-height: 204px; padding: 23px; text-align: left; border: 1px solid #b1b8f324; border-radius: 17px; background: linear-gradient(140deg, #171924bb, #101119aa); transition: transform 180ms, border-color 180ms, box-shadow 180ms; }
+    .action-card.primary { border-color: #a1a9ff6b; background: radial-gradient(ellipse at 5% 0%, #8074ff25, transparent 85%), linear-gradient(145deg, #202139, #141622); box-shadow: 0 0 35px #7467df0d, inset 0 1px #e2deff0a; }
+    .action-card:hover { transform: translateY(-3px); border-color: #aab6ff8c; box-shadow: 0 12px 35px #5950be15; }
+    .action-icon { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 23px; border: 1px solid #b4b8ff26; border-radius: 12px; color: #bbc5ff; background: #8b8de710; }
+    .action-card.primary .action-icon { background: #a49af321; }
+    .action-card .arrow { position: absolute; right: 22px; top: 28px; width: 17px; height: 17px; color: #898fae; transition: transform 180ms, color 180ms; }
+    .action-card:hover .arrow { transform: translateX(3px); color: #d2d8ff; }
+    .action-card strong { font-size: 16px; font-weight: 620; letter-spacing: -.5px; }
+    .action-card p { margin: 10px 0 0; color: #969bb3; font-size: 11.5px; line-height: 1.75; }
+    .home-note { display: flex; align-items: center; gap: 9px; margin-top: 25px; color: #858ba5; font-size: 11px; line-height: 1.6; }
+    .home-note svg { width: 15px; height: 15px; color: #9da9d5; }
+    footer { display: flex; align-items: center; justify-content: space-between; min-height: 49px; padding: 0 26px; border-top: 1px solid var(--line); font-size: 10px; color: #777d97; }
+    .build-info { display: flex; align-items: center; gap: 10px; }
+    .build-info i { width: 3px; height: 3px; background: #5c627c; border-radius: 50%; }
+    .text-button { padding: 5px 0; border: 0; background: transparent; color: #a3adce; font-size: 11px; }
+    .text-button:hover { color: #d2dcff; }
+    .back { display: flex; align-items: center; gap: 7px; margin: -13px 0 26px; }
+    .back svg { width: 15px; height: 15px; }
+    .step-row { display: flex; align-items: center; gap: 10px; margin: 0 0 24px; color: #7d849e; font-size: 10px; }
+    .step-row .current { color: #c0c9f5; }
+    .step-line { height: 1px; width: 30px; background: #a1a9db2b; }
+    .target-layout { display: grid; grid-template-columns: 230px minmax(0, 1fr); gap: 40px; }
+    .target-layout h1 { font-size: 33px; letter-spacing: -1.4px; }
+    .target-layout .intro { font-size: 12px; }
+    .operation-symbol { display: grid; place-items: center; width: 48px; height: 48px; margin: 24px 0 19px; color: #b5bfff; border: 1px solid #a5aaf32e; border-radius: 15px; background: #8388ee0e; }
+    .operation-symbol svg { width: 23px; height: 23px; }
+    .side-note { margin: 22px 0 0; color: #7b829d; font-size: 10.5px; line-height: 1.8; }
+    .targets-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 13px; }
+    .targets-header h2 { margin: 0; font-size: 12px; font-weight: 550; }
+    .targets-header .text-button { display: flex; align-items: center; gap: 5px; font-size: 10px; }
+    .targets-header svg { width: 13px; height: 13px; }
+    #discord-list { display: grid; gap: 9px; }
+    .discord-card { display: flex; align-items: center; gap: 13px; width: 100%; padding: 16px; border: 1px solid #a8b1ed20; border-radius: 12px; background: #14162099; text-align: left; transition: border-color 160ms, background 160ms; }
+    .discord-card:hover { border-color: #aab8ff60; }
+    .discord-card[aria-pressed="true"] { border-color: #a2b3ff96; background: linear-gradient(115deg, #7f8fe81b, #735bc309); box-shadow: 0 0 22px #7b7de609; }
+    .channel-icon { display: grid; place-items: center; width: 34px; height: 34px; flex-shrink: 0; border: 1px solid #b5bcff1a; border-radius: 10px; color: #b4bded; background: #878df20b; }
+    .channel-icon.canary { color: #e9cd87; background: #f1c65c08; border-color: #f1c65c20; }
+    .target-info { display: grid; gap: 6px; min-width: 0; flex: 1; }
+    .target-name { font-weight: 590; font-size: 12px; letter-spacing: -.1px; }
+    .target-state { color: #8b92ad; font-size: 10px; }
+    .target-state.installed { color: #afbfee; }
+    .target-state.other { color: #d9be8d; }
+    .radio { width: 15px; height: 15px; flex-shrink: 0; border: 1px solid #5a617f; border-radius: 50%; }
+    [aria-pressed="true"] .radio { border: 4px solid #b7c2ff; background: #393755; }
+    .manual { margin-top: 17px; color: #929bb9; font-size: 10.5px; }
+    .manual summary { cursor: pointer; width: fit-content; }
+    .manual p { color: #7e87a4; line-height: 1.7; }
+    .manual-row { display: flex; gap: 8px; margin-top: 10px; }
+    input[type="text"] { min-width: 0; flex: 1; padding: 10px; border: 1px solid #a7b8e32d; border-radius: 8px; color: #dee4fc; background: #0c0e16; font-size: 11px; }
+    .small-button { padding: 0 13px; border: 1px solid #a7b8e345; border-radius: 8px; color: #bdcaff; background: #8596e115; }
+    .selection { margin-top: 22px; padding-top: 19px; border-top: 1px solid var(--line); }
+    #selection-note { margin: 0; color: #9ca7c6; font-size: 11px; line-height: 1.8; overflow-wrap: anywhere; }
+    #selection-path { margin: 8px 0 0; font-size: 9px; line-height: 1.7; color: #626e91; overflow-wrap: anywhere; }
+    .replace-confirm { display: flex; align-items: flex-start; gap: 9px; margin-top: 13px; color: #dbc29d; font-size: 10.5px; line-height: 1.8; }
+    .replace-confirm input { margin: 4px 0 0; accent-color: #a5afff; }
+    .primary-button { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 45px; padding: 0 21px; border: 1px solid #d4d6ff69; border-radius: 10px; background: linear-gradient(110deg, #b7c5ff, #b8a8f6); color: #171a35; box-shadow: 0 3px 20px #9385f21c; font-size: 12px; font-weight: 680; transition: filter 160ms, box-shadow 160ms; }
+    .primary-button:hover:enabled { filter: brightness(1.08); box-shadow: 0 4px 25px #9385f238; }
+    .primary-button svg { width: 17px; height: 17px; }
+    #run-operation { width: 100%; margin-top: 18px; }
+    #repair-shortcut { margin-top: 9px; }
+    .empty { padding: 24px 15px; border: 1px dashed #a8b4e42e; border-radius: 12px; color: #8e99bb; font-size: 11px; line-height: 1.8; }
+    .notice { margin: 15px 0 0; padding: 12px 14px; border: 1px solid #f0a0b92e; border-radius: 10px; color: #edb0c3; background: #e1719510; font-size: 11px; line-height: 1.8; overflow-wrap: anywhere; }
+    .progress-page { max-width: 620px; margin: 0 auto; padding-top: 74px; text-align: center; }
+    .progress-page .eyebrow { justify-content: center; }
+    .progress-page h1 { font-size: 36px; letter-spacing: -1.5px; }
+    .progress-page .intro { margin: 15px auto 0; }
+    .progress-icon { display: grid; place-items: center; width: 75px; height: 75px; margin: 0 auto 31px; border: 1px solid #a1b2ff4d; border-radius: 24px; color: #c3ceff; background: linear-gradient(145deg, #939cf429, #6e4d9e0a); box-shadow: 0 0 70px #8882f51c; }
+    .progress-icon svg { width: 29px; height: 29px; }
+    .progress-track { height: 5px; margin-top: 32px; border-radius: 5px; background: #a0acf013; overflow: hidden; }
+    #progress-fill { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #8baffc, #b496f9); transition: width 250ms ease; }
+    .progress-meta { display: flex; justify-content: space-between; gap: 20px; margin-top: 13px; color: #9ba7cb; font-size: 11px; text-align: left; }
+    #progress-pct { color: #c0c9ef; }
+    #progress-mb { min-height: 18px; margin: 12px 0 0; color: #6f7c9e; font-size: 10px; }
+    #result-actions { display: flex; justify-content: center; gap: 20px; margin-top: 28px; }
+    .spinning { animation: spin 2.5s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    @keyframes arrive { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+    @media (max-width: 760px) { .page { padding: 32px 28px; } .target-layout { grid-template-columns: 180px minmax(0, 1fr); gap: 25px; } .action-card { padding: 18px; } .action-card strong { font-size: 14px; } .orbit { flex-basis: 135px; margin-right: 0; } h1 { font-size: 36px; } }
+    @media (max-width: 570px) { .hero .orbit { display: none; } .actions, .target-layout { grid-template-columns: 1fr; } .action-card { min-height: 155px; } .action-icon { margin-bottom: 15px; } .target-layout .side-note, .operation-symbol { display: none; } .progress-page { padding-top: 35px; } .brand span { display: none; } }
   </style>
 </head>
 <body>
-  <div class="wrapper">
-    <div class="titlebar">
-      <div class="titlebar-left">
-        <div class="brand-lockup" onclick="window.moggcord.openUrl('https://moggcord.online/')">
-          <span class="logo-mark"><img src="{{PFP_BASE64}}" alt="Moggcord" /></span>
-          <span class="titlebar-title">Moggcord</span>
-        </div>
-        <div class="nav-pills">
-          <span class="nav-pill">Shards</span>
-          <span class="nav-pill">Installer</span>
-          <span class="titlebar-version" id="titlebar-version">...</span>
-        </div>
+  <svg aria-hidden="true" style="display:none">
+    <symbol id="icon-arrow" viewBox="0 0 24 24"><path d="M5 12h14m-5-5 5 5-5 5" /></symbol>
+    <symbol id="icon-back" viewBox="0 0 24 24"><path d="M19 12H5m5-5-5 5 5 5" /></symbol>
+    <symbol id="icon-install" viewBox="0 0 24 24"><path d="M12 3v12m-4-4 4 4 4-4M4 15v4a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-4" /></symbol>
+    <symbol id="icon-repair" viewBox="0 0 24 24"><path d="M14 6a5 5 0 0 0-6 6L3 17a2.8 2.8 0 0 0 4 4l5-5a5 5 0 0 0 6-6l-4 3-3-3z" /></symbol>
+    <symbol id="icon-uninstall" viewBox="0 0 24 24"><path d="M4 7h16M9 7V4h6v3M6 7l1 13h10l1-13M10 11v5m4-5v5" /></symbol>
+    <symbol id="icon-shield" viewBox="0 0 24 24"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6zM8 12l3 3 5-6" /></symbol>
+    <symbol id="icon-check" viewBox="0 0 24 24"><path d="m5 12 4 4L19 6" /></symbol>
+    <symbol id="icon-refresh" viewBox="0 0 24 24"><path d="M20 7v5h-5M4 17v-5h5M6 7a7 7 0 0 1 12-1l2 6M4 12l2 6a7 7 0 0 0 12-1" /></symbol>
+    <symbol id="icon-discord" viewBox="0 0 24 24"><path d="M8 5 5 6c-2 3-3 7-3 10l5 3 1-2m8-12 3 1c2 3 3 7 3 10l-5 3-1-2M7 7c3-2 7-2 10 0M6 16c4 2 8 2 12 0" /><circle cx="8.5" cy="12" r="1" /><circle cx="15.5" cy="12" r="1" /></symbol>
+    <symbol id="icon-close" viewBox="0 0 24 24"><path d="m6 6 12 12M18 6 6 18" /></symbol>
+  </svg>
+  <div class="shell">
+    <header class="titlebar">
+      <div class="brand"><img src="{{ICON_BASE64}}" alt="" />moggcord<span>Installer</span></div>
+      <div class="window-actions">
+        <button id="minimize" aria-label="Minimize"><svg viewBox="0 0 24 24"><path d="M6 12h12" /></svg></button>
+        <button id="close" aria-label="Close installer"><svg><use href="#icon-close" /></svg></button>
       </div>
-      <div class="titlebar-right">
-        <button class="icon-btn" onclick="toggleSettingsModal()" title="Settings">
-          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-            <circle cx="12" cy="12" r="3"></circle>
-            <path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 0 1-4 0v-.1a1.7 1.7 0 0 0-1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 0 1 0-4h.1a1.7 1.7 0 0 0 1.5-1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3h.1a1.7 1.7 0 0 0 1-1.5V3a2 2 0 0 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8v.1a1.7 1.7 0 0 0 1.5 1H21a2 2 0 0 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1Z"></path>
-          </svg>
-        </button>
-        <div class="titlebar-controls">
-          <button class="btn-minimize" onclick="window.moggcord.minimizeApp()" title="Minimize"></button>
-          <button class="btn-close" onclick="window.moggcord.closeApp()" title="Close"></button>
-        </div>
-      </div>
-    </div>
-
-    <main class="content">
-      <section class="hero">
-        <div class="hero-copy">
-          <div class="eyebrow"><span class="spark"></span>Premium Discord client experience</div>
-          <h1>Moggcord</h1>
-          <p>Black liquid glass installer with a cleaner setup flow for your Discord desktop client.</p>
-          <div class="hero-actions">
-            <button class="btn btn-primary" onclick="focusTargets()">Get access</button>
-            <button class="btn btn-secondary" onclick="window.moggcord.openUrl('https://discord.gg/moggcord')">Discord</button>
+    </header>
+    <main>
+      <section id="home-page" class="page" aria-labelledby="welcome-title">
+        <div class="hero">
+          <div>
+            <p class="eyebrow">Desktop setup</p>
+            <h1 id="welcome-title">Your Discord.<br /><em>Your way.</em></h1>
+            <p class="intro">A little more you. Choose how you want to set up<br /> Moggcord, then pick your Discord installation.</p>
           </div>
+          <div class="orbit" aria-hidden="true"><div class="orbit-core"><img src="{{ICON_BASE64}}" alt="" /></div></div>
         </div>
-
-        <div class="hero-portrait">
-          <div class="profile-avatar"><img src="{{PFP_BASE64}}" alt="Moggcord" /></div>
-          <div class="portrait-meta">
-            <div class="portrait-name">mogger</div>
-            <div class="status-chip">Ready</div>
+        <div class="actions" aria-label="Setup actions">
+          <button class="action-card primary" data-action="install">
+            <span class="action-icon"><svg><use href="#icon-install" /></svg></span><svg class="arrow"><use href="#icon-arrow" /></svg>
+            <strong>Install Moggcord</strong><p>Add Moggcord to a fresh Discord installation.</p>
+          </button>
+          <button class="action-card" data-action="repair">
+            <span class="action-icon"><svg><use href="#icon-repair" /></svg></span><svg class="arrow"><use href="#icon-arrow" /></svg>
+            <strong>Repair Moggcord</strong><p>Restore Moggcord files and keep your settings.</p>
+          </button>
+          <button class="action-card" data-action="uninstall">
+            <span class="action-icon"><svg><use href="#icon-uninstall" /></svg></span><svg class="arrow"><use href="#icon-arrow" /></svg>
+            <strong>Uninstall Moggcord</strong><p>Go back to Discord. Your settings stay saved.</p>
+          </button>
+        </div>
+        <p class="home-note"><svg><use href="#icon-shield" /></svg><span id="detection-summary" role="status">Checking your Discord installations…</span></p>
+      </section>
+      <section id="target-page" class="page" aria-labelledby="target-title" hidden>
+        <button id="back" class="text-button back"><svg><use href="#icon-back" /></svg>All actions</button>
+        <div class="target-layout">
+          <div>
+            <div class="step-row"><span>01 Action</span><span class="step-line"></span><span class="current">02 Discord</span></div>
+            <h1 id="target-title" tabindex="-1">Install Moggcord.</h1>
+            <p id="target-description" class="intro"></p>
+            <div id="operation-symbol" class="operation-symbol" aria-hidden="true"></div>
+            <p class="side-note">Only the selected Discord installation will be changed.</p>
+          </div>
+          <div>
+            <div class="targets-header"><h2>Choose your Discord</h2><button id="refresh" class="text-button"><svg><use href="#icon-refresh" /></svg>Refresh</button></div>
+            <div id="discord-list" role="group" aria-label="Discord installations"></div>
+            <details class="manual" id="manual-details"><summary>Use a custom installation</summary>
+              <p id="manual-help">Enter the full path to your Discord resources folder.</p>
+              <form id="manual-form" class="manual-row"><input id="manual-path" type="text" aria-label="Discord resources folder" aria-describedby="manual-help" placeholder="C:\…\Discord\app-…\resources" required /><button class="small-button" type="submit">Add</button></form>
+            </details>
+            <div class="selection">
+              <p id="selection-note" role="status">Select a Discord installation to continue.</p>
+              <p id="selection-path"></p>
+              <label id="replace-confirm" class="replace-confirm" hidden><input type="checkbox" id="replace-other" /><span>Replace the other mod on this Discord installation with Moggcord.</span></label>
+              <button id="run-operation" class="primary-button" disabled><span id="run-label">Install Moggcord</span><svg><use href="#icon-arrow" /></svg></button>
+              <button id="repair-shortcut" class="text-button" hidden>Use Repair Moggcord instead →</button>
+            </div>
+            <p id="target-error" class="notice" role="alert" hidden></p>
           </div>
         </div>
       </section>
-
-      <section class="install-grid" id="targets">
-        <div class="liquid-panel target-panel">
-          <div class="panel-content">
-            <div class="section-row">
-              <div>
-                <div class="section-label">Detected Discord installations</div>
-                <div class="section-subtitle">Pick the app folder you want to patch.</div>
-              </div>
-              <button class="btn-manual" onclick="toggleManual()">Manual path</button>
-            </div>
-
-            <div class="manual-input-row" id="manual-row">
-              <input id="manual-path" type="text" placeholder="C:\Users\You\AppData\Local\Discord\app-1.0.9238\resources" />
-              <button onclick="addManualPath()">OK</button>
-            </div>
-
-            <div class="discord-list" id="discord-list">
-              <div class="empty-state">Searching for Discord installations...</div>
-            </div>
-          </div>
+      <section id="progress-page" class="page progress-page" aria-labelledby="progress-title" hidden>
+        <div id="progress-icon" class="progress-icon" aria-hidden="true"></div>
+        <p class="eyebrow" id="progress-kicker">Setting things up</p>
+        <h1 id="progress-title" tabindex="-1">Making it yours.</h1>
+        <p id="progress-description" class="intro"></p>
+        <div id="progress-details" aria-live="polite">
+          <div id="progress-track" class="progress-track" role="progressbar" aria-label="Setup progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progress-fill"></div></div>
+          <div class="progress-meta"><span id="progress-label">Preparing…</span><span id="progress-pct">0%</span></div>
+          <p id="progress-mb"></p>
         </div>
-
-        <aside class="liquid-panel side-panel">
-          <div class="panel-content">
-            <div class="selected-box">
-              <div class="selected-box-top">
-                <span class="profile-avatar"><img src="{{PFP_BASE64}}" alt="Moggcord" /></span>
-                <div>
-                  <div class="selected-kicker">Selected target</div>
-                  <div class="selected-name" id="selected-name">None</div>
-                </div>
-              </div>
-              <div class="selected-path" id="selected-path">Choose a Discord installation first.</div>
-            </div>
-
-            <div class="tiny-links">
-              <button class="tiny-link" onclick="toggleSettingsModal()">Links</button>
-              <button class="tiny-link" onclick="loadDiscords()">Refresh</button>
-            </div>
-
-            <div class="actions">
-              <button class="btn btn-primary" id="btn-inject" disabled onclick="handleInject()">Inject Moggcord</button>
-              <button class="btn btn-danger" id="btn-uninject" disabled onclick="handleUninject()">Uninject</button>
-            </div>
-          </div>
-        </aside>
+        <p id="progress-error" class="notice" role="alert" hidden></p>
+        <div id="result-actions" hidden><button id="another-action" class="text-button">Back to setup</button><button id="done" class="primary-button">Done<svg><use href="#icon-check" /></svg></button></div>
       </section>
     </main>
-
-    <div class="status-bar">
-      <div class="status-dot idle" id="status-dot"></div>
-      <span class="status-text" id="status-text">Waiting for selection...</span>
-    </div>
+    <footer><div class="build-info"><span id="installer-version">Moggcord Installer</span><i></i><span>Windows x64</span></div><button id="github" class="text-button">GitHub ↗</button></footer>
   </div>
-
-  <div class="progress-overlay" id="progress-overlay">
-    <div class="progress-container">
-      <div class="progress-inner">
-        <span class="progress-label" id="progress-label">Preparing installation...</span>
-        <div class="progress-stats">
-          <span class="progress-stats-left" id="progress-mb"></span>
-          <span class="progress-stats-right" id="progress-pct">0%</span>
-        </div>
-        <div class="progress-bar-bg">
-          <div class="progress-bar-fill" id="progress-fill"></div>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <div class="settings-overlay" id="settings-overlay" onclick="closeSettingsModal(event)">
-    <div class="settings-container" onclick="event.stopPropagation()">
-      <div class="settings-inner">
-        <div class="settings-header">
-          <div class="settings-heading">
-            <span class="profile-avatar"><img src="{{PFP_BASE64}}" alt="Moggcord" /></span>
-            <h2>Moggcord Links</h2>
-          </div>
-          <button class="settings-close-btn" onclick="toggleSettingsModal()">x</button>
-        </div>
-        <p class="settings-desc">Official community, site and source links for this installer build.</p>
-        <div class="settings-buttons">
-          <button class="btn-setting-link" onclick="window.moggcord.openUrl('https://discord.gg/moggcord')">
-            <svg class="btn-link-icon" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M19.27 5.33C17.94 4.71 16.5 4.26 15 4c-.18.33-.39.76-.53 1.09a16.09 16.09 0 0 0-4.8 0c-.14-.34-.35-.76-.54-1.09-1.5.26-2.93.71-4.27 1.33-2.72 4.07-3.47 8.03-3.1 11.95 1.8 1.32 3.53 2.12 5.24 2.65.4-.55.76-1.13 1.07-1.74-.57-.22-1.11-.48-1.64-.78.11-.08.22-.17.33-.25 3.44 1.57 7.15 1.57 10.55 0 .11.09.22.17.33.26-.52.31-1.07.56-1.64.78.32.61.68 1.19 1.07 1.74 1.72-.53 3.45-1.33 5.25-2.65.44-4.53-.73-8.46-3.1-11.95ZM8.52 14.91c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.84 2.12-1.89 2.12Zm6.97 0c-1.03 0-1.89-.95-1.89-2.12s.84-2.12 1.89-2.12c1.06 0 1.9.96 1.89 2.12 0 1.17-.84 2.12-1.89 2.12Z" />
-            </svg>
-            <span>Discord Server</span>
-          </button>
-          <button class="btn-setting-link" onclick="window.moggcord.openUrl('https://moggcord.online')">
-            <svg class="btn-link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.3" stroke-linecap="round" stroke-linejoin="round">
-              <circle cx="12" cy="12" r="10"></circle>
-              <path d="M2 12h20"></path>
-              <path d="M12 2c3 3 4 6 4 10s-1 7-4 10c-3-3-4-6-4-10s1-7 4-10Z"></path>
-            </svg>
-            <span>Mogged Site</span>
-          </button>
-          <button class="btn-setting-link" onclick="window.moggcord.openUrl('https://github.com/caedesdev/moggcord')">
-            <svg class="btn-link-icon" viewBox="0 0 24 24" fill="currentColor">
-              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.3 3.44 9.8 8.2 11.39.6.11.82-.26.82-.58v-2.17c-3.34.73-4.04-1.61-4.04-1.61-.55-1.39-1.33-1.76-1.33-1.76-1.09-.75.08-.73.08-.73 1.21.08 1.84 1.24 1.84 1.24 1.07 1.84 2.81 1.31 3.49 1 .11-.78.42-1.31.76-1.61-2.67-.3-5.47-1.33-5.47-5.93 0-1.31.47-2.38 1.24-3.22-.12-.3-.54-1.52.12-3.18 0 0 1.01-.32 3.3 1.23.96-.27 1.98-.4 3-.4s2.04.13 3 .4c2.29-1.55 3.3-1.23 3.3-1.23.65 1.66.24 2.88.12 3.18.77.84 1.23 1.91 1.23 3.22 0 4.61-2.8 5.63-5.48 5.92.43.37.82 1.1.82 2.22v3.29c0 .32.22.69.83.58C20.57 21.8 24 17.3 24 12c0-6.63-5.37-12-12-12Z" />
-            </svg>
-            <span>GitHub Repository</span>
-          </button>
-          <div class="update-result" id="update-result"></div>
-        </div>
-        <div class="settings-dev-footer">dev by ahki__ for moggcord</div>
-      </div>
-    </div>
-  </div>
-
   <script>
-    const PROFILE_AVATAR = '<img src="{{PFP_BASE64}}" alt="Moggcord" />';
-    const ICONS = {
-      "Discord": { html: PROFILE_AVATAR, cls: "profile" },
-      "Discord PTB": { html: PROFILE_AVATAR, cls: "profile" },
-      "Discord Canary": { html: PROFILE_AVATAR, cls: "profile" },
-      "Discord Dev": { html: PROFILE_AVATAR, cls: "profile" },
-      "Manual": { html: PROFILE_AVATAR, cls: "profile" }
+    const $ = id => document.getElementById(id);
+    const actions = {
+      install: { label: 'Install Moggcord', title: 'Install\nMoggcord.', description: 'Pick where Moggcord should live. Existing Moggcord installations can be repaired instead.', running: 'Installing Moggcord.', finished: 'You’re all set.', detail: 'Moggcord is installed. Your selected Discord is starting.' },
+      repair: { label: 'Repair Moggcord', title: 'A fresh\nstart.', description: 'Restore the Moggcord files on your selected Discord. Your settings, themes and plugins stay saved.', running: 'Restoring Moggcord.', finished: 'Good as new.', detail: 'Moggcord has been repaired. Your selected Discord is starting.' },
+      uninstall: { label: 'Uninstall Moggcord', title: 'Back to\nDiscord.', description: 'Remove Moggcord from one Discord installation. Your Moggcord settings stay saved for later.', running: 'Removing Moggcord.', finished: 'Back to the original.', detail: 'Moggcord has been removed. Your selected Discord is starting.' }
     };
-
     let discords = [];
     let selected = null;
+    let action = 'install';
+    let busy = false;
+    let detecting = false;
+    let detectionFailed = false;
+    let pollTimer = null;
 
-    function escapeHtml(value) {
-      return String(value ?? "")
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
+    function icon(name, spinning = false) {
+      return '<svg' + (spinning ? ' class="spinning"' : '') + '><use href="#icon-' + name + '" /></svg>';
+    }
+
+    function showPage(id) {
+      for (const page of ['home-page', 'target-page', 'progress-page']) $(page).hidden = page !== id;
+      document.querySelector('main').scrollTop = 0;
+    }
+
+    function showError(id, message = '') {
+      $(id).textContent = message;
+      $(id).hidden = !message;
+    }
+
+    function chooseAction(next) {
+      if (busy || !actions[next]) return;
+      action = next;
+      selected = null;
+      $('target-title').textContent = actions[action].title;
+      $('target-description').textContent = actions[action].description;
+      $('operation-symbol').innerHTML = icon(action);
+      $('run-label').textContent = actions[action].label;
+      $('replace-other').checked = false;
+      showError('target-error');
+      showPage('target-page');
+      renderTargets();
+      const eligible = discords.filter(d => action === 'install' ? !d.installed && !d.otherMod : d.installed);
+      if (eligible.length === 1) selectTarget(eligible[0]);
+      $('target-title').focus();
+    }
+
+    function renderTargets() {
+      const list = $('discord-list');
+      list.replaceChildren();
+      if (!discords.length) {
+        const empty = document.createElement('div');
+        empty.className = 'empty';
+        empty.textContent = detecting ? 'Finding your Discord installations…' : detectionFailed ? 'Discord detection failed. Try Refresh or add a custom resources folder.' : 'No Discord installations found. Install Discord first, or add a custom resources folder below.';
+        list.append(empty);
+      }
+      for (const target of discords) {
+        const card = document.createElement('button');
+        card.className = 'discord-card';
+        card.type = 'button';
+        card.setAttribute('aria-pressed', String(target === selected));
+        const channel = document.createElement('span');
+        channel.className = 'channel-icon' + (target.name.includes('Canary') ? ' canary' : '');
+        channel.innerHTML = icon('discord');
+        channel.setAttribute('aria-hidden', 'true');
+        const info = document.createElement('span');
+        info.className = 'target-info';
+        const name = document.createElement('span');
+        name.className = 'target-name';
+        name.textContent = target.name;
+        const status = document.createElement('span');
+        status.className = 'target-state' + (target.installed ? ' installed' : target.otherMod ? ' other' : '');
+        status.textContent = target.installed ? 'Moggcord installed' : target.otherMod ? 'Another mod installed' : 'Ready for Moggcord';
+        info.append(name, status);
+        const radio = document.createElement('span');
+        radio.className = 'radio';
+        radio.setAttribute('aria-hidden', 'true');
+        card.append(channel, info, radio);
+        card.addEventListener('click', () => selectTarget(target));
+        list.append(card);
+      }
+      updateSelection();
+    }
+
+    function selectTarget(target) {
+      if (busy || detecting) return;
+      selected = target;
+      $('replace-other').checked = false;
+      renderTargets();
+    }
+
+    function updateSelection() {
+      const installed = selected?.installed;
+      const needsReplace = action === 'install' && selected?.otherMod;
+      const alreadyInstalled = action === 'install' && installed;
+      const missing = action !== 'install' && selected && !installed;
+      $('run-operation').disabled = busy || detecting || !selected || alreadyInstalled || missing || (needsReplace && !$('replace-other').checked);
+      $('replace-confirm').hidden = !needsReplace;
+      $('repair-shortcut').hidden = !alreadyInstalled;
+      $('selection-path').textContent = selected?.path || '';
+      $('selection-note').textContent = !selected ? 'Select a Discord installation to continue.'
+        : alreadyInstalled ? 'Moggcord is already installed here. Use Repair if something needs fixing.'
+        : missing ? 'Moggcord is not installed here. Choose Install or select another Discord.'
+        : needsReplace ? 'Another mod was detected. Installing here will replace it on this Discord only.'
+        : actions[action].label + ' on ' + selected.name + '. Discord will close and restart.';
+    }
+
+    async function inspectTarget(target) {
+      const installed = await window.moggcord.isInjected(target.path);
+      const otherMod = installed ? false : await window.moggcord.hasThirdPartyMod(target.path);
+      return { ...target, installed, otherMod };
+    }
+
+    async function loadDiscords() {
+      if (detecting || busy) return;
+      detecting = true;
+      detectionFailed = false;
+      selected = null;
+      $('refresh').disabled = true;
+      renderTargets();
+      try {
+        const found = await window.moggcord.detectDiscord();
+        discords = await Promise.all((found || []).map(inspectTarget));
+        const installed = discords.filter(d => d.installed);
+        $('detection-summary').textContent = installed.length ? 'Moggcord found on ' + installed.map(d => d.name).join(', ') + '. Use Repair if you need it.' : discords.length ? discords.length + ' Discord installation' + (discords.length === 1 ? '' : 's') + ' found. Nothing changes until you choose an action.' : 'Nothing changes until you choose an action and a Discord installation.';
+      } catch (error) {
+        discords = [];
+        detectionFailed = true;
+        $('detection-summary').textContent = 'Could not check Discord. Choose an action to try again or add a custom folder.';
+      } finally {
+        detecting = false;
+        $('refresh').disabled = false;
+        renderTargets();
+      }
+    }
+
+    async function addManualTarget(event) {
+      event.preventDefault();
+      if (busy || detecting) return;
+      const path = $('manual-path').value.trim().replace(/[\\/]+$/, '');
+      if (!path) return;
+      showError('target-error');
+      try {
+        let target = discords.find(d => d.path.toLowerCase() === path.toLowerCase());
+        if (!target) {
+          target = await inspectTarget({ name: 'Custom Discord', path });
+          discords.push(target);
+        }
+        selectTarget(target);
+        $('manual-details').open = false;
+        $('manual-path').value = '';
+      } catch (error) {
+        showError('target-error', 'Could not read that folder. Check the path and try again.');
+      }
     }
 
     function setStatus(type, text) {
-      document.getElementById("status-dot").className = `status-dot ${type}`;
-      document.getElementById("status-text").textContent = text;
+      if (busy) $('progress-label').textContent = text;
     }
 
-    function setLoading(v, text = "Loading...", percent = 100, mbDownloaded = null, mbTotal = null) {
-      document.getElementById("progress-overlay").classList.toggle("visible", v);
-      if (v) {
-        const pct = Math.round(percent);
-        document.getElementById("progress-label").textContent = text;
-        document.getElementById("progress-pct").textContent = `${pct}%`;
-        if (mbDownloaded !== null && mbTotal !== null) {
-          document.getElementById("progress-mb").textContent =
-            `${mbDownloaded.toFixed(1)} / ${mbTotal.toFixed(1)} MB`;
-        } else {
-          document.getElementById("progress-mb").textContent = "";
-        }
-        document.getElementById("progress-fill").style.width = `${percent}%`;
-      } else {
-        setTimeout(() => {
-          document.getElementById("progress-fill").style.width = "0%";
-        }, 300);
-      }
+    function setLoading(visible, text = 'Preparing…', percent = 0, downloaded = null, total = null) {
+      if (!busy || !visible) return;
+      const value = Math.max(0, Math.min(100, Number(percent) || 0));
+      $('progress-label').textContent = text;
+      $('progress-pct').textContent = Math.round(value) + '%';
+      $('progress-fill').style.width = value + '%';
+      $('progress-track').setAttribute('aria-valuenow', String(Math.round(value)));
+      $('progress-mb').textContent = downloaded !== null && total !== null ? downloaded.toFixed(1) + ' / ' + total.toFixed(1) + ' MB' : '';
     }
 
-    function focusTargets() {
-      const panel = document.getElementById("targets");
-      panel.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      setStatus("idle", "Choose a Discord installation target.");
+    function finishOperation(success, detail = '') {
+      clearInterval(pollTimer);
+      pollTimer = null;
+      busy = false;
+      $('close').disabled = false;
+      $('progress-icon').innerHTML = icon(success ? 'check' : 'close');
+      $('progress-kicker').textContent = success ? 'Complete' : 'Let’s try that again';
+      $('progress-title').textContent = success ? detail === 'alreadyInstalled' ? 'Already at home.' : actions[action].finished : 'Setup couldn’t finish.';
+      $('progress-description').textContent = success ? detail === 'alreadyInstalled' ? 'Moggcord is already installed. Nothing was changed. Choose Repair to restore its files.' : actions[action].detail : 'Check the details below, then return to setup to try again.';
+      $('progress-details').hidden = true;
+      $('result-actions').hidden = false;
+      showError('progress-error', success ? '' : detail);
+      $('progress-title').focus();
     }
 
-    function toggleManual() {
-      const row = document.getElementById("manual-row");
-      row.classList.toggle("visible");
-      if (row.classList.contains("visible")) document.getElementById("manual-path").focus();
-    }
-
-    async function addManualPath() {
-      const input = document.getElementById("manual-path");
-      const p = input.value.trim();
-      if (!p) return;
-
-      const injected = await window.moggcord.isInjected(p);
-      const entry = {
-        name: "Manual",
-        path: p,
-        asarPath: `${p}\\app.asar`,
-        exePath: null,
-        version: "?"
-      };
-      discords.push(entry);
-      renderCard(entry, discords.length - 1, injected, "profile");
-      await selectDiscord(discords.length - 1);
-      input.value = "";
-      document.getElementById("manual-row").classList.remove("visible");
-    }
-
-    function pickBestDiscord(list) {
-      const order = ["Discord", "Discord PTB", "Discord Canary", "Discord Dev"];
-      for (const name of order) {
-        const match = list.find(d => d.name === name);
-        if (match) return match;
-      }
-      return list[0] || null;
-    }
-
-    async function maybeAutoSelect(preferPath) {
-      if (discords.length === 0) return;
-
-      if (preferPath) {
-        const idx = discords.findIndex(d => d.path === preferPath);
-        if (idx !== -1) {
-          await selectDiscord(idx);
-          return;
-        }
-      }
-
+    function pollOperation() {
+      if (!busy) return;
       try {
-        const saved = sessionStorage.getItem("moggcord-installer-target");
-        if (saved) {
-          const idx = discords.findIndex(d => d.path === saved);
-          if (idx !== -1) {
-            await selectDiscord(idx);
-            return;
-          }
-        }
-      } catch (e) {}
-
-      for (let i = 0; i < discords.length; i++) {
-        try {
-          if (await window.moggcord.isInjected(discords[i].path)) {
-            await selectDiscord(i);
-            return;
-          }
-        } catch (e) {}
+        const status = window.moggcord.getInjectStatus();
+        if (status.state === 'done') finishOperation(true, status.result);
+        else if (status.state === 'error') finishOperation(false, status.error || 'The operation failed. Please try again.');
+      } catch (error) {
+        finishOperation(false, 'The installer connection was interrupted. Check your Discord installation before trying again.');
       }
-
-      const target = pickBestDiscord(discords);
-      if (!target) return;
-      const idx = discords.findIndex(d => d.path === target.path);
-      if (idx !== -1) await selectDiscord(idx);
     }
 
-    async function loadDiscords(preferPath) {
-      setStatus("loading", "Detecting Discord installations...");
-
+    function runOperation() {
+      if (busy || $('run-operation').disabled || !selected) return;
+      busy = true;
+      $('close').disabled = true;
+      $('progress-icon').innerHTML = icon('refresh', true);
+      $('progress-kicker').textContent = action === 'uninstall' ? 'Returning to Discord' : 'Setting things up';
+      $('progress-title').textContent = actions[action].running;
+      $('progress-description').textContent = selected.name + ' will restart when everything is ready.';
+      $('progress-details').hidden = false;
+      $('result-actions').hidden = true;
+      showError('progress-error');
+      showPage('progress-page');
+      setLoading(true, 'Preparing…', 0);
+      $('progress-title').focus();
       try {
-        const found = await window.moggcord.detectDiscord();
-        discords = found || [];
-      } catch (e) {
-        discords = [];
-      }
-
-      const list = document.getElementById("discord-list");
-      list.innerHTML = "";
-
-      if (discords.length === 0) {
-        list.innerHTML = `
-          <div class="empty-state">
-            No Discord installations found automatically.<br>
-            Use manual path if Discord is installed in a custom folder.
-          </div>`;
-        setStatus("error", "No installations auto-detected. Use manual path.");
-        updateSelected(null);
-        return;
-      }
-
-      for (let i = 0; i < discords.length; i++) {
-        const d = discords[i];
-        const icon = ICONS[d.name] || ICONS.Manual;
-        let injected = false;
-        let hasThirdParty = false;
-        try { injected = await window.moggcord.isInjected(d.path); } catch (e) {}
-        if (!injected) {
-          try { hasThirdParty = await window.moggcord.hasThirdPartyMod(d.path); } catch (e) {}
-        }
-        renderCard(d, i, injected, icon.cls, hasThirdParty);
-      }
-
-      setStatus("idle", "Select an installation target.");
-      await maybeAutoSelect(preferPath);
-    }
-
-    function renderCard(d, i, injected, iconCls, hasThirdParty = false) {
-      const list = document.getElementById("discord-list");
-      const icon = ICONS[d.name] || ICONS.Manual;
-
-      let statusBadge;
-      if (injected) {
-        statusBadge = '<span class="badge badge-injected">Injected</span>';
-      } else if (hasThirdParty) {
-        statusBadge = '<span class="badge" style="color:var(--warn);border-color:rgba(245,205,117,0.28);background:rgba(245,205,117,0.10)">Mod detected</span>';
-      } else {
-        statusBadge = '<span class="badge badge-clean">Clean</span>';
-      }
-
-      const card = document.createElement("div");
-      card.className = "discord-card";
-      if (hasThirdParty && !injected) card.style.borderColor = "rgba(245,205,117,0.35)";
-      card.dataset.index = i;
-      card.dataset.thirdParty = hasThirdParty ? "1" : "0";
-      card.innerHTML = `
-        <div class="card-left">
-          <div class="card-icon ${escapeHtml(icon.cls || iconCls)}">${icon.html}</div>
-          <div class="card-info">
-            <h3>${escapeHtml(d.name)}</h3>
-            <div class="card-path">${escapeHtml(d.path)}</div>
-          </div>
-        </div>
-        <div class="card-right">
-          <span class="badge badge-version">v${escapeHtml(d.version)}</span>
-          ${statusBadge}
-          <div class="radio"></div>
-        </div>
-      `;
-      card.addEventListener("click", () => selectDiscord(Number(card.dataset.index)));
-      list.appendChild(card);
-    }
-
-    function updateSelected(target) {
-      document.getElementById("selected-name").textContent = target ? target.name : "None";
-      document.getElementById("selected-path").textContent = target ? target.path : "Choose a Discord installation first.";
-    }
-
-    async function selectDiscord(index) {
-      if (!discords[index]) return;
-
-      selected = discords[index];
-      try { sessionStorage.setItem("moggcord-installer-target", selected.path); } catch (e) {}
-      updateSelected(selected);
-
-      document.querySelectorAll(".discord-card").forEach(c => {
-        c.classList.toggle("selected", Number(c.dataset.index) === index);
-      });
-
-      document.getElementById("btn-inject").disabled = false;
-      document.getElementById("btn-uninject").disabled = false;
-
-      const card = document.querySelector(`.discord-card[data-index="${index}"]`);
-      const isThirdParty = card && card.dataset.thirdParty === "1";
-
-      let injected = false;
-      try { injected = await window.moggcord.isInjected(selected.path); } catch (e) {}
-
-      if (injected) {
-        document.getElementById("btn-inject").textContent = "Update Moggcord";
-        setStatus("success", `${selected.name} already has Moggcord. Click Update to reinstall.`);
-      } else if (isThirdParty) {
-        document.getElementById("btn-inject").textContent = "Replace with Moggcord";
-        setStatus("loading", `${selected.name}: Vencord or Equicord detected. Inject will replace it with Moggcord.`);
-      } else {
-        document.getElementById("btn-inject").textContent = "Inject Moggcord";
-        setStatus("idle", `Selected: ${selected.name}`);
+        const started = window.moggcord.startOperation(action, selected.path, $('replace-other').checked);
+        if (!started?.started) return finishOperation(false, started?.error || 'Could not start setup. Please try again.');
+        pollTimer = setInterval(pollOperation, 350);
+      } catch (error) {
+        finishOperation(false, 'Could not start setup. Please reopen the installer and try again.');
       }
     }
 
-    function toggleSettingsModal() {
-      document.getElementById("settings-overlay").classList.toggle("visible");
-    }
-
-    function closeSettingsModal() {
-      document.getElementById("settings-overlay").classList.remove("visible");
-    }
-
-    async function handleInject() {
-      if (!selected) return;
-
-      setLoading(true, "Starting installation...", 2);
-      setStatus("loading", `Injecting into ${selected.name}...`);
-
-      const started = window.moggcord.startInject(selected.path);
-      if (!started || !started.started) {
-        setLoading(false);
-        setStatus("error", `Error: ${started?.error || "Could not start inject"}`);
-        return;
-      }
-
-      await new Promise((resolve) => {
-        const interval = setInterval(() => {
-          const status = window.moggcord.getInjectStatus();
-          if (status.state === "done") {
-            clearInterval(interval);
-            resolve({ success: true });
-          } else if (status.state === "error") {
-            clearInterval(interval);
-            resolve({ success: false, error: status.error });
-          }
-        }, 500);
-      }).then(result => {
-        if (result.success) {
-          setLoading(true, "Finalizing installation...", 100);
-          setTimeout(async () => {
-            setLoading(false);
-            setStatus("success", `Moggcord injected into ${selected.name}. Restart Discord.`);
-            const injectedPath = selected.path;
-            await loadDiscords(injectedPath);
-          }, 700);
-        } else {
-          setLoading(false);
-          setStatus("error", `Error: ${result.error}`);
-        }
-      });
-    }
-
-    async function handleUninject() {
-      if (!selected) return;
-
-      setLoading(true, "Preparing uninjection...", 5);
-      setStatus("loading", `Uninjecting from ${selected.name}...`);
-
-      const result = await window.moggcord.uninject(selected.path);
-
-      if (result.success) {
-        setLoading(true, "Completed", 100);
-        setTimeout(async () => {
-          setLoading(false);
-          setStatus("success", `Moggcord uninjected from ${selected.name}.`);
-          await loadDiscords(selected?.path);
-        }, 600);
-      } else {
-        setLoading(false);
-        setStatus("error", `Error: ${result.error}`);
-      }
-    }
-
-    async function loadLatestVersion() {
-      try {
-        const res = await fetch("https://api.github.com/repos/caedesdev/moggcord/releases/latest", {
-          headers: { Accept: "application/vnd.github.v3+json" }
-        });
-        if (!res.ok) return;
-        const data = await res.json();
-        const tag = data.tag_name;
-        if (tag) {
-          const el = document.getElementById("titlebar-version");
-          el.textContent = tag;
-          el.classList.add("loaded");
-        }
-      } catch (e) {}
-    }
-
+    document.querySelectorAll('[data-action]').forEach(button => button.addEventListener('click', () => chooseAction(button.dataset.action)));
+    $('back').addEventListener('click', () => { if (!busy) showPage('home-page'); });
+    $('refresh').addEventListener('click', loadDiscords);
+    $('manual-form').addEventListener('submit', addManualTarget);
+    $('replace-other').addEventListener('change', updateSelection);
+    $('repair-shortcut').addEventListener('click', () => chooseAction('repair'));
+    $('run-operation').addEventListener('click', runOperation);
+    $('another-action').addEventListener('click', () => { showPage('home-page'); loadDiscords(); });
+    $('done').addEventListener('click', () => window.moggcord.closeApp());
+    $('close').addEventListener('click', () => { if (!busy) window.moggcord.closeApp(); });
+    $('minimize').addEventListener('click', () => window.moggcord.minimizeApp());
+    $('github').addEventListener('click', () => window.moggcord.openUrl('https://github.com/caedesdev/moggcord'));
+    document.addEventListener('keydown', event => { if (event.key === 'Escape' && !busy && !$('target-page').hidden) showPage('home-page'); });
+    try { $('installer-version').textContent = 'v' + window.moggcord.getInstallerVersion(); }
+    catch (error) { $('installer-version').textContent = 'Moggcord Installer'; }
     loadDiscords();
-    loadLatestVersion();
   </script>
 </body>
 </html>
