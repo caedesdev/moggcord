@@ -16,6 +16,9 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Reflection;
 using System.Security.Cryptography;
+using System.Text;
+using System.ComponentModel;
+using Microsoft.Win32.SafeHandles;
 
 namespace MoggcordInstaller
 {
@@ -266,6 +269,8 @@ namespace MoggcordInstaller
                     detectDiscord: async () => JSON.parse(await chrome.webview.hostObjects.backend.DetectDiscord()),
                     isInjected: async (path) => await chrome.webview.hostObjects.backend.IsInjected(path),
                     hasThirdPartyMod: async (path) => await chrome.webview.hostObjects.backend.HasThirdPartyMod(path),
+                    resolveDiscord: async (path) => JSON.parse(await chrome.webview.hostObjects.backend.ResolveDiscord(path)),
+                    browseDiscord: async () => await chrome.webview.hostObjects.backend.BrowseDiscord(),
                     inject: async (path) => JSON.parse(await chrome.webview.hostObjects.backend.Inject(path)),
                     startInject: (path) => JSON.parse(chrome.webview.hostObjects.sync.backend.StartInject(path)),
                     startOperation: (action, path, replaceOtherMod) => JSON.parse(chrome.webview.hostObjects.sync.backend.StartOperation(action, path, replaceOtherMod)),
@@ -477,36 +482,102 @@ namespace MoggcordInstaller
             });
         }
 
+        private static readonly string[] DiscordExecutables = { "Discord.exe", "DiscordPTB.exe", "DiscordCanary.exe", "DiscordDevelopment.exe" };
+
+        private sealed class DiscordInstallation
+        {
+            public string name { get; set; }
+            public string path { get; set; }
+            public string exePath { get; set; }
+            public string version { get; set; }
+            public string icon { get; set; }
+        }
+
+        private static string FindDiscordExecutable(string directory) =>
+            DiscordExecutables.Select(name => Path.Combine(directory, name)).FirstOrDefault(File.Exists);
+
+        private static DiscordInstallation ResolveInstallation(string input)
+        {
+            if (string.IsNullOrWhiteSpace(input)) throw new IOException("Enter a Discord folder or the path to Discord.exe.");
+            var selected = Path.TrimEndingDirectorySeparator(Path.GetFullPath(input.Trim().Trim('"')));
+            var selectedFile = File.Exists(selected);
+            if (selectedFile && !DiscordExecutables.Contains(Path.GetFileName(selected), StringComparer.OrdinalIgnoreCase))
+                throw new IOException("Choose a Discord executable or its installation folder.");
+            if (selectedFile)
+                selected = Path.Combine(Path.GetDirectoryName(selected), DiscordExecutables.First(name => string.Equals(name, Path.GetFileName(selected), StringComparison.OrdinalIgnoreCase)));
+            var directory = selectedFile ? Path.GetDirectoryName(selected) : selected;
+            if (!Directory.Exists(directory)) throw new IOException("That folder does not exist. Check the path and try again.");
+            if (string.Equals(Path.GetFileName(directory), "resources", StringComparison.OrdinalIgnoreCase))
+                directory = Path.GetDirectoryName(directory);
+            var candidates = new[] { directory }.Concat(Directory.GetDirectories(directory, "app-*")
+                .OrderByDescending(path => Version.TryParse(Path.GetFileName(path).Substring(4), out var version) ? version : new Version(0, 0)));
+            foreach (var appDirectory in candidates)
+            {
+                var executable = selectedFile ? selected : FindDiscordExecutable(appDirectory);
+                var resources = Path.Combine(appDirectory, "resources");
+                if (executable == null || !string.Equals(Path.GetDirectoryName(executable), appDirectory, StringComparison.OrdinalIgnoreCase)
+                    || !Directory.Exists(resources)
+                    || (!File.Exists(Path.Combine(resources, "app.asar")) && !File.Exists(Path.Combine(resources, "_app.asar"))))
+                    continue;
+                var executableName = Path.GetFileNameWithoutExtension(executable);
+                var name = executableName switch { "DiscordPTB" => "Discord PTB", "DiscordCanary" => "Discord Canary", "DiscordDevelopment" => "Discord Dev", _ => "Discord" };
+                var folder = Path.GetFileName(appDirectory);
+                string icon = null;
+                try
+                {
+                    using var associatedIcon = Icon.ExtractAssociatedIcon(executable);
+                    if (associatedIcon != null)
+                    {
+                        using var bitmap = associatedIcon.ToBitmap();
+                        using var bytes = new MemoryStream();
+                        bitmap.Save(bytes, System.Drawing.Imaging.ImageFormat.Png);
+                        icon = "data:image/png;base64," + Convert.ToBase64String(bytes.ToArray());
+                    }
+                }
+                catch (Exception error)
+                {
+                    Console.WriteLine("[Moggcord] Could not read the Discord icon: " + error.Message);
+                }
+                return new DiscordInstallation { name = name, path = resources, exePath = executable, version = folder.StartsWith("app-") ? folder.Substring(4) : "Custom", icon = icon };
+            }
+            throw new IOException("No Discord installation was found there. Choose the Discord folder, an app folder, its resources folder or Discord.exe.");
+        }
+
+        public async Task<string> ResolveDiscord(string input)
+        {
+            try
+            {
+                var target = await Task.Run(() => ResolveInstallation(input));
+                return JsonSerializer.Serialize(new { success = true, target });
+            }
+            catch (Exception error)
+            {
+                return JsonSerializer.Serialize(new { success = false, error = error.Message });
+            }
+        }
+
+        public string BrowseDiscord()
+        {
+            if (_form == null) return "";
+            return (string)_form.Invoke(new Func<string>(() =>
+            {
+                using var picker = new FolderBrowserDialog { Description = "Choose your Discord installation folder", UseDescriptionForTitle = true };
+                return picker.ShowDialog(_form) == DialogResult.OK ? picker.SelectedPath : "";
+            }));
+        }
+
         public async Task<string> DetectDiscord()
         {
-            return await Task.Run(() => {
+            return await Task.Run(() =>
+            {
                 var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
-                string[] channels = { "Discord", "DiscordPTB", "DiscordCanary", "DiscordDevelopment" };
-                string[] names = { "Discord", "Discord PTB", "Discord Canary", "Discord Dev" };
-
-                var list = new List<object>();
-                for (int i = 0; i < channels.Length; i++)
+                var list = new List<DiscordInstallation>();
+                foreach (var channel in new[] { "Discord", "DiscordPTB", "DiscordCanary", "DiscordDevelopment" })
                 {
-                    var c = channels[i];
-                    var dPath = Path.Combine(localAppData, c);
-                    if (!Directory.Exists(dPath)) continue;
-
-                    var latestApp = Directory.GetDirectories(dPath, "app-*")
-                        .Select(dir => new { dir, version = Path.GetFileName(dir).Replace("app-", "") })
-                        .OrderByDescending(x => x.version, StringComparer.Ordinal)
-                        .FirstOrDefault();
-
-                    if (latestApp == null) continue;
-
-                    var resources = Path.Combine(latestApp.dir, "resources");
-                    if (!Directory.Exists(resources)) continue;
-
-                    list.Add(new {
-                        name = names[i],
-                        path = resources,
-                        asarPath = Path.Combine(resources, "app.asar"),
-                        version = latestApp.version
-                    });
+                    var directory = Path.Combine(localAppData, channel);
+                    if (!Directory.Exists(directory)) continue;
+                    try { list.Add(ResolveInstallation(directory)); }
+                    catch (IOException error) { Console.WriteLine("[Moggcord] " + error.Message); }
                 }
                 return JsonSerializer.Serialize(list);
             });
@@ -580,7 +651,7 @@ namespace MoggcordInstaller
         {
             if (action != "install" && action != "repair" && action != "uninstall")
                 throw new InvalidOperationException("Choose Install, Repair or Uninstall.");
-            var path = Path.GetFullPath(resourcesPath);
+            var path = Path.TrimEndingDirectorySeparator(Path.GetFullPath(resourcesPath));
             if (!Directory.Exists(path) || !string.Equals(Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar)), "resources", StringComparison.OrdinalIgnoreCase)
                 || (!File.Exists(Path.Combine(path, "app.asar")) && !File.Exists(Path.Combine(path, "_app.asar"))))
                 throw new InvalidOperationException("Choose the resources folder of a Discord installation.");
@@ -591,7 +662,7 @@ namespace MoggcordInstaller
                 throw new InvalidOperationException("Moggcord is not installed here. Choose another Discord installation or use Install.");
             if (action == "install" && !replaceOtherMod && await HasThirdPartyMod(path))
                 throw new InvalidOperationException("Another mod is installed here. Confirm that you want to replace it first.");
-            if (!File.Exists(Path.Combine(Path.GetDirectoryName(path), GetDiscordProcessName(path) + ".exe")))
+            if (FindDiscordExecutable(Path.GetDirectoryName(path)) == null)
                 throw new InvalidOperationException("The Discord executable is missing next to this resources folder. Check the selected path.");
 
             if (action == "uninstall")
@@ -1184,54 +1255,76 @@ namespace MoggcordInstaller
 
         private static string GetDiscordProcessName(string resPath)
         {
-            if (resPath.Contains("DiscordPTB", StringComparison.OrdinalIgnoreCase)) return "DiscordPTB";
-            if (resPath.Contains("DiscordCanary", StringComparison.OrdinalIgnoreCase)) return "DiscordCanary";
-            if (resPath.Contains("DiscordDevelopment", StringComparison.OrdinalIgnoreCase)) return "DiscordDevelopment";
-            return "Discord";
+            var executable = FindDiscordExecutable(Path.GetDirectoryName(Path.GetFullPath(resPath)));
+            if (executable == null) throw new IOException("The selected Discord executable could not be found.");
+            return Path.GetFileNameWithoutExtension(executable);
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern SafeProcessHandle OpenProcess(uint access, bool inheritHandle, int processId);
+
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool QueryFullProcessImageName(SafeProcessHandle process, uint flags, StringBuilder filename, ref int size);
+
+        private static string GetProcessExecutablePath(int processId)
+        {
+            const uint QueryLimitedInformation = 0x1000;
+            using var handle = OpenProcess(QueryLimitedInformation, false, processId);
+            if (handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error());
+            var path = new StringBuilder(32768);
+            var size = path.Capacity;
+            if (!QueryFullProcessImageName(handle, 0, path, ref size))
+                throw new Win32Exception(Marshal.GetLastWin32Error());
+            return path.ToString();
         }
 
         private void KillDiscord(string resPath)
         {
             SetStatus("loading", "Closing Discord...");
             var procName = GetDiscordProcessName(resPath);
-            var channelRoot = Directory.GetParent(Path.GetDirectoryName(Path.GetFullPath(resPath))).FullName + Path.DirectorySeparatorChar;
+            var appDirectory = Path.GetDirectoryName(Path.GetFullPath(resPath));
+            var folder = Path.GetFileName(appDirectory);
+            var channelRoot = (folder.StartsWith("app-") && Version.TryParse(folder.Substring(4), out _)
+                ? Directory.GetParent(appDirectory).FullName : appDirectory) + Path.DirectorySeparatorChar;
 
-            foreach (var name in new[] { procName, "DiscordSystemHelper" })
+            foreach (var process in Process.GetProcessesByName(procName))
             {
-                foreach (var process in Process.GetProcessesByName(name))
+                try
                 {
-                    try
-                    {
-                        var executable = process.MainModule?.FileName;
-                        if (executable == null || !Path.GetFullPath(executable).StartsWith(channelRoot, StringComparison.OrdinalIgnoreCase)) continue;
-                        process.Kill();
-                        process.WaitForExit(5000);
-                    }
-                    catch (InvalidOperationException) when (process.HasExited)
-                    {
-                        continue;
-                    }
-                    catch (Exception error)
-                    {
-                        throw new IOException("Could not close the selected Discord installation. Close it manually and try again.", error);
-                    }
-                    finally
-                    {
-                        process.Dispose();
-                    }
+                    if (process.HasExited) continue;
+                    var executable = GetProcessExecutablePath(process.Id);
+                    if (!Path.GetFullPath(executable).StartsWith(channelRoot, StringComparison.OrdinalIgnoreCase)) continue;
+                    process.Kill();
+                    if (!process.WaitForExit(5000))
+                        throw new IOException("Discord did not exit within five seconds.");
+                }
+                catch (Win32Exception) when (process.HasExited)
+                {
+                    continue;
+                }
+                catch (InvalidOperationException) when (process.HasExited)
+                {
+                    continue;
+                }
+                catch (Exception error)
+                {
+                    throw new IOException($"Could not close {procName} (process {process.Id}). {error.Message} Close that Discord installation and try again.", error);
+                }
+                finally
+                {
+                    process.Dispose();
                 }
             }
-
-            System.Threading.Thread.Sleep(2500);
         }
 
         private void StartDiscord(string resPath)
         {
             try {
-                var exe = Path.Combine(Path.GetDirectoryName(resPath), "..", "Update.exe");
+                var appDirectory = Path.GetDirectoryName(resPath);
+                var exe = Path.GetFullPath(Path.Combine(appDirectory, "..", "Update.exe"));
                 var procName = GetDiscordProcessName(resPath) + ".exe";
-                               
                 if (File.Exists(exe)) Process.Start(exe, $"--processStart {procName}");
+                else Process.Start(new ProcessStartInfo(Path.Combine(appDirectory, procName)) { UseShellExecute = true });
             } catch { }
         }
 
