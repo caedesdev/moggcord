@@ -5,12 +5,15 @@
 
 import { createHash, randomUUID } from "node:crypto";
 import { mkdir, readFile, readdir, rename, rm, rmdir, writeFile } from "node:fs/promises";
-import { existsSync, realpathSync } from "node:fs";
-import { dirname, extname, join, resolve } from "node:path";
+import { existsSync, lstatSync, realpathSync } from "node:fs";
+import { dirname, join, posix, resolve } from "node:path";
+import { isBuiltin } from "node:module";
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import ts from "typescript";
 import { buildFiles, verifyBuild } from "../lib/build-info.mjs";
+import pluginPackage from "../../web/plugin-package.js";
+import { pluginBundleKind } from "../lib/plugin-bundle.mjs";
 
 export const bridgePort = 6469;
 export const bridgeName = "moggcord-community";
@@ -48,14 +51,22 @@ export function parseLink(value, origin) {
 }
 
 export function validateManifest(data, address, expectedHash) {
-    const extension = data?.kind === "theme" ? /\.(css|style)$/i : /\.(js|ts|tsx|css)$/i;
-    if (data?.protocol !== 1 || !identifier.test(data?.id ?? "") || !["plugin", "theme"].includes(data.kind)
+    const bundled = data?.protocol === 2;
+    const extension = data?.kind === "theme" ? /\.(css|style)$/i : /\.(js|jsx|ts|tsx|css)$/i;
+    if (![1, 2].includes(data?.protocol) || !identifier.test(data?.id ?? "") || !["plugin", "theme"].includes(data.kind)
         || new URL(address).pathname !== `/api/install/${data.id}` || typeof data.name !== "string" || data.name.length > 100
-        || typeof data.file_name !== "string" || !/^[A-Za-z0-9_. -]+$/.test(data.file_name) || !extension.test(data.file_name)
+        || typeof data.file_name !== "string" || (!bundled && !/^[A-Za-z0-9_. -]+$/.test(data.file_name)) || !extension.test(data.file_name)
         || typeof data.source_code !== "string" || !data.source_code.trim() || data.source_code.includes("\0")
         || Buffer.byteLength(data.source_code) > sourceLimit)
-        throw new Error("This upload is not a supported single-file plugin or stylesheet, or exceeds 10 MB.");
-    if (!/^[a-f0-9]{64}$/.test(expectedHash) || hash(data.source_code) !== expectedHash || data.sha256 !== expectedHash)
+        throw new Error("This upload is not a supported plugin or stylesheet, or exceeds 10 MB.");
+    let content = data.source_code;
+    if (bundled) {
+        if (data.kind !== "plugin") throw new Error("Themes must contain one stylesheet.");
+        const checked = pluginPackage.validate(data.files, data.file_name);
+        if (checked.source_code !== data.source_code) throw new Error("The plugin entry point does not match its files.");
+        content = pluginPackage.canonical(checked.files, data.file_name);
+    } else if (data.files !== undefined) throw new Error("Update the manifest format before sending a plugin folder.");
+    if (!/^[a-f0-9]{64}$/.test(expectedHash) || hash(content) !== expectedHash || data.sha256 !== expectedHash)
         throw new Error("The uploaded file changed. Download it again from the website.");
     return data;
 }
@@ -98,20 +109,50 @@ export async function findClient(channel, localAppData = process.env.LOCALAPPDAT
     throw new Error(`No Moggcord installation was found in ${channelNames[channel]}. Install Moggcord in this channel first.`);
 }
 
-async function pluginName(source, ownDirectory, sourceRoot) {
-    const ast = ts.createSourceFile("index.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
-    if (ast.parseDiagnostics.length) throw new Error("This plugin has a syntax error.");
+function inspectSources(files) {
+    const paths = new Set(files.map(file => file.path));
+    const localImport = (file, specifier) => {
+        const path = posix.normalize(posix.join(posix.dirname(file.path), specifier.split(/[?#]/)[0]));
+        if (path === ".." || path.startsWith("../") || posix.isAbsolute(path)
+            || ![path, ...[".ts", ".tsx", ".js", ".jsx", ".css", ".json", "/index.ts", "/index.tsx", "/index.js", "/index.jsx"].map(extension => path + extension)].some(value => paths.has(posix.normalize(value))))
+            throw new Error(`Missing or unsafe import ${specifier} in ${file.path}. Include the complete plugin folder.`);
+    };
+    for (const file of files) {
+        if (/\.css$/i.test(file.path)) {
+            for (const match of file.content.matchAll(/(?:@import\s+(?:url\()?|url\()\s*["']?([^"')\s;]+)/gi)) {
+                const specifier = match[1];
+                if (/^(?:https?:|data:|#)/i.test(specifier)) continue;
+                if (specifier.startsWith("/") || specifier.includes("\\")) throw new Error("Styles must reference files inside this plugin folder.");
+                localImport(file, specifier);
+            }
+            continue;
+        }
+        if (!pluginPackage.codeExtension.test(file.path)) continue;
+        const ast = ts.createSourceFile(file.path, file.content, ts.ScriptTarget.Latest, true,
+            /x$/i.test(file.path) ? ts.ScriptKind.TSX : ts.ScriptKind.TS);
+        if (ast.parseDiagnostics.length) throw new Error(`This plugin has a syntax error in ${file.path}.`);
+        const inspect = node => {
+            const module = ts.isImportDeclaration(node) || ts.isExportDeclaration(node) ? node.moduleSpecifier
+                : ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword || node.expression.getText(ast) === "require") ? node.arguments[0] : null;
+            if (module) {
+                if (!ts.isStringLiteral(module)) throw new Error("Plugin imports must use a fixed module name.");
+                if (module.text.startsWith(".")) localImport(file, module.text);
+                else if (!/^@(api|utils|components|webpack|shared)(?:\/|$)/.test(module.text)
+                    && module.text !== "@vencord/discord-types"
+                    && !((/^native(?:\/|\.[jt]sx?$)/i.test(file.path)) && isBuiltin(module.text)))
+                    throw new Error(`Unsupported import ${module.text} in ${file.path}. Use Moggcord modules or files from this plugin folder.`);
+            }
+            ts.forEachChild(node, inspect);
+        };
+        inspect(ast);
+    }
+}
+
+async function pluginName(source, ownDirectory, sourceRoot, files) {
+    inspectSources(files);
     const name = source.match(/definePlugin\(\{\s*(["'])?name\1:\s*(["'`])(.+?)\2/)?.[3];
     if (!name || !/^[A-Za-z0-9][A-Za-z0-9 ._-]{0,79}$/.test(name) || ["constructor", "prototype", "__proto__"].includes(name))
         throw new Error("Plugins must export definePlugin({ name: \"PluginName\", ... }) with the name first.");
-    const inspect = node => {
-        const module = ts.isImportDeclaration(node) || ts.isExportDeclaration(node) ? node.moduleSpecifier
-            : ts.isCallExpression(node) && (node.expression.kind === ts.SyntaxKind.ImportKeyword || node.expression.getText(ast) === "require") ? node.arguments[0] : null;
-        if (module && (!ts.isStringLiteral(module) || !/^@(api|utils|components|webpack|shared)\//.test(module.text)))
-            throw new Error("This plugin needs extra files or unsupported imports. Upload a self-contained Moggcord plugin.");
-        ts.forEachChild(node, inspect);
-    };
-    inspect(ast);
     const visit = async directory => {
         if (!existsSync(directory) || resolve(directory) === ownDirectory) return;
         for (const item of await readdir(directory, { withFileTypes: true })) {
@@ -123,7 +164,17 @@ async function pluginName(source, ownDirectory, sourceRoot) {
             }
         }
     };
-    for (const directory of ["plugins", "moggcordplugins", "userplugins"]) await visit(join(sourceRoot, "src", directory));
+    for (const directory of ["plugins/_api", "plugins/_core", "plugins", "moggcordplugins/_api", "moggcordplugins", "userplugins"]) {
+        const base = join(sourceRoot, "src", directory);
+        if (!existsSync(base)) continue;
+        for (const file of await readdir(base, { withFileTypes: true })) {
+            if (!pluginBundleKind(directory, file.name)) continue;
+            const path = join(base, file.name);
+            if (file.isDirectory()) await visit(path);
+            else if (/\.[jt]sx?$/.test(file.name) && (await readFile(path, "utf8")).match(/definePlugin\(\{\s*(["'])?name\1:\s*(["'`])(.+?)\2/)?.[3] === name)
+                throw new Error("Another installed plugin already uses this name.");
+        }
+    }
     return name;
 }
 
@@ -186,20 +237,46 @@ export async function repairClient(config, dependencies = {}) {
 }
 
 export async function installEntry(entry, config, dependencies = {}, progress = () => {}) {
+    validateManifest(entry, `https://moggcord.invalid/api/install/${entry?.id}`, entry?.sha256);
     const sourceRoot = resolve(config.sourceRoot);
     const client = await (dependencies.findClient ?? findClient)(config.channel);
-    const stylesheet = /\.(css|style)$/i.test(entry.file_name);
+    const stylesheet = entry.protocol === 1 && /\.(css|style)$/i.test(entry.file_name);
     const pluginDirectory = join(sourceRoot, "src", "userplugins", `community-${entry.id}`);
-    const pluginFile = join(pluginDirectory, extname(entry.file_name).toLowerCase() === ".tsx" ? "index.tsx" : "index.ts");
+    const pluginFiles = entry.files ?? [{ path: /\.[jt]sx$/i.test(entry.file_name) ? "index.tsx" : "index.ts", content: entry.source_code }];
+    const createdDirectories = new Set();
     const backups = new Map(); let stopped = false;
     const stop = dependencies.stop ?? stopClient;
     const start = dependencies.start ?? startClient;
     try {
         let name;
         if (!stylesheet) {
-            name = await pluginName(entry.source_code, resolve(pluginDirectory), sourceRoot);
-            await snapshot(pluginFile, backups);
-            await atomicWrite(pluginFile, entry.source_code);
+            const files = [...pluginFiles];
+            if (!files.some(file => ["index.ts", "index.tsx"].includes(file.path)))
+                files.push({ path: "index.ts", content: `export { default } from ${JSON.stringify("./" + entry.file_name)};\nexport * from ${JSON.stringify("./" + entry.file_name)};\n` });
+            name = await pluginName(entry.source_code, resolve(pluginDirectory), sourceRoot, files);
+            const requested = new Set(files.map(file => resolve(pluginDirectory, file.path)));
+            const checkPath = path => {
+                for (let current = path; ; current = dirname(current)) {
+                    if (existsSync(current) && lstatSync(current).isSymbolicLink()) throw new Error("Plugin folders cannot contain links to other folders.");
+                    if (current === sourceRoot) break;
+                    if (dirname(current) === current) throw new Error("Invalid plugin destination.");
+                }
+            };
+            checkPath(pluginDirectory);
+            const oldFiles = async directory => {
+                if (!existsSync(directory)) return;
+                for (const item of await readdir(directory, { withFileTypes: true })) {
+                    const path = join(directory, item.name); checkPath(path);
+                    if (item.isDirectory()) await oldFiles(path);
+                    else if (!requested.has(path)) { await snapshot(path, backups); await rm(path); }
+                }
+            };
+            await oldFiles(pluginDirectory);
+            for (const file of files) {
+                const path = resolve(pluginDirectory, file.path); checkPath(path);
+                for (let current = dirname(path); current !== dirname(pluginDirectory) && !existsSync(current); current = dirname(current)) createdDirectories.add(current);
+                await snapshot(path, backups); await atomicWrite(path, file.content);
+            }
             progress("building", "Building your plugin…");
             await (dependencies.build ?? defaultBuild)(sourceRoot);
             const version = JSON.parse(await readFile(join(sourceRoot, "package.json"), "utf8")).version;
@@ -228,13 +305,16 @@ export async function installEntry(entry, config, dependencies = {}, progress = 
         await start(client);
         return { name: entry.name, channel: config.channel, sha256: entry.sha256 };
     } catch (error) {
-        for (const [file, bytes] of [...backups].reverse()) {
+        for (const [file, bytes] of [...backups].reverse())
             if (bytes === null) await rm(file, { force: true });
-            else await atomicWrite(file, bytes);
-        }
+        for (const directory of [...createdDirectories].sort((a, b) => b.length - a.length))
+            if (existsSync(directory) && lstatSync(directory).isDirectory() && !(await readdir(directory)).length) await rmdir(directory);
+        for (const [file, bytes] of [...backups].reverse())
+            if (bytes !== null) await atomicWrite(file, bytes);
         if (stopped) await start(client).catch(() => {});
         throw error;
     } finally {
-        if (!stylesheet && existsSync(pluginDirectory) && !(await readdir(pluginDirectory)).length) await rmdir(pluginDirectory);
+        for (const directory of [...createdDirectories].sort((a, b) => b.length - a.length))
+            if (existsSync(directory) && lstatSync(directory).isDirectory() && !(await readdir(directory)).length) await rmdir(directory);
     }
 }

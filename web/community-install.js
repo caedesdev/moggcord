@@ -16,6 +16,7 @@
     progress('Connecting to Moggcord…');
     try { status = await request('/v1/status',{},30000); } catch { return false; }
     if (status.name !== 'moggcord-community' || status.protocol !== 1) return false;
+    if (data.files && !status.capabilities?.includes('plugin-folders')) throw new Error('Update your Moggcord connector to install plugin folders automatically.');
     const manifest = new URL(data.install_manifest,location.origin);
     if (manifest.origin !== location.origin || !/^\/api\/install\/[a-f0-9-]{36}$/.test(manifest.pathname)) throw new Error('Invalid installation link.');
     progress('Connecting to Moggcord…');
@@ -31,8 +32,9 @@
     throw new Error('Installation is taking longer than expected. Check Moggcord before trying again.');
   }
   function download(data) {
-    const url = URL.createObjectURL(new Blob([data.source_code],{type:'text/plain;charset=utf-8'}));
-    const link = document.createElement('a'); link.href=url;link.download=data.file_name;document.body.append(link);link.click();link.remove();
+    const blob=data.files ? new Blob([window.MoggcordPackage.zip(data.files,data.file_name)],{type:'application/zip'}) : new Blob([data.source_code],{type:'text/plain;charset=utf-8'});
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a'); link.href=url;link.download=data.files ? `${(data.name || 'plugin').replace(/[^A-Za-z0-9_-]/g,'_')}.zip` : data.file_name;document.body.append(link);link.click();link.remove();
     setTimeout(()=>URL.revokeObjectURL(url),1000);
   }
   function connectionHelp(element,data,installed = false) {

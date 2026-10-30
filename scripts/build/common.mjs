@@ -101,7 +101,7 @@ const PluginDefinitionNameMatcher = /definePlugin\(\{\s*(["'])?name\1:\s*(["'`])
  */
 export async function resolvePluginName(base, dirent) {
     const fullPath = join(base, dirent.name);
-    const content = dirent.isFile()
+    let content = dirent.isFile()
         ? await readFile(fullPath, "utf-8")
         : await (async () => {
             for (const file of ["index.ts", "index.tsx"]) {
@@ -114,6 +114,12 @@ export async function resolvePluginName(base, dirent) {
             throw new Error(`Invalid plugin ${fullPath}: could not resolve entry point`);
         })();
 
+    const wrapper = /^export \{ default \} from "(\.\/[A-Za-z0-9_@()+ ./-]+\.[jt]sx?)";\n(?:export \* from "\1";\n)?$/.exec(content);
+    if (wrapper && dirent.isDirectory()) {
+        const target = resolve(fullPath, wrapper[1]);
+        if (relative(fullPath, target).startsWith("..")) throw new Error(`Invalid plugin entry point ${fullPath}`);
+        content = await readFile(target, "utf-8");
+    }
     return PluginDefinitionNameMatcher.exec(content)?.[3]
         ?? (() => {
             throw new Error(`Invalid plugin ${fullPath}: must contain definePlugin call with simple string name property as first property`);

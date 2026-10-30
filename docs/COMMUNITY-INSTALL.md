@@ -35,7 +35,13 @@ Click **Download** on a plugin or theme, including uploads on another member's p
 
 If the connector is unavailable, the website saves the ordinary source file and shows setup help. **Open in Moggcord** can launch the registered connector. **Copy install link** produces a shareable `moggcord://install?manifest=…&sha256=…` link. Recipients need Moggcord and the one-time setup connected to the same website. Links refer to the exact file fingerprint, so changed or deleted uploads do not silently install a replacement.
 
-Themes accept one `.css` or `.style` file. A `.style` file is installed under a `.theme.css` filename so Moggcord can load it. CSS uploads in User Plugins also install as stylesheets. Code plugins accept one `.js`, `.ts`, or `.tsx` file exporting a normal Moggcord `definePlugin({ name: "PluginName", … })` definition. The name must come first and must not clash with another installed plugin. Imports may use Moggcord's `@api/`, `@utils/`, `@components/`, `@webpack/`, and `@shared/` modules. Multi-file plugins and separate native modules need a source installation instead. Both upload limits are 10 MB.
+Themes accept one `.css` or `.style` file. A `.style` file is installed under a `.theme.css` filename so Moggcord can load it. CSS-only uploads in User Plugins also install as stylesheets.
+
+In **User Plugins**, choose **Choose files** for individual files or **Choose folder** for a complete plugin, including nested `components`, `utils` and stylesheet files. Folder selection preserves relative paths and removes only the outer folder name. `.git` and `node_modules` are omitted. The total limit is **10 MB and 256 files**. Supported files are JavaScript, TypeScript, CSS, JSON, SVG and text documentation; executables are rejected. Themes still accept exactly one stylesheet.
+
+The main file must export a normal Moggcord `definePlugin({ name: "PluginName", … })` definition with the name first. `index.ts` or `index.tsx` is selected automatically. If neither exists, select the main JavaScript or TypeScript file. Its original filename and relative imports are preserved. The name must not clash with another currently bundled or community plugin; optional plugins excluded from the standard bundle can be added through the website.
+
+Imports can use files inside the uploaded folder and Moggcord's `@api`, `@utils`, `@components`, `@webpack` and `@shared` modules, plus its Discord types. Native helpers can use Node built-ins. Missing files, imports escaping the folder and unsupported external packages are rejected before Discord is closed. Without an updated connector, a complete plugin is downloaded as a ZIP preserving its folder structure; single-file downloads keep their original format.
 
 Code plugins are built before the current client is stopped or replaced. A build failure leaves the existing installation running. Replaced files and settings are restored if installation or restarting fails. The connector does not execute uploaded code while downloading or compiling it; installed code runs in your Discord client when enabled, like other Moggcord plugins.
 
@@ -43,7 +49,7 @@ Community plugins are kept in `src/userplugins/community-<upload-id>` in this ch
 
 ## Website integration
 
-The reference browser integration is in [`web/community-install.js`](../web/community-install.js). Load it before your download handlers and allow `http://127.0.0.1:6469` in the website's `connect-src` policy. The existing download response should add `install_manifest: "/api/install/<uuid>"` and a SHA-256 fingerprint of the exact UTF-8 source. Call `moggcordInstaller.install(response, onProgress)`; a `false` result means use your existing file-download fallback. A rejected promise is an installation failure, not a successful install.
+The reference browser integration is in [`web/community-install.js`](../web/community-install.js). Load [`web/plugin-package.js`](../web/plugin-package.js) first, then the integration before your download handlers. Allow `http://127.0.0.1:6469` in the website's `connect-src` policy. The download response adds `install_manifest: "/api/install/<uuid>"` and a SHA-256 fingerprint. Call `moggcordInstaller.install(response, onProgress)`; a `false` result means use `moggcordInstaller.download(response)` as the fallback. A rejected promise is an installation failure, not a successful install. The connector advertises the `plugin-folders` capability so an older connector cannot report a folder installation as successful.
 
 The public `GET /api/install/<uuid>` endpoint returns:
 
@@ -59,7 +65,9 @@ The public `GET /api/install/<uuid>` endpoint returns:
 }
 ```
 
-Fetching this manifest must not increment the site's download counter. The connector accepts only the configured HTTPS origin (HTTP loopback is allowed for development), that exact endpoint shape, and a matching UUID and file fingerprint. Redirects to other servers are refused. Its local HTTP endpoint binds only to `127.0.0.1:6469`, checks Host and Origin, and requires a JSON request with a custom header. It exposes no arbitrary command, process ID, filesystem path, or download URL parameter.
+Folder manifests use `protocol: 2` and add `files: [{"path":"index.tsx","content":"..."}, {"path":"components/card.tsx","content":"..."}]`. `file_name` identifies the main file and `source_code` matches its contents. Hash the UTF-8 result of `MoggcordPackage.canonical(files, file_name)` instead of the main source alone. The shared validator sorts paths, rejects duplicate Windows filenames, traversal, reserved names and executables, and enforces the total size. Changing any nested file invalidates the install link. Single-file protocol 1 remains supported.
+
+Fetching a manifest must not increment the site's download counter. The connector accepts only the configured HTTPS origin (HTTP loopback is allowed for development), that exact endpoint shape, and a matching UUID and package fingerprint. Redirects to other servers are refused. Its local HTTP endpoint binds only to `127.0.0.1:6469`, checks Host and Origin, and requires a JSON request with a custom header. It exposes no arbitrary command, process ID, filesystem path, or download URL parameter.
 
 ## Repeated update banner
 
