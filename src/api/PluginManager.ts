@@ -26,6 +26,7 @@ import { addMessageDecoration, removeMessageDecoration } from "@api/MessageDecor
 import { addMessageClickListener, addMessagePreEditListener, addMessagePreSendListener, removeMessageClickListener, removeMessagePreEditListener, removeMessagePreSendListener } from "@api/MessageEvents";
 import { addMessagePopoverButton, removeMessagePopoverButton } from "@api/MessagePopover";
 import { addNicknameIcon, removeNicknameIcon } from "@api/NicknameIcons";
+import { addProfileSection, removeProfileSection } from "@api/ProfileSections";
 import { Settings, SettingsStore } from "@api/Settings";
 import { disableStyle, enableStyle } from "@api/Styles";
 import { Logger } from "@utils/Logger";
@@ -213,7 +214,7 @@ export const startPlugin = traceFunction("startPlugin", function startPlugin(p: 
         onBeforeMessageEdit, onBeforeMessageSend, onMessageClick,
         renderChatBarButton, chatBarButton, renderMemberListDecorator, renderMessageAccessory, renderMessageDecoration, renderMessagePopoverButton, messagePopoverButton,
         // Custom
-        renderNicknameIcon, headerBarButton, audioProcessor, userAreaButton
+        renderNicknameIcon, renderProfileSection, headerBarButton, audioProcessor, userAreaButton
     } = p;
 
     if (p.start) {
@@ -275,6 +276,7 @@ export const startPlugin = traceFunction("startPlugin", function startPlugin(p: 
 
     // Custom
     if (renderNicknameIcon) addNicknameIcon(name, renderNicknameIcon);
+    if (renderProfileSection) addProfileSection(name, renderProfileSection.render, renderProfileSection.priority);
     if (headerBarButton) {
         if (headerBarButton.location === "channeltoolbar") {
             addChannelToolbarButton(name, headerBarButton.render, headerBarButton.priority);
@@ -294,7 +296,7 @@ export const stopPlugin = traceFunction("stopPlugin", function stopPlugin(p: Plu
         onBeforeMessageEdit, onBeforeMessageSend, onMessageClick,
         renderChatBarButton, chatBarButton, renderMemberListDecorator, renderMessageAccessory, renderMessageDecoration, renderMessagePopoverButton, messagePopoverButton,
         // Custom
-        renderNicknameIcon, headerBarButton, audioProcessor, userAreaButton
+        renderNicknameIcon, renderProfileSection, headerBarButton, audioProcessor, userAreaButton
     } = p;
 
     if (p.stop) {
@@ -350,6 +352,7 @@ export const stopPlugin = traceFunction("stopPlugin", function stopPlugin(p: Plu
 
     // Custom
     if (renderNicknameIcon) removeNicknameIcon(name);
+    if (renderProfileSection) removeProfileSection(name);
     if (headerBarButton) {
         if (headerBarButton.location === "channeltoolbar") {
             removeChannelToolbarButton(name);
@@ -379,11 +382,12 @@ export const initPluginManager = onlyOnce(function init() {
     const plain = SettingsStore.plain as Record<string, unknown>;
 
     /** Disable optional plugins; keep only required + enabledByDefault. */
-    function applyDefaultOffPlugins() {
+    function applyDefaultOffPlugins(directory?: string) {
         let changed = 0;
         for (const key of Object.keys(Plugins)) {
             if (!key) continue;
             if (PluginMeta[key]?.userPlugin) continue;
+            if (directory && !PluginMeta[key]?.folderName.startsWith(directory)) continue;
             const p = Plugins[key];
             if (!p?.name || p.required || p.enabledByDefault) continue;
 
@@ -429,6 +433,13 @@ export const initPluginManager = onlyOnce(function init() {
         SettingsStore.markAsChanged();
     }
 
+    const VENCORD_CATALOG_FLAG = "__moggcord_vencord_catalog_defaults_v1__";
+    if (!plain[VENCORD_CATALOG_FLAG]) {
+        applyDefaultOffPlugins("src/plugins/");
+        plain[VENCORD_CATALOG_FLAG] = true;
+        SettingsStore.markAsChanged();
+    }
+
     if (!settings.MessageLoggerEnhanced?.enabled && settings.MessageLogger?.enabled) {
         settings.MessageLogger.enabled = false;
         SettingsStore.markAsChanged();
@@ -469,6 +480,7 @@ export const initPluginManager = onlyOnce(function init() {
 
         // Custom
         if (p.renderNicknameIcon) neededApiPlugins.add("NicknameIconsAPI");
+        if (p.renderProfileSection) neededApiPlugins.add("ProfileSectionsAPI");
         if (p.headerBarButton) neededApiPlugins.add("HeaderBarAPI");
         if (p.audioProcessor) neededApiPlugins.add("AudioPlayerAPI");
         if (p.userAreaButton) neededApiPlugins.add("UserAreaAPI");

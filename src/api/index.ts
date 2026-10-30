@@ -32,6 +32,7 @@ import * as $MessageUpdater from "./MessageUpdater";
 import * as $NicknameIcons from "./NicknameIcons";
 import * as $Notices from "./Notices";
 import * as $Notifications from "./Notifications";
+import * as $ProfileSections from "./ProfileSections";
 import * as $UserArea from "./UserArea";
 export * as PluginManager from "./PluginManager";
 import * as $ServerList from "./ServerList";
@@ -165,6 +166,8 @@ export const AudioPlayer = $AudioPlayer;
  * An API allowing you to add buttons to the user area panel.
  */
 export const UserArea = $UserArea;
+
+export const ProfileSections = $ProfileSections;
 
 /**
  * Just used to identify if user is on Equicord as Vencord doesn't have this.

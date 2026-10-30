@@ -27,6 +27,7 @@ import type { MessageDecorationFactory } from "@api/MessageDecorations";
 import type { MessageClickListener, MessageEditListener, MessageSendListener } from "@api/MessageEvents";
 import type { MessagePopoverButtonData, MessagePopoverButtonFactory } from "@api/MessagePopover";
 import type { NicknameIconFactory } from "@api/NicknameIcons";
+import type { ProfileSectionData } from "@api/ProfileSections";
 import type { UserAreaButtonData } from "@api/UserArea";
 import type { Command, FluxEvents } from "@vencord/discord-types";
 import type { ReactNode } from "react";
@@ -214,6 +215,7 @@ export interface PluginDef {
 
     // Custom
     renderNicknameIcon?: NicknameIconFactory;
+    renderProfileSection?: ProfileSectionData;
     headerBarButton?: HeaderBarButtonData;
     audioProcessor?: AudioProcessor;
     userAreaButton?: UserAreaButtonData;

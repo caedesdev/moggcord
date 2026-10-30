@@ -220,7 +220,7 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
 
     const hasUserPlugins = useMemo(() => !IS_STANDALONE && Object.values(PluginMeta).some(m => m.userPlugin), []);
 
-    const [searchValue, setSearchValue] = useState({ value: "", status: SearchStatus.MOGGCORD });
+    const [searchValue, setSearchValue] = useState({ value: "", status: SearchStatus.ALL });
     const [searchInput, setSearchInput] = useState("");
 
     const debouncedSetSearch = useMemo(
@@ -477,7 +477,7 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
                                 { label: "Show Enabled", value: SearchStatus.ENABLED },
                                 { label: "Show Disabled", value: SearchStatus.DISABLED },
                                 { label: "Show Moggcord Plugins", value: SearchStatus.MOGGCORD },
-                                { label: "Show Others Plugins", value: SearchStatus.OTHERS },
+                                { label: "Show Vencord Plugins", value: SearchStatus.VENCORD },
                                 { label: "Show New", value: SearchStatus.NEW },
                                 hasUserPlugins && { label: "Show UserPlugins", value: SearchStatus.USER_PLUGINS },
                             ].filter(isTruthy)}
@@ -519,7 +519,7 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
                     {othersPlugins.length > 0 && (
                         <>
                             <Divider className={Margins.top20} />
-                            <HeadingTertiary className={classes(Margins.top20, Margins.bottom8)}>Others Plugins</HeadingTertiary>
+                            <HeadingTertiary className={classes(Margins.top20, Margins.bottom8)}>Vencord &amp; Community Plugins</HeadingTertiary>
                             <div className={cl("grid")}>
                                 {othersVisible}
                             </div>
