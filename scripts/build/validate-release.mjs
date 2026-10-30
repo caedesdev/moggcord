@@ -31,6 +31,14 @@ if (!fs.existsSync(versionJsonPath)) {
         console.error(`[release] version.json (${meta.version}) does not match package.json (${pkgVersion}).`);
         errors++;
     }
+    const catalog = meta.pluginCatalog;
+    const counts = catalog?.plugins;
+    if (catalog?.version !== pkgVersion || catalog?.platform !== "discordDesktop" ||
+        !counts || ![counts.total, counts.vencord, counts.moggcord].every(value => Number.isSafeInteger(value) && value >= 0) ||
+        counts.total !== counts.vencord + counts.moggcord) {
+        console.error("[release] Missing or invalid generated plugin catalog statistics.");
+        errors++;
+    }
 }
 
 const distZip = path.join(root, "release", "installer", "moggcord-dist.zip");

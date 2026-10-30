@@ -19,6 +19,8 @@ On the first start with version 1.18.35, stale activations for the restored Venc
 
 Community plugins installed from the website remain supported. The source build still accepts TypeScript, JavaScript, CSS and native helpers from src/userplugins. See [Community installation](COMMUNITY-INSTALL.md).
 
+The release workflow generates `version.json.pluginCatalog` with the number of selectable desktop plugins in each collection. It uses the same registry generator as the renderer, including platform restrictions, name overrides and hidden internal entries, and excludes personal user plugins. Run `node scripts/build/catalog-stats.mjs` to generate `dist/plugin-catalog.json`. The website uses these counts instead of a manually maintained plugin total.
+
 ## Fake Deafen and Fake Mute
 
 The ghost button appears beside Discord's microphone and headphones controls. Click it to turn Fake Deafen on or off. Right-click to choose Fake Mute, Fake Deafen or both. The default is Fake Deafen alone. The button and menu stay in sync when switching modes.
