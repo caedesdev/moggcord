@@ -22,7 +22,7 @@ class Element {
     click() { if (!this.disabled) this.events.get("click")?.({ preventDefault() {} }); }
 }
 
-async function mount({ targets = [{ name: "Discord", path: "fresh" }, { name: "Discord Canary", path: "installed" }, { name: "Discord PTB", path: "other" }], detectError = false } = {}) {
+async function mount({ targets = [{ name: "Discord", path: "fresh" }, { name: "Discord Canary", path: "installed" }, { name: "Discord PTB", path: "other" }], detectError = false, resolve, browse = "" } = {}) {
     const elements = new Map([...html.matchAll(/id="([^"]+)"/g)].map(([, id]) => [id, new Element()]));
     elements.get("target-page").hidden = elements.get("progress-page").hidden = true;
     const buttons = ["install", "repair", "uninstall"].map(action => { const el = new Element(); el.dataset.action = action; return el; });
@@ -33,7 +33,9 @@ async function mount({ targets = [{ name: "Discord", path: "fresh" }, { name: "D
         detectDiscord: async () => { if (detectError) throw new Error("Offline"); return targets; },
         isInjected: async path => path === "installed",
         hasThirdPartyMod: async path => path === "other",
-        getInstallerVersion: () => "1.18.27",
+        resolveDiscord: resolve ?? (async path => ({ success: true, target: { name: "Custom Discord", path: path.replace(/[\\/]+$/, "") } })),
+        browseDiscord: async () => browse,
+        getInstallerVersion: () => "1.18.28",
         startOperation: (...args) => { calls.push(args); return { started: true }; },
         getInjectStatus: () => status,
         closeApp: () => calls.push(["close"]), minimizeApp() {}, openUrl() {}
@@ -118,4 +120,45 @@ test("missing installations and failed detection keep actions disabled and allow
         assert.equal(s.get("selection-path").textContent, "C:\\Custom\\resources");
         assert.equal(s.calls.length, 0);
     }
+});
+
+test("custom paths use the native resolver, keep the original channel icon and deduplicate canonical targets", async () => {
+    const requests = [];
+    const image = "data:image/png;base64,aWNvbg==";
+    const s = await mount({ targets: [], resolve: async path => { requests.push(path); return { success: true, target: { name: "Discord Canary", path: "C:/Custom/app-1.0.100/resources", icon: image } }; } });
+    s.buttons[0].click();
+    s.get("manual-path").value = "C:/Custom/DiscordCanary.exe";
+    await s.get("manual-form").events.get("submit")({ preventDefault() {} });
+    assert.deepEqual(requests, ["C:/Custom/DiscordCanary.exe"]);
+    assert.equal(s.get("discord-list").children.length, 1);
+    assert.equal(s.get("discord-list").children[0].children[0].children[0].src, image);
+    assert.equal(s.get("selection-path").textContent, "C:/Custom/app-1.0.100/resources");
+    await s.get("manual-form").events.get("submit")({ preventDefault() {} });
+    assert.equal(s.get("discord-list").children.length, 1);
+    assert.equal(s.calls.length, 0);
+});
+
+test("invalid custom folders show the native error without adding an install target", async () => {
+    const s = await mount({ targets: [], resolve: async () => ({ success: false, error: "No Discord installation was found there." }) });
+    s.buttons[0].click(); s.get("manual-path").value = "C:/Wrong";
+    await s.get("manual-form").events.get("submit")({ preventDefault() {} });
+    assert.equal(s.get("target-error").hidden, false);
+    assert.equal(s.get("target-error").textContent, "No Discord installation was found there.");
+    assert.equal(s.get("run-operation").disabled, true);
+    assert.equal(s.get("manual-add").disabled, false);
+    assert.equal(s.calls.length, 0);
+});
+
+test("the folder picker resolves the selected folder and cancellation preserves the current selection", async () => {
+    const s = await mount({ targets: [], browse: "C:/Portable/resources" });
+    s.buttons[0].click();
+    await s.get("manual-browse").events.get("click")();
+    assert.equal(s.get("selection-path").textContent, "C:/Portable/resources");
+    assert.equal(s.get("run-operation").disabled, false);
+    assert.equal(s.calls.length, 0);
+    const canceled = await mount();
+    canceled.buttons[0].click();
+    await canceled.get("manual-browse").events.get("click")();
+    assert.equal(canceled.get("selection-path").textContent, "fresh");
+    assert.equal(canceled.calls.length, 0);
 });

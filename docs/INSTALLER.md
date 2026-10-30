@@ -8,7 +8,9 @@ Download the current [Windows installer](https://github.com/caedesdev/moggcord/r
 
 After choosing an action, select Discord, PTB, Canary or Development and press the action button to continue. The selected Discord closes and restarts during the operation. A detected third-party mod needs explicit replacement confirmation before Install can proceed.
 
-For a custom location, enter its full resources path, such as `C:\Users\you\AppData\Local\DiscordCanary\app-1.0.x\resources`.
+For a custom location, use **Custom path** below the installation list. Press **Browse…** to select a folder, or paste a Discord installation folder, an app folder, its resources folder or the full path to Discord.exe, then press **Use path**. A versioned installation root resolves to the newest valid numeric app version. The selected target shows the original icon extracted from its Discord executable.
+
+Install, Repair and Uninstall close only matching Discord processes inside the selected installation directory. Protected DiscordSystemHelper processes are not shutdown targets. If Windows still refuses to close the selected Discord, the error includes the process ID and Windows error details.
 
 The version in the footer is the actual installer version, including when offline. The Inter variable font is embedded for consistent typography; its [SIL Open Font License](../installer-src/fonts/Inter.LICENSE.txt) is included with the font and embedded in the executable.
 
@@ -23,4 +25,4 @@ pnpm buildStandalone
 .\build-installer.ps1
 ```
 
-The native guard tests use temporary resources fixtures and an isolated file cache. They check existing-install skips, third-party mod protection and invalid targets without performing a real installation. The packaging script also checks the embedded desktop version and file fingerprints using the installer's read-only `--verify-bundle` command.
+The native tests use temporary resources fixtures and an isolated file cache. They check existing-install skips, third-party mod protection, path resolution and invalid targets. Shutdown checks start temporary test processes, close only the selected fixture and verify that an unrelated installation and helper remain running. They do not install into or stop a real Discord installation. The packaging script also checks the embedded desktop version and file fingerprints using the installer's read-only `--verify-bundle` command.

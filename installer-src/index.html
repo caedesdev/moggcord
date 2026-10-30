@@ -6,7 +6,7 @@
   <title>Moggcord Installer</title>
   <style>
     @font-face { font-family: Inter; src: url('data:font/woff2;base64,{{FONT_BASE64}}') format('woff2'); font-style: normal; font-weight: 100 900; font-display: swap; }
-    :root { color-scheme: dark; font-family: Inter, 'Segoe UI Variable', 'Segoe UI', sans-serif; --bg: #090a10; --text: #f1f2fb; --muted: #9298af; --line: #b6baff16; }
+    :root { color-scheme: dark; font-family: Inter, 'Segoe UI Variable', 'Segoe UI', sans-serif; --bg: #090a10; --text: #f1f2fb; --muted: #9298af; --line: #b6baff16; --control-radius: 14px; --control-ease: cubic-bezier(.23, 1, .32, 1); }
     * { box-sizing: border-box; }
     [hidden] { display: none !important; }
     body { margin: 0; background: var(--bg); color: var(--text); font-size: 13px; -webkit-font-smoothing: antialiased; }
@@ -14,6 +14,32 @@
     button { cursor: pointer; color: inherit; -webkit-app-region: no-drag; }
     button:disabled { cursor: default; opacity: .42; }
     button:focus-visible, a:focus-visible, input:focus-visible { outline: 2px solid #aab6ff; outline-offset: 4px; }
+    .button { position: relative; display: inline-flex; flex-shrink: 0; align-items: center; justify-content: center; gap: 8px; min-height: 40px; padding: 0 18px; border: 1px solid transparent; border-radius: var(--control-radius); background: transparent; color: var(--text); box-shadow: none; font-size: 13px; font-weight: 550; line-height: 1.3; white-space: nowrap; user-select: none; touch-action: manipulation; transition: background-color 180ms var(--control-ease), border-color 180ms var(--control-ease), color 180ms var(--control-ease), opacity 180ms var(--control-ease), transform 180ms var(--control-ease); }
+    .button:focus-visible { outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px #aab6ffb3; }
+    .button:disabled { pointer-events: none; opacity: .45; }
+    .button:active:enabled { transform: scale(.97); transition-duration: 100ms; }
+    .button svg { width: 16px; height: 16px; pointer-events: none; }
+    .button[data-size="sm"] { min-height: 34px; gap: 6px; padding: 0 12px; font-size: 11px; }
+    .button[data-variant="primary"] { border-color: #b2b1f0; background: #bcbaff; color: #1c1c37; }
+    .button[data-variant="primary"]:hover:enabled { border-color: #a6a3e3; background: #aaa6ef; }
+    .button[data-variant="primary"]:active:enabled { border-color: #9b96da; background: #9992df; }
+    .button[data-variant="secondary"] { border-color: #aab3e02b; background: #1b1e2a; color: #e1e5f9; }
+    .button[data-variant="secondary"]:hover:enabled { border-color: #b7c1ee45; background: #242837; }
+    .button[data-variant="secondary"]:active:enabled { background: #2d3243; }
+    .button[data-variant="outline"] { border-color: #b1b8e640; color: #dce2fb; }
+    .button[data-variant="outline"]:hover:enabled { border-color: #b1b8e666; background: #b3bff00a; }
+    .button[data-variant="outline"]:active:enabled { border-color: #b1b8e680; background: #b3bff014; }
+    .button[data-variant="ghost"] { color: #a5afce; }
+    .button[data-variant="ghost"]:hover:enabled { border-color: #b3bff01a; background: #b3bff00a; color: #edf0ff; }
+    .button[data-variant="ghost"]:active:enabled { border-color: #b3bff024; background: #b3bff014; }
+    .button[data-variant="destructive"] { border-color: #ce718c; background: #b44365; color: #fff6f8; }
+    .button[data-variant="destructive"]:hover:enabled { border-color: #bd607a; background: #9f3b59; }
+    .button[data-variant="destructive"]:active:enabled { background: #8c334e; }
+    .button[data-variant="link"] { min-height: 28px; padding: 0; color: #b8c2e5; font-size: 11px; }
+    .button[data-variant="link"]:hover:enabled { color: #e0e6ff; text-decoration: underline; text-underline-offset: 4px; }
+    .button[data-variant="link"]:active:enabled { transform: none; }
+    .button-icon { display: inline-flex; flex-shrink: 0; transform-origin: center; transition: transform 160ms var(--control-ease); }
+    .button[aria-busy="true"]::before { content: ''; width: 14px; height: 14px; flex-shrink: 0; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; opacity: .8; animation: spin 700ms linear infinite; }
     svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.65; stroke-linecap: round; stroke-linejoin: round; flex-shrink: 0; }
     .shell { display: flex; flex-direction: column; height: 100vh; overflow: hidden; border: 1px solid #aab4ff2b; background: radial-gradient(ellipse at 82% 12%, #5f43bb14, transparent 48%), var(--bg); }
     .titlebar { display: flex; align-items: center; justify-content: space-between; min-height: 55px; padding-left: 25px; border-bottom: 1px solid var(--line); user-select: none; }
@@ -39,24 +65,16 @@
     .orbit::after { transform: rotate(46deg) scaleY(.55); border-bottom-color: #a18cea8c; }
     .orbit-core { display: grid; place-items: center; width: 78px; height: 78px; border: 1px solid #bec6ff44; border-radius: 24px; background: linear-gradient(140deg, #8085e92b, #47375f14); box-shadow: 0 0 65px #8676fc28, inset 0 1px #ffffff10; transform: rotate(-9deg); }
     .orbit-core img { width: 45px; height: 45px; border-radius: 13px; transform: rotate(9deg); }
-    .actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 13px; margin-top: 39px; }
-    .action-card { position: relative; display: flex; flex-direction: column; align-items: flex-start; min-height: 204px; padding: 23px; text-align: left; border: 1px solid #b1b8f324; border-radius: 17px; background: linear-gradient(140deg, #171924bb, #101119aa); transition: transform 180ms, border-color 180ms, box-shadow 180ms; }
-    .action-card.primary { border-color: #a1a9ff6b; background: radial-gradient(ellipse at 5% 0%, #8074ff25, transparent 85%), linear-gradient(145deg, #202139, #141622); box-shadow: 0 0 35px #7467df0d, inset 0 1px #e2deff0a; }
-    .action-card:hover { transform: translateY(-3px); border-color: #aab6ff8c; box-shadow: 0 12px 35px #5950be15; }
-    .action-icon { display: grid; place-items: center; width: 40px; height: 40px; margin-bottom: 23px; border: 1px solid #b4b8ff26; border-radius: 12px; color: #bbc5ff; background: #8b8de710; }
-    .action-card.primary .action-icon { background: #a49af321; }
-    .action-card .arrow { position: absolute; right: 22px; top: 28px; width: 17px; height: 17px; color: #898fae; transition: transform 180ms, color 180ms; }
-    .action-card:hover .arrow { transform: translateX(3px); color: #d2d8ff; }
-    .action-card strong { font-size: 16px; font-weight: 620; letter-spacing: -.5px; }
-    .action-card p { margin: 10px 0 0; color: #969bb3; font-size: 11.5px; line-height: 1.75; }
+    .actions { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; margin-top: 58px; }
+    .action-option { min-width: 0; padding: 22px 0 0; border-top: 1px solid #aeb8f024; }
+    .action-option .button { width: 100%; min-height: 44px; padding: 0 16px; }
+    .action-option p { margin: 15px 8px 0; color: #969bb3; font-size: 11.5px; line-height: 1.8; }
     .home-note { display: flex; align-items: center; gap: 9px; margin-top: 25px; color: #858ba5; font-size: 11px; line-height: 1.6; }
     .home-note svg { width: 15px; height: 15px; color: #9da9d5; }
     footer { display: flex; align-items: center; justify-content: space-between; min-height: 49px; padding: 0 26px; border-top: 1px solid var(--line); font-size: 10px; color: #777d97; }
     .build-info { display: flex; align-items: center; gap: 10px; }
     .build-info i { width: 3px; height: 3px; background: #5c627c; border-radius: 50%; }
-    .text-button { padding: 5px 0; border: 0; background: transparent; color: #a3adce; font-size: 11px; }
-    .text-button:hover { color: #d2dcff; }
-    .back { display: flex; align-items: center; gap: 7px; margin: -13px 0 26px; }
+    .back { margin: -13px 0 26px -12px; }
     .back svg { width: 15px; height: 15px; }
     .step-row { display: flex; align-items: center; gap: 10px; margin: 0 0 24px; color: #7d849e; font-size: 10px; }
     .step-row .current { color: #c0c9f5; }
@@ -69,7 +87,6 @@
     .side-note { margin: 22px 0 0; color: #7b829d; font-size: 10.5px; line-height: 1.8; }
     .targets-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 13px; }
     .targets-header h2 { margin: 0; font-size: 12px; font-weight: 550; }
-    .targets-header .text-button { display: flex; align-items: center; gap: 5px; font-size: 10px; }
     .targets-header svg { width: 13px; height: 13px; }
     #discord-list { display: grid; gap: 9px; }
     .discord-card { display: flex; align-items: center; gap: 13px; width: 100%; padding: 16px; border: 1px solid #a8b1ed20; border-radius: 12px; background: #14162099; text-align: left; transition: border-color 160ms, background 160ms; }
@@ -77,6 +94,7 @@
     .discord-card[aria-pressed="true"] { border-color: #a2b3ff96; background: linear-gradient(115deg, #7f8fe81b, #735bc309); box-shadow: 0 0 22px #7b7de609; }
     .channel-icon { display: grid; place-items: center; width: 34px; height: 34px; flex-shrink: 0; border: 1px solid #b5bcff1a; border-radius: 10px; color: #b4bded; background: #878df20b; }
     .channel-icon.canary { color: #e9cd87; background: #f1c65c08; border-color: #f1c65c20; }
+    .channel-icon img { width: 30px; height: 30px; object-fit: contain; }
     .target-info { display: grid; gap: 6px; min-width: 0; flex: 1; }
     .target-name { font-weight: 590; font-size: 12px; letter-spacing: -.1px; }
     .target-state { color: #8b92ad; font-size: 10px; }
@@ -84,20 +102,17 @@
     .target-state.other { color: #d9be8d; }
     .radio { width: 15px; height: 15px; flex-shrink: 0; border: 1px solid #5a617f; border-radius: 50%; }
     [aria-pressed="true"] .radio { border: 4px solid #b7c2ff; background: #393755; }
-    .manual { margin-top: 17px; color: #929bb9; font-size: 10.5px; }
-    .manual summary { cursor: pointer; width: fit-content; }
-    .manual p { color: #7e87a4; line-height: 1.7; }
+    .manual { margin-top: 18px; padding: 15px; border: 1px solid #a8b1ed20; border-radius: 12px; background: #11131d80; color: #929bb9; font-size: 10.5px; }
+    .manual label { color: #c0c9e5; font-size: 11px; font-weight: 550; }
+    .manual p { margin: 8px 0 0; color: #8c96b3; font-size: 10px; line-height: 1.7; }
     .manual-row { display: flex; gap: 8px; margin-top: 10px; }
-    input[type="text"] { min-width: 0; flex: 1; padding: 10px; border: 1px solid #a7b8e32d; border-radius: 8px; color: #dee4fc; background: #0c0e16; font-size: 11px; }
-    .small-button { padding: 0 13px; border: 1px solid #a7b8e345; border-radius: 8px; color: #bdcaff; background: #8596e115; }
+    input[type="text"] { min-width: 0; flex: 1; padding: 10px; border: 1px solid #a7b8e32d; border-radius: var(--control-radius); color: #dee4fc; background: #0c0e16; font-size: 11px; }
     .selection { margin-top: 22px; padding-top: 19px; border-top: 1px solid var(--line); }
     #selection-note { margin: 0; color: #9ca7c6; font-size: 11px; line-height: 1.8; overflow-wrap: anywhere; }
     #selection-path { margin: 8px 0 0; font-size: 9px; line-height: 1.7; color: #626e91; overflow-wrap: anywhere; }
     .replace-confirm { display: flex; align-items: flex-start; gap: 9px; margin-top: 13px; color: #dbc29d; font-size: 10.5px; line-height: 1.8; }
     .replace-confirm input { margin: 4px 0 0; accent-color: #a5afff; }
-    .primary-button { display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 45px; padding: 0 21px; border: 1px solid #d4d6ff69; border-radius: 10px; background: linear-gradient(110deg, #b7c5ff, #b8a8f6); color: #171a35; box-shadow: 0 3px 20px #9385f21c; font-size: 12px; font-weight: 680; transition: filter 160ms, box-shadow 160ms; }
-    .primary-button:hover:enabled { filter: brightness(1.08); box-shadow: 0 4px 25px #9385f238; }
-    .primary-button svg { width: 17px; height: 17px; }
+    .primary-button { min-height: 44px; padding: 0 20px; }
     #run-operation { width: 100%; margin-top: 18px; }
     #repair-shortcut { margin-top: 9px; }
     .empty { padding: 24px 15px; border: 1px dashed #a8b4e42e; border-radius: 12px; color: #8e99bb; font-size: 11px; line-height: 1.8; }
@@ -117,9 +132,17 @@
     .spinning { animation: spin 2.5s linear infinite; }
     @keyframes spin { to { transform: rotate(360deg); } }
     @keyframes arrive { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: none; } }
-    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
-    @media (max-width: 760px) { .page { padding: 32px 28px; } .target-layout { grid-template-columns: 180px minmax(0, 1fr); gap: 25px; } .action-card { padding: 18px; } .action-card strong { font-size: 14px; } .orbit { flex-basis: 135px; margin-right: 0; } h1 { font-size: 36px; } }
-    @media (max-width: 570px) { .hero .orbit { display: none; } .actions, .target-layout { grid-template-columns: 1fr; } .action-card { min-height: 155px; } .action-icon { margin-bottom: 15px; } .target-layout .side-note, .operation-symbol { display: none; } .progress-page { padding-top: 35px; } .brand span { display: none; } }
+    @keyframes button-trash-shake { 0%, 100% { transform: translate(0, 0) rotate(0); } 24% { transform: translate(-.5px, -1px) rotate(-4deg); } 48% { transform: translate(.5px, -1px) rotate(3deg); } 72% { transform: translate(-.25px, -.5px) rotate(-1.5deg); } }
+    @keyframes button-download-tick { 0%, 100% { transform: translateY(0); } 46% { transform: translateY(2.5px); } }
+    @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+      .button:hover:enabled .motion-arrow { transform: translateX(2px); }
+      .button:active:enabled .motion-arrow { transform: translateX(1px); }
+      .button:hover:enabled .motion-trash { animation: button-trash-shake 340ms var(--control-ease) both; }
+      .button:hover:enabled .motion-download { animation: button-download-tick 300ms var(--control-ease) both; }
+    }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } .button:active:enabled, .button-icon { transform: none !important; } }
+    @media (max-width: 760px) { .page { padding: 32px 28px; } .target-layout { grid-template-columns: 180px minmax(0, 1fr); gap: 25px; } .action-option .button { padding: 0 10px; gap: 6px; font-size: 12px; } .orbit { flex-basis: 135px; margin-right: 0; } h1 { font-size: 36px; } }
+    @media (max-width: 570px) { .hero .orbit { display: none; } .actions, .target-layout { grid-template-columns: 1fr; } .actions { margin-top: 28px; } .target-layout .side-note, .operation-symbol { display: none; } .progress-page { padding-top: 35px; } .brand span { display: none; } }
   </style>
 </head>
 <body>
@@ -154,23 +177,29 @@
           <div class="orbit" aria-hidden="true"><div class="orbit-core"><img src="{{ICON_BASE64}}" alt="" /></div></div>
         </div>
         <div class="actions" aria-label="Setup actions">
-          <button class="action-card primary" data-action="install">
-            <span class="action-icon"><svg><use href="#icon-install" /></svg></span><svg class="arrow"><use href="#icon-arrow" /></svg>
-            <strong>Install Moggcord</strong><p>Add Moggcord to a fresh Discord installation.</p>
-          </button>
-          <button class="action-card" data-action="repair">
-            <span class="action-icon"><svg><use href="#icon-repair" /></svg></span><svg class="arrow"><use href="#icon-arrow" /></svg>
-            <strong>Repair Moggcord</strong><p>Restore Moggcord files and keep your settings.</p>
-          </button>
-          <button class="action-card" data-action="uninstall">
-            <span class="action-icon"><svg><use href="#icon-uninstall" /></svg></span><svg class="arrow"><use href="#icon-arrow" /></svg>
-            <strong>Uninstall Moggcord</strong><p>Go back to Discord. Your settings stay saved.</p>
-          </button>
+          <div class="action-option">
+            <button class="button" data-variant="primary" data-action="install" type="button">
+              <span class="button-icon motion-download"><svg><use href="#icon-install" /></svg></span><span>Install Moggcord</span><span class="button-icon motion-arrow"><svg><use href="#icon-arrow" /></svg></span>
+            </button>
+            <p>Add Moggcord to a fresh Discord installation.</p>
+          </div>
+          <div class="action-option">
+            <button class="button" data-variant="secondary" data-action="repair" type="button">
+              <span class="button-icon"><svg><use href="#icon-repair" /></svg></span><span>Repair Moggcord</span><span class="button-icon motion-arrow"><svg><use href="#icon-arrow" /></svg></span>
+            </button>
+            <p>Restore Moggcord files and keep your settings.</p>
+          </div>
+          <div class="action-option">
+            <button class="button" data-variant="outline" data-action="uninstall" type="button">
+              <span class="button-icon motion-trash"><svg><use href="#icon-uninstall" /></svg></span><span>Uninstall Moggcord</span>
+            </button>
+            <p>Go back to Discord. Your settings stay saved.</p>
+          </div>
         </div>
         <p class="home-note"><svg><use href="#icon-shield" /></svg><span id="detection-summary" role="status">Checking your Discord installations…</span></p>
       </section>
       <section id="target-page" class="page" aria-labelledby="target-title" hidden>
-        <button id="back" class="text-button back"><svg><use href="#icon-back" /></svg>All actions</button>
+        <button id="back" class="button back" data-variant="ghost" data-size="sm" type="button"><svg><use href="#icon-back" /></svg>All actions</button>
         <div class="target-layout">
           <div>
             <div class="step-row"><span>01 Action</span><span class="step-line"></span><span class="current">02 Discord</span></div>
@@ -180,18 +209,19 @@
             <p class="side-note">Only the selected Discord installation will be changed.</p>
           </div>
           <div>
-            <div class="targets-header"><h2>Choose your Discord</h2><button id="refresh" class="text-button"><svg><use href="#icon-refresh" /></svg>Refresh</button></div>
+            <div class="targets-header"><h2>Choose your Discord</h2><button id="refresh" class="button" data-variant="ghost" data-size="sm" type="button"><svg><use href="#icon-refresh" /></svg>Refresh</button></div>
             <div id="discord-list" role="group" aria-label="Discord installations"></div>
-            <details class="manual" id="manual-details"><summary>Use a custom installation</summary>
-              <p id="manual-help">Enter the full path to your Discord resources folder.</p>
-              <form id="manual-form" class="manual-row"><input id="manual-path" type="text" aria-label="Discord resources folder" aria-describedby="manual-help" placeholder="C:\…\Discord\app-…\resources" required /><button class="small-button" type="submit">Add</button></form>
-            </details>
+            <div class="manual">
+              <label for="manual-path">Custom path</label>
+              <p id="manual-help">Choose a Discord folder, app folder, resources folder or Discord.exe.</p>
+              <form id="manual-form" class="manual-row"><input id="manual-path" type="text" aria-describedby="manual-help" placeholder="C:\…\Discord" required /><button id="manual-browse" class="button" data-variant="outline" data-size="sm" type="button">Browse…</button><button id="manual-add" class="button" data-variant="secondary" data-size="sm" type="submit">Use path</button></form>
+            </div>
             <div class="selection">
               <p id="selection-note" role="status">Select a Discord installation to continue.</p>
               <p id="selection-path"></p>
               <label id="replace-confirm" class="replace-confirm" hidden><input type="checkbox" id="replace-other" /><span>Replace the other mod on this Discord installation with Moggcord.</span></label>
-              <button id="run-operation" class="primary-button" disabled><span id="run-label">Install Moggcord</span><svg><use href="#icon-arrow" /></svg></button>
-              <button id="repair-shortcut" class="text-button" hidden>Use Repair Moggcord instead →</button>
+              <button id="run-operation" class="button primary-button" data-variant="primary" type="button" disabled><span id="run-label">Install Moggcord</span><span id="run-icon" class="button-icon motion-arrow"><svg><use href="#icon-arrow" /></svg></span></button>
+              <button id="repair-shortcut" class="button" data-variant="link" type="button" hidden>Use Repair Moggcord instead →</button>
             </div>
             <p id="target-error" class="notice" role="alert" hidden></p>
           </div>
@@ -208,10 +238,10 @@
           <p id="progress-mb"></p>
         </div>
         <p id="progress-error" class="notice" role="alert" hidden></p>
-        <div id="result-actions" hidden><button id="another-action" class="text-button">Back to setup</button><button id="done" class="primary-button">Done<svg><use href="#icon-check" /></svg></button></div>
+        <div id="result-actions" hidden><button id="another-action" class="button" data-variant="ghost" type="button">Back to setup</button><button id="done" class="button primary-button" data-variant="primary" type="button">Done<svg><use href="#icon-check" /></svg></button></div>
       </section>
     </main>
-    <footer><div class="build-info"><span id="installer-version">Moggcord Installer</span><i></i><span>Windows x64</span></div><button id="github" class="text-button">GitHub ↗</button></footer>
+    <footer><div class="build-info"><span id="installer-version">Moggcord Installer</span><i></i><span>Windows x64</span></div><button id="github" class="button" data-variant="link" type="button">GitHub ↗</button></footer>
   </div>
   <script>
     const $ = id => document.getElementById(id);
@@ -225,6 +255,7 @@
     let action = 'install';
     let busy = false;
     let detecting = false;
+    let resolving = false;
     let detectionFailed = false;
     let pollTimer = null;
 
@@ -243,13 +274,16 @@
     }
 
     function chooseAction(next) {
-      if (busy || !actions[next]) return;
+      if (busy || resolving || !actions[next]) return;
       action = next;
       selected = null;
       $('target-title').textContent = actions[action].title;
       $('target-description').textContent = actions[action].description;
       $('operation-symbol').innerHTML = icon(action);
       $('run-label').textContent = actions[action].label;
+      $('run-operation').setAttribute('data-variant', action === 'uninstall' ? 'destructive' : 'primary');
+      $('run-icon').innerHTML = icon(action === 'uninstall' ? 'uninstall' : 'arrow');
+      $('run-icon').className = 'button-icon ' + (action === 'uninstall' ? 'motion-trash' : 'motion-arrow');
       $('replace-other').checked = false;
       showError('target-error');
       showPage('target-page');
@@ -275,7 +309,12 @@
         card.setAttribute('aria-pressed', String(target === selected));
         const channel = document.createElement('span');
         channel.className = 'channel-icon' + (target.name.includes('Canary') ? ' canary' : '');
-        channel.innerHTML = icon('discord');
+        if (typeof target.icon === 'string' && target.icon.startsWith('data:image/png;base64,')) {
+          const image = document.createElement('img');
+          image.src = target.icon;
+          image.alt = '';
+          channel.append(image);
+        } else channel.innerHTML = icon('discord');
         channel.setAttribute('aria-hidden', 'true');
         const info = document.createElement('span');
         info.className = 'target-info';
@@ -297,7 +336,7 @@
     }
 
     function selectTarget(target) {
-      if (busy || detecting) return;
+      if (busy || detecting || resolving) return;
       selected = target;
       $('replace-other').checked = false;
       renderTargets();
@@ -308,7 +347,7 @@
       const needsReplace = action === 'install' && selected?.otherMod;
       const alreadyInstalled = action === 'install' && installed;
       const missing = action !== 'install' && selected && !installed;
-      $('run-operation').disabled = busy || detecting || !selected || alreadyInstalled || missing || (needsReplace && !$('replace-other').checked);
+      $('run-operation').disabled = busy || detecting || resolving || !selected || alreadyInstalled || missing || (needsReplace && !$('replace-other').checked);
       $('replace-confirm').hidden = !needsReplace;
       $('repair-shortcut').hidden = !alreadyInstalled;
       $('selection-path').textContent = selected?.path || '';
@@ -326,7 +365,7 @@
     }
 
     async function loadDiscords() {
-      if (detecting || busy) return;
+      if (detecting || busy || resolving) return;
       detecting = true;
       detectionFailed = false;
       selected = null;
@@ -349,23 +388,55 @@
     }
 
     async function addManualTarget(event) {
-      event.preventDefault();
-      if (busy || detecting) return;
-      const path = $('manual-path').value.trim().replace(/[\\/]+$/, '');
+      event?.preventDefault();
+      if (busy || detecting || resolving) return;
+      const path = $('manual-path').value.trim();
       if (!path) return;
       showError('target-error');
+      setResolving(true);
+      let added = null;
       try {
-        let target = discords.find(d => d.path.toLowerCase() === path.toLowerCase());
+        const result = await window.moggcord.resolveDiscord(path);
+        if (!result?.success || !result.target) throw new Error(result?.error || 'No Discord installation was found at that path.');
+        let target = discords.find(d => d.path.toLowerCase() === result.target.path.toLowerCase());
         if (!target) {
-          target = await inspectTarget({ name: 'Custom Discord', path });
+          target = await inspectTarget(result.target);
           discords.push(target);
         }
-        selectTarget(target);
-        $('manual-details').open = false;
-        $('manual-path').value = '';
+        added = target;
+        $('manual-path').value = target.path;
       } catch (error) {
-        showError('target-error', 'Could not read that folder. Check the path and try again.');
+        showError('target-error', error.message || 'Could not read that folder. Check the path and try again.');
+      } finally {
+        setResolving(false);
       }
+      if (added) selectTarget(added);
+    }
+
+    function setResolving(value, activeButton = 'manual-add') {
+      resolving = value;
+      $('manual-browse').disabled = value;
+      $('manual-add').disabled = value;
+      $('manual-path').disabled = value;
+      $('refresh').disabled = value || detecting;
+      for (const id of ['manual-browse', 'manual-add']) $(id).setAttribute('aria-busy', String(value && id === activeButton));
+      updateSelection();
+    }
+
+    async function browseManualTarget() {
+      if (busy || detecting || resolving) return;
+      showError('target-error');
+      setResolving(true, 'manual-browse');
+      let path = '';
+      try {
+        path = await window.moggcord.browseDiscord();
+        if (path) $('manual-path').value = path;
+      } catch (error) {
+        showError('target-error', 'Could not open the folder picker. You can enter the path above.');
+      } finally {
+        setResolving(false);
+      }
+      if (path) await addManualTarget();
     }
 
     function setStatus(type, text) {
@@ -435,6 +506,7 @@
     $('back').addEventListener('click', () => { if (!busy) showPage('home-page'); });
     $('refresh').addEventListener('click', loadDiscords);
     $('manual-form').addEventListener('submit', addManualTarget);
+    $('manual-browse').addEventListener('click', browseManualTarget);
     $('replace-other').addEventListener('change', updateSelection);
     $('repair-shortcut').addEventListener('click', () => chooseAction('repair'));
     $('run-operation').addEventListener('click', runOperation);
