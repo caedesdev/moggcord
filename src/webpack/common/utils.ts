@@ -110,7 +110,13 @@ export interface ToastOptions {
 }
 
 interface ToastsExports {
-    showToast: (data: ToastData) => void;
+    showToast: (data: {
+        text: string;
+        variant: "default" | "success" | "critical";
+        position: "top" | "bottom";
+        duration: number;
+        __dangerouslyRenderContent?: () => React.ReactNode;
+    }) => void;
     popToast(): void;
 }
 
@@ -133,7 +139,17 @@ export const Toasts = {
     Position: ToastPosition,
     genId: () => (Math.random() || Math.random()).toString(36).slice(2),
 
-    show: ToastsExports.showToast,
+    show(data: ToastData) {
+        const { message, type, options } = data;
+        const fallback = type === ToastType.FAILURE ? "Something went wrong. Please try again." : type === ToastType.SUCCESS ? "Done." : "Moggcord notification.";
+        ToastsExports.showToast({
+            text: message?.trim() || fallback,
+            variant: type === ToastType.FAILURE ? "critical" : type === ToastType.SUCCESS ? "success" : "default",
+            position: options?.position === ToastPosition.BOTTOM ? "bottom" : "top",
+            duration: options?.duration ?? 6000,
+            ...(options?.component != null ? { __dangerouslyRenderContent: () => options.component } : {})
+        });
+    },
     pop: ToastsExports.popToast,
     create: createToast,
 };

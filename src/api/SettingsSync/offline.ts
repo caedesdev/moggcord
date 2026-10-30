@@ -17,14 +17,16 @@ const toast = (type: string, message: string) =>
     Toasts.show({
         type,
         message,
-        id: Toasts.genId()
+        id: Toasts.genId(),
+        options: { duration: type === Toasts.Type.FAILURE ? 10000 : 8000 }
     });
 
-const toastSuccess = () =>
-    toast(Toasts.Type.SUCCESS, "Settings successfully imported. Restart to apply changes!");
+const toastSuccess = (type: BackupType) =>
+    toast(Toasts.Type.SUCCESS, type === "css" ? "QuickCSS imported successfully."
+        : `${type === "plugins" ? "Plugin settings" : type === "datastore" ? "Plugin data" : "Settings"} imported. Fully close Discord and reopen it to apply the changes.`);
 
-const toastFailure = (err: any) =>
-    toast(Toasts.Type.FAILURE, `Failed to import settings: ${String(err)}`);
+const toastFailure = () =>
+    toast(Toasts.Type.FAILURE, "Import failed. Choose a valid Vencord or Moggcord JSON backup and try again.");
 
 const logger = new Logger("SettingsSync:Offline", "#39b7e0");
 
@@ -63,7 +65,6 @@ export async function importSettings(data: string, type: BackupType = "all", clo
     try {
         var parsed = JSON.parse(data);
     } catch (err) {
-        console.log(data);
         throw new Error("Failed to parse JSON: " + String(err));
     }
 
@@ -214,10 +215,10 @@ export async function uploadSettingsBackup(type: BackupType = "all", showToast =
         if (file) {
             try {
                 await importSettings(new TextDecoder().decode(file.data), type);
-                if (showToast) toastSuccess();
+                if (showToast) toastSuccess(type);
             } catch (err) {
                 logger.error(err);
-                if (showToast) toastFailure(err);
+                if (showToast) toastFailure();
             }
         }
     } else {
@@ -228,10 +229,10 @@ export async function uploadSettingsBackup(type: BackupType = "all", showToast =
         reader.onload = async () => {
             try {
                 await importSettings(reader.result as string, type);
-                if (showToast) toastSuccess();
+                if (showToast) toastSuccess(type);
             } catch (err) {
                 logger.error(err);
-                if (showToast) toastFailure(err);
+                if (showToast) toastFailure();
             }
         };
         reader.readAsText(file);
