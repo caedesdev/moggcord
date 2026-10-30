@@ -25,7 +25,21 @@ interface Props extends ModalProps {
 }
 
 function PluginList({ names, tone = "ready" }: { names: string[]; tone?: "ready" | "missing" | "muted"; }) {
-    return <ul className={cl("list", tone)}>{names.map(name => <li key={name}>{name}</li>)}</ul>;
+    return <ul className={cl("list", tone)}>{names.map(name => <li key={name} title={name}><span className={cl("plugin-name")}>{name}</span></li>)}</ul>;
+}
+
+function ImportIcon({ kind }: { kind: "file" | "check" | "alert"; }) {
+    return <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+        {kind === "file" ? <>
+            <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9l-6-6Z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
+            <path d="M14 3v6h6M8 13h8M8 17h5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </> : <>
+            <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+            {kind === "check"
+                ? <path d="m8 12 2.5 2.5L16 9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                : <path d="M12 7v6m0 4v.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />}
+        </>}
+    </svg>;
 }
 
 export function ImportPreview({ report, apply, ...props }: Props) {
@@ -49,65 +63,73 @@ export function ImportPreview({ report, apply, ...props }: Props) {
     return (
         <ModalRoot {...props} size={ModalSize.LARGE} className={cl("root")} aria-label="Review settings import">
             <ModalHeader className={cl("header")}>
-                <div>
-                    <span className={cl("eyebrow")}>SETTINGS BACKUP</span>
-                    <Heading tag="h2">{done ? "Import complete" : "Review your import"}</Heading>
+                <div className={cl("heading")}>
+                    <div className={cl("header-icon")}><ImportIcon kind={done ? "check" : "file"} /></div>
+                    <div>
+                        <span className={cl("eyebrow")}>SETTINGS BACKUP</span>
+                        <Heading tag="h2">{done ? "Import complete" : "Review your import"}</Heading>
+                        <p>{done ? "Your settings are saved. Choose when to restart." : "See what carries over before you import."}</p>
+                    </div>
                 </div>
                 {!busy && <ModalCloseButton onClick={props.onClose} />}
             </ModalHeader>
             <ModalContent className={cl("content")}>
-                <p className={cl("intro")}>A backup contains settings, not plugin files. Included plugins are already installed and only need a restart.</p>
                 <div className={cl("stats")}>
-                    <div><strong>{report.configured}</strong><span>saved entries</span></div>
-                    <div><strong>{report.enabledInBackup}</strong><span>enabled in backup</span></div>
-                    <div><strong>{report.projectedEnabled.length}</strong><span>enabled after import</span></div>
+                    <div><span>In this backup</span><strong>{report.configured}</strong><small>saved entries</small></div>
+                    <div><span>Switched on</span><strong>{report.enabledInBackup}</strong><small>enabled in backup</small></div>
+                    <div className={cl("stat-highlight")}><span>After restart</span><strong>{report.projectedEnabled.length}</strong><small>enabled after import</small></div>
                 </div>
                 <div className={cl("status", done ? "success" : "info")} role="status" aria-live="polite">
-                    {done ? "Settings saved. Fully restart Discord to load the available plugins."
-                        : busy ? "Saving your settings. Keep Discord open..."
-                            : "Available plugins use the backup's on/off choices. Your other plugin choices stay as they are."}
+                    <ImportIcon kind={done ? "check" : "file"} />
+                    <div><strong>{done ? "Settings saved" : busy ? "Importing your settings" : "Ready to import"}</strong>
+                        <p>{done ? "Fully restart Discord to load the available plugins."
+                            : busy ? "Keep Discord open while your settings are saved."
+                                : "The backup's on/off choices are preserved. Your other plugins stay as they are."}</p>
+                    </div>
                 </div>
                 {phase === "error" && <p className={cl("error")} role="alert">The import could not finish. Try again, or close this window and choose another backup. Discord has not been restarted.</p>}
                 {missing > 0 && (
                     <section className={cl("section", "missing-section")}>
-                        <h3>{missing} enabled {missing === 1 ? "entry needs" : "entries need"} attention</h3>
-                        <p>These plugins cannot be activated from this backup alone. Their settings are kept, but their plugin code must be installed separately. You can import now and add compatible missing plugins later. Restarting does not install them.</p>
+                        <div className={cl("section-heading")}><ImportIcon kind="alert" /><h3>Not included in this build</h3><span className={cl("count")}>{missing}</span></div>
+                        <p>Their settings are kept. You can add compatible plugin files later. Restarting does not install them.</p>
                         <PluginList names={report.missing} tone="missing" />
                         {report.incompatible.map(({ name, target }) => <p key={name}><strong>{name}</strong> is unavailable on this client ({target}).</p>)}
                     </section>
                 )}
-                <details className={cl("section")} open>
-                    <summary>{report.ready.length} available plugins enabled by this backup</summary>
+                <details className={cl("section", "accordion")}>
+                    <summary><span>Included and ready</span><span className={cl("count", "ready-count")}>{report.ready.length}</span></summary>
                     <p>Already included in Moggcord. No separate download is needed.</p>
                     <PluginList names={report.ready} />
                 </details>
-                <details className={cl("section")}>
-                    <summary>{report.internal.length} internal entries managed by Moggcord</summary>
+                <details className={cl("section", "accordion")}>
+                    <summary><span>Internal helpers</span><span className={cl("count")}>{report.internal.length}</span></summary>
                     <p>These APIs and helpers do not count as ordinary enabled plugins. Moggcord manages them and their dependencies.</p>
                     <PluginList names={report.internal} tone="muted" />
                 </details>
-                <details className={cl("section")}>
-                    <summary>{report.disabled.length} entries disabled in the backup</summary>
+                <details className={cl("section", "accordion")}>
+                    <summary><span>Disabled in this backup</span><span className={cl("count")}>{report.disabled.length}</span></summary>
                     <p>They remain disabled. {report.missingDisabled.length > 0 && `${report.missingDisabled.length} are also not included in this build.`}</p>
                     <PluginList names={report.disabled} tone="muted" />
                 </details>
-                {report.unchanged.length > 0 && <details className={cl("section")}>
-                    <summary>{report.unchanged.length} entries without an on/off choice</summary>
+                {report.unchanged.length > 0 && <details className={cl("section", "accordion")}>
+                    <summary><span>Keep current on/off choice</span><span className={cl("count")}>{report.unchanged.length}</span></summary>
                     <p>Their current enabled state is preserved.</p>
                     <PluginList names={report.unchanged} tone="muted" />
                 </details>}
-                <details className={cl("section")}>
-                    <summary>Expected enabled plugin list after restart ({report.projectedEnabled.length})</summary>
+                <details className={cl("section", "accordion")}>
+                    <summary><span>Your plugins after restart</span><span className={cl("count", "active-count")}>{report.projectedEnabled.length}</span></summary>
                     <PluginList names={report.projectedEnabled} />
                 </details>
+                <p className={cl("footnote")}>Backups contain settings, not plugin files. Only available user plugins count toward the active total.</p>
             </ModalContent>
             <ModalFooter className={cl("footer")}>
+                <span className={cl("footer-note")}>{done ? "You can restart whenever you're ready." : "Nothing changes until you confirm."}</span>
                 {done ? <>
-                    <Button onClick={() => { props.onClose(); relaunch(); }}>Restart Discord</Button>
-                    <Button variant="secondary" onClick={props.onClose}>Restart later</Button>
+                    <Button className={cl("primary-button")} onClick={() => { props.onClose(); relaunch(); }}>Restart Discord</Button>
+                    <Button className={cl("secondary-button")} variant="secondary" onClick={props.onClose}>Restart later</Button>
                 </> : <>
-                    <Button onClick={confirm} disabled={busy}>{busy ? "Importing..." : "Import settings"}</Button>
-                    <Button variant="secondary" onClick={props.onClose} disabled={busy}>Cancel</Button>
+                    <Button className={cl("primary-button")} onClick={confirm} disabled={busy}>{busy ? "Importing..." : "Import settings"}</Button>
+                    <Button className={cl("secondary-button")} variant="secondary" onClick={props.onClose} disabled={busy}>Cancel</Button>
                 </>}
             </ModalFooter>
         </ModalRoot>
