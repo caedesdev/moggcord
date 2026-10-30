@@ -52,7 +52,7 @@ function BackupAndRestoreTab() {
 
             <Heading>Import Settings</Heading>
             <Paragraph className={Margins.bottom16}>
-                Select a previously exported settings file to restore your configuration.
+                Select a Vencord or Moggcord backup to review its plugin choices before importing. The preview shows available plugins, missing entries and the expected enabled count after restart. Plugin files are not included in settings backups.
             </Paragraph>
 
             <Flex gap="8px" className={Margins.bottom20} style={{ flexWrap: "wrap" }}>
