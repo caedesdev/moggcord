@@ -211,14 +211,13 @@ export async function uploadSettingsBackup(type: BackupType = "all", showToast =
     async function applyBackup(data: string) {
         const parsed = JSON.parse(data);
         if (!isSafeObject(parsed)) throw new Error("Unsafe Settings");
-        const apply = async () => {
-            await importSettings(data, type);
-            if (showToast) toastSuccess(type);
-        };
         if ((type === "all" || type === "plugins") && parsed?.settings?.plugins != null) {
             const report = inspectPluginImport(parsed.settings.plugins, Plugins, ExcludedPlugins, PlainSettings.plugins);
-            await reviewPluginImport(report, apply);
-        } else await apply();
+            await reviewPluginImport(report, () => importSettings(data, type));
+        } else {
+            await importSettings(data, type);
+            if (showToast) toastSuccess(type);
+        }
     }
     if (IS_DISCORD_DESKTOP) {
         const [file] = await DiscordNative.fileManager.openFiles({

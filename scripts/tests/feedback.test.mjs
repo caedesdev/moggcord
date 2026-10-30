@@ -89,21 +89,20 @@ async function loadImport({ file, type = "all", notify = true, rejectWrite = fal
     return { ...toastApi, plain, writes, css, data, errors, reviews };
 }
 
-test("Vencord settings import reports completion and restart instructions after the write", async () => {
+test("Vencord import uses its completion dialog without an overlapping toast; standalone CSS imports still notify", async () => {
     const state = await loadImport({ file: JSON.stringify({ settings: { plugins: { Example: { enabled: true } } } }) });
     assert.equal(state.writes.length, 1);
     assert.equal(state.reviews.length, 1);
     assert.equal(state.reviews[0].ready[0], "Example");
     assert.equal(state.plain.plugins.Example.enabled, true);
-    assert.equal(state.shown.at(-1).variant, "success");
-    assert.match(state.shown.at(-1).text, /Settings imported.*close Discord.*reopen/);
-    assert.equal(state.shown.at(-1).duration, 8000);
+    assert.equal(state.shown.length, 0);
     const plugins = await loadImport({ file: JSON.stringify({ settings: { plugins: {} } }), type: "plugins" });
-    assert.match(plugins.shown.at(-1).text, /Plugin settings imported/);
+    assert.equal(plugins.shown.length, 0);
     const css = await loadImport({ file: JSON.stringify({ quickCss: "body {}" }), type: "css" });
     assert.equal(css.css[0], "body {}");
     assert.equal(css.reviews.length, 0);
     assert.match(css.shown.at(-1).text, /QuickCSS imported/);
+    assert.equal(css.shown.at(-1).duration, 8000);
 });
 
 test("failed or malformed imports show a useful error while cancel and silent imports stay quiet", async () => {
