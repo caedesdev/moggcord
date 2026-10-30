@@ -17,12 +17,6 @@ function injectStyle() {
     (document.head ?? document.documentElement).appendChild(style);
 }
 
-function nodeIsDraggable(el: Element | null): boolean {
-    if (!el) return false;
-    const style = getComputedStyle(el) as CSSStyleDeclaration & { appRegion?: string; };
-    return (style.webkitAppRegion || style.appRegion) === "drag";
-}
-
 /** Only remove the splash if bootstrap finished or the overlay is stuck too long. */
 function clearStuckLoadingOverlay() {
     const el = document.getElementById(LOADING_OVERLAY_ID);
@@ -42,12 +36,6 @@ function clearStuckLoadingOverlay() {
 
 function enforceNoDrag() {
     clearStuckLoadingOverlay();
-
-    for (const el of [document.documentElement, document.body, document.querySelector("#app-mount")]) {
-        if (el && nodeIsDraggable(el)) {
-            (el as HTMLElement).style.setProperty("-webkit-app-region", "no-drag", "important");
-        }
-    }
 }
 
 let fastPollTimer: ReturnType<typeof setInterval> | null = null;
@@ -88,7 +76,7 @@ export default definePlugin({
 
         slowPollTimer = setInterval(enforceNoDrag, 60_000);
 
-        window.addEventListener("keydown", (e) => {
+        window.addEventListener("keydown", e => {
             if (!e.ctrlKey || e.shiftKey || e.altKey || e.metaKey) return;
             if (e.key.toLowerCase() !== "r") return;
             e.preventDefault();
