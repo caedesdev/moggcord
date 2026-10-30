@@ -28,6 +28,7 @@ export * from "./types";
 
 export let BUILT_IN: VencordCommand[];
 export const commands = {} as Record<string, VencordCommand>;
+const pendingCommands = new Map<string, { command: VencordCommand; plugin: string; }>();
 
 // hack for plugins being evaluated before we can grab these from webpack
 const OptPlaceholder = Symbol("OptionalMessageOption") as any as CommandOption;
@@ -56,6 +57,8 @@ export const _init = function (cmds: VencordCommand[]) {
         OptionalMessageOption = cmds.find(c => (c.untranslatedName || c.displayName) === "shrug")!.options![0];
         RequiredMessageOption = cmds.find(c => (c.untranslatedName || c.displayName) === "me")!.options![0];
         commandIdOffset = Math.abs(BUILT_IN.map(x => Number(x.id)).sort((x, y) => x - y)[0]) - BUILT_IN.length;
+        for (const { command, plugin } of pendingCommands.values()) registerCommand(command, plugin);
+        pendingCommands.clear();
     } catch (e) {
         new Logger("CommandsAPI").error("Failed to load CommandsApi", e, " - cmds is", cmds);
     }
@@ -134,11 +137,7 @@ function registerSubCommands(cmd: VencordCommand, plugin: string) {
 
 export function registerCommand<C extends VencordCommand>(command: C, plugin: string) {
     if (!BUILT_IN) {
-        console.warn(
-            "[CommandsAPI]",
-            `Not registering ${command.name} as the CommandsAPI hasn't been initialised.`,
-            "Please restart to use commands"
-        );
+        pendingCommands.set(command.name, { command, plugin });
         return;
     }
 
@@ -166,6 +165,7 @@ export function registerCommand<C extends VencordCommand>(command: C, plugin: st
 }
 
 export function unregisterCommand(name: string) {
+    if (!BUILT_IN) return pendingCommands.delete(name);
     const idx = BUILT_IN.findIndex(c => c.name === name);
     if (idx === -1)
         return false;
