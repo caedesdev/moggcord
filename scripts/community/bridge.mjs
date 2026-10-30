@@ -47,7 +47,7 @@ export function createBridge(config, dependencies = {}) {
             res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Moggcord-Install");
             return res.writeHead(204).end();
         }
-        if (req.method === "GET" && req.url === "/v1/status") return json(res, 200, { name: bridgeName, protocol: 1, channel: config.channel });
+        if (req.method === "GET" && req.url === "/v1/status") return json(res, 200, { name: bridgeName, protocol: 1, channel: config.channel, capabilities: ["plugin-folders"] });
         const match = req.url?.match(/^\/v1\/jobs\/([a-f0-9-]{36})$/);
         if (req.method === "GET" && match) return jobs.has(match[1]) ? json(res, 200, jobs.get(match[1])) : json(res, 404, { error: "Installation not found." });
         if (req.method !== "POST" || req.url !== "/v1/install") return json(res, 404, { error: "Not found." });

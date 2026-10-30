@@ -14,9 +14,20 @@ import http from "node:http";
 import { createBridge } from "../community/bridge.mjs";
 import { fetchManifest, findClient, installEntry, parseLink, repairClient, sourceLimit, trustedOrigin, validateManifest } from "../community/core.mjs";
 import { buildFiles, writeBuildInfo } from "../lib/build-info.mjs";
+import pluginPackage from "../../web/plugin-package.js";
+import { resolvePluginName } from "../build/common.mjs";
 
 const source = 'import definePlugin from "@utils/types"; export default definePlugin({ name: "CommunityExample", description: "An example.", authors: [], start() {} });';
 const entry = (kind = "plugin", code = source, filename = "example.ts") => ({ protocol: 1, id: randomUUID(), kind, name: "Example", file_name: filename, source_code: code, sha256: createHash("sha256").update(code).digest("hex") });
+const folderEntry = (main = "index.tsx") => {
+    const files = [
+        { path: main, content: 'import "./styles.css"; import { value } from "./utils/data"; ' + source },
+        { path: "styles.css", content: ".example {color:purple}" },
+        { path: "utils/data.ts", content: 'export { value } from "../components/value";' },
+        { path: "components/value.ts", content: 'import type Plugin from ".."; export const value = 42;' }
+    ];
+    return { ...entry("plugin", files[0].content, main), protocol: 2, files, sha256: createHash("sha256").update(pluginPackage.canonical(files, main)).digest("hex") };
+};
 const cleanup = async directory => {
     assert.equal(dirname(resolve(directory)), resolve(tmpdir()));
     assert(basenameSafe(directory));
@@ -71,6 +82,73 @@ test("installation manifests enforce size, type, origin, identity and file finge
     assert.throws(() => parseLink(link.href, "https://moggcord.example"));
 });
 
+test("folder manifests fingerprint every nested file, reject traversal and keep protocol one backwards compatible", () => {
+    const data = folderEntry(), address = `https://moggcord.example/api/install/${data.id}`;
+    assert.equal(validateManifest(data, address, data.sha256), data);
+    for (const replacement of [
+        { files: data.files.map(file => file.path === "utils/data.ts" ? { ...file, content: "changed" } : file) },
+        { files: [...data.files, { path: "../outside.ts", content: "bad" }] },
+        { files: [...data.files, { path: "INDEX.tsx", content: "duplicate" }] },
+        { protocol: 1 }, { kind: "theme" }
+    ]) assert.throws(() => validateManifest({ ...data, ...replacement }, address, data.sha256));
+});
+
+for (const main of ["index.tsx", "main.tsx"]) test(`plugin folders retain all relative files and support ${main} as the entry point`, async t => {
+    const f = await fixture(t), data = folderEntry(main);
+    const build = f.dependencies.build;
+    f.dependencies.build = async root => {
+        const folder = join(root, "src", "userplugins", `community-${data.id}`);
+        for (const file of data.files) assert.equal(await readFile(join(folder, file.path), "utf8"), file.content);
+        const parent = dirname(folder), dirent = (await readdir(parent, { withFileTypes: true })).find(item => item.name === `community-${data.id}`);
+        assert.equal(await resolvePluginName(parent, dirent), "CommunityExample");
+        await build(root);
+    };
+    await installEntry(data, f.config, f.dependencies);
+    assert.deepEqual(f.events, ["build", "stop canary", "start canary"]);
+    assert.equal(JSON.parse(await readFile(f.settings, "utf8")).plugins.CommunityExample.communityInstallHash, data.sha256);
+});
+
+test("missing relative imports, escaping stylesheets and dynamic module paths are rejected before writing or stopping Discord", async t => {
+    const f = await fixture(t);
+    for (const replacement of [
+        { path: "utils/data.ts", content: 'export {value} from "../../outside";' },
+        { path: "styles.css", content: '@import "../../private.css";' },
+        { path: "components/value.ts", content: 'const name="./value"; import(name);' }
+    ]) {
+        const data = folderEntry(); data.files = data.files.map(file => file.path === replacement.path ? replacement : file);
+        data.sha256 = createHash("sha256").update(pluginPackage.canonical(data.files, data.file_name)).digest("hex");
+        await assert.rejects(installEntry(data, f.config, f.dependencies));
+        assert(!existsSync(join(f.config.sourceRoot, "src", "userplugins", `community-${data.id}`)));
+    }
+    assert.deepEqual(f.events, []);
+});
+
+test("a failed folder rebuild restores prior nested files, removes new files and never stops the client", async t => {
+    const f = await fixture(t), data = folderEntry();
+    const directory = join(f.config.sourceRoot, "src", "userplugins", `community-${data.id}`);
+    await mkdir(join(directory, "old"), { recursive: true });
+    await writeFile(join(directory, "index.tsx"), source); await writeFile(join(directory, "old", "saved.ts"), "old source");
+    f.dependencies.build = async () => { throw new Error("Build failed"); };
+    await assert.rejects(installEntry(data, f.config, f.dependencies), /Build failed/);
+    assert.equal(await readFile(join(directory, "index.tsx"), "utf8"), source);
+    assert.equal(await readFile(join(directory, "old", "saved.ts"), "utf8"), "old source");
+    assert(!existsSync(join(directory, "utils"))); assert(!existsSync(join(directory, "components")));
+    assert.deepEqual(f.events, []); assert.deepEqual(JSON.parse(await readFile(f.settings, "utf8")), f.original);
+});
+
+test("folder rollback restores an old file replaced by a new directory", async t => {
+    const f = await fixture(t), data = folderEntry();
+    const directory = join(f.config.sourceRoot, "src", "userplugins", `community-${data.id}`);
+    await mkdir(directory, { recursive: true });
+    await writeFile(join(directory, "index.tsx"), source);
+    await writeFile(join(directory, "utils"), "previous file");
+    f.dependencies.build = async () => { throw new Error("Build failed"); };
+    await assert.rejects(installEntry(data, f.config, f.dependencies), /Build failed/);
+    assert.equal(await readFile(join(directory, "utils"), "utf8"), "previous file");
+    assert.equal(await readFile(join(directory, "index.tsx"), "utf8"), source);
+    assert.deepEqual(f.events, []);
+});
+
 for (const kind of ["plugin", "theme"]) for (const extension of kind === "theme" ? ["css", "style"] : ["css"]) {
     test(`${kind} ${extension} installs as one stylesheet, enables it and restarts only Canary`, async t => {
         const f = await fixture(t), data = entry(kind, ":root { --accent: purple; }", `styles.${extension}`);
@@ -99,7 +177,7 @@ for (const extension of ["js", "ts", "tsx"]) test(`${extension} plugin is built 
 
 test("syntax errors, unsupported imports and duplicate built-in names leave Canary untouched", async t => {
     const f = await fixture(t);
-    const builtins = join(f.config.sourceRoot, "src", "moggcordplugins", "example");
+    const builtins = join(f.config.sourceRoot, "src", "moggcordplugins", "FakeVoice");
     await mkdir(builtins, { recursive: true }); await writeFile(join(builtins, "index.ts"), source);
     for (const code of [source, source + " {", source.replace("@utils/types", "./secret.txt"), source.replace("CommunityExample", "constructor")])
         await assert.rejects(installEntry(entry("plugin", code), f.config, f.dependencies));
