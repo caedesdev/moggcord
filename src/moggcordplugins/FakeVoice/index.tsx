@@ -4,10 +4,14 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import "./styles.css";
+
 import { ApplicationCommandInputType, sendBotMessage } from "@api/Commands";
 import { UserAreaButton, UserAreaRenderProps } from "@api/UserArea";
+import { classNameFactory } from "@utils/css";
 import definePlugin from "@utils/types";
-import { ContextMenuApi, Menu, React } from "@webpack/common";
+import type { User } from "@vencord/discord-types";
+import { ContextMenuApi, Menu, React, ReactDOM, UserStore } from "@webpack/common";
 
 interface VoiceStateUpdate {
     channelId?: string | null;
@@ -20,6 +24,18 @@ interface VoiceSocket {
     voiceStateUpdate(state: VoiceStateUpdate): void;
 }
 
+interface VoiceStatusProps {
+    user?: User;
+    channelId?: string;
+    mute: boolean;
+    deaf: boolean;
+}
+
+const cl = classNameFactory("mc-fake-voice-");
+const NOTICE_DURATION_MS = 3000;
+let notice: { id: number; active: boolean; title: string; body: string; } | undefined;
+let noticeId = 0;
+let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 let isGhostActive = false;
 let configFakeMute = false;
 let configFakeDeafen = true;
@@ -31,8 +47,33 @@ function notify() {
     for (const listener of listeners) listener();
 }
 
-function syncState() {
+function dismissNotice() {
+    clearTimeout(noticeTimer);
+    noticeTimer = undefined;
+    notice = undefined;
+    notify();
+}
+
+function modeName() {
+    return configFakeMute && configFakeDeafen ? "Fake Mute & Deafen" : configFakeMute ? "Fake Mute" : "Fake Deafen";
+}
+
+function showStatus() {
+    clearTimeout(noticeTimer);
+    notice = {
+        id: ++noticeId,
+        active: isGhostActive,
+        title: isGhostActive ? `${modeName()} enabled` : "Fake Voice disabled",
+        body: !isGhostActive ? "Your real voice status is restored."
+            : !voiceState?.channelId ? "Ready for your next call. Your audio controls stay unchanged."
+                : `You appear ${configFakeMute && configFakeDeafen ? "muted and deafened" : configFakeMute ? "muted" : "deafened"}. Your audio controls stay unchanged.`
+    };
+    noticeTimer = setTimeout(dismissNotice, NOTICE_DURATION_MS);
+}
+
+function syncState(announce = true) {
     if (voiceState?.channelId) voiceSocket?.voiceStateUpdate(voiceState);
+    if (announce) showStatus();
     notify();
 }
 
@@ -61,6 +102,32 @@ function FakeDeafenIcon({ className }: { className?: string }) {
                 <path d="M2 2L22 22" stroke="#ed4245" strokeWidth="2.5" strokeLinecap="round" />
             )}
         </svg>
+    );
+}
+
+function FakeVoiceNotice() {
+    if (!notice) return null;
+    const { active, title, body } = notice;
+    return ReactDOM.createPortal(
+        <div className={cl("notice", active ? "success" : "info")} role="status" aria-live="polite" aria-atomic="true">
+            <svg className={cl("notice-icon")} width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="1.6" />
+                {active
+                    ? <path d="m8 12 2.5 2.5L16 9" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+                    : <path d="M12 11v5m0-8v.01" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />}
+            </svg>
+            <div className={cl("notice-content")}>
+                <strong>{title}</strong>
+                <p>{body}</p>
+            </div>
+            <button type="button" className={cl("notice-close")} aria-label="Dismiss notification" onClick={dismissNotice}>
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <path d="m6 6 12 12M6 18 18 6" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+            </button>
+            <span className={cl("notice-progress")} aria-hidden="true" />
+        </div>,
+        document.body
     );
 }
 
@@ -110,20 +177,25 @@ function GhostContextMenu() {
 function FakeDeafenUserButton({ iconForeground, hideTooltips, nameplate }: UserAreaRenderProps) {
     useVoiceState();
     return (
-        <UserAreaButton
-            onClick={() => {
-                isGhostActive = !isGhostActive;
-                if (isGhostActive && !configFakeMute && !configFakeDeafen) configFakeDeafen = true;
-                syncState();
-            }}
-            onContextMenu={(e: React.MouseEvent) => ContextMenuApi.openContextMenu(e, () => <GhostContextMenu />)}
-            tooltipText={hideTooltips ? undefined : isGhostActive ? "Disable Fake Voice" : "Enable Fake Deafen (right click: config)"}
-            icon={<FakeDeafenIcon className={iconForeground} />}
-            role="switch"
-            aria-checked={isGhostActive}
-            redGlow={false}
-            plated={nameplate != null}
-        />
+        <>
+            <UserAreaButton
+                className={cl("button", { active: isGhostActive })}
+                onClick={() => {
+                    isGhostActive = !isGhostActive;
+                    if (isGhostActive && !configFakeMute && !configFakeDeafen) configFakeDeafen = true;
+                    syncState();
+                }}
+                onContextMenu={(e: React.MouseEvent) => ContextMenuApi.openContextMenu(e, () => <GhostContextMenu />)}
+                tooltipText={hideTooltips ? undefined : isGhostActive ? `${modeName()} active (click to disable)` : "Enable Fake Deafen (right click: config)"}
+                icon={<FakeDeafenIcon className={iconForeground} />}
+                role="switch"
+                aria-label={isGhostActive ? `${modeName()} active` : "Enable Fake Voice"}
+                aria-checked={isGhostActive}
+                redGlow={false}
+                plated={nameplate != null}
+            />
+            <FakeVoiceNotice key={notice?.id} />
+        </>
     );
 }
 
@@ -148,15 +220,29 @@ export default definePlugin({
                     replace: "self_mute:$self.toggle($1,'mute'),self_deaf:$self.toggle($2,'deaf')"
                 }
             ]
+        },
+        {
+            find: 'location:"VoiceUserIcons"',
+            replacement: {
+                match: /function \i\((\i)\)\{(?=let\{className:\i,mute:\i,localMute:)/,
+                replace: "$&$1=$self.useDisplayedVoiceStatus($1);"
+            }
         }
     ],
+
+    useDisplayedVoiceStatus<T extends VoiceStatusProps>(props: T): T {
+        useVoiceState();
+        if (!isGhostActive || !voiceState?.channelId || !props.user || props.user.id !== UserStore.getCurrentUser()?.id
+            || (props.channelId != null && props.channelId !== voiceState.channelId)) return props;
+        return { ...props, mute: props.mute || configFakeMute, deaf: props.deaf || configFakeDeafen };
+    },
 
     rememberVoiceState(socket: VoiceSocket, state: VoiceStateUpdate) {
         voiceSocket = socket;
         voiceState = { ...state };
         if (state.channelId == null && isGhostActive) {
             isGhostActive = false;
-            notify();
+            dismissNotice();
         }
     },
 
@@ -170,7 +256,8 @@ export default definePlugin({
 
     stop() {
         isGhostActive = false;
-        syncState();
+        dismissNotice();
+        syncState(false);
     },
 
     userAreaButton: {

@@ -21,6 +21,8 @@ The ghost button appears beside Discord's microphone and headphones controls. Cl
 
 FakeVoice changes the outgoing voice-status flags without toggling the real microphone or headphones. Turning it off or disabling the plugin restores the last real mute/deafen flags. Leaving voice clears the active fake status. These controls do not override server mute, server deafen or channel permissions.
 
+Version 1.18.34 also displays the active fake mute/deafen icons beside your own voice participant, using Discord's native voice-status icons. This display change applies only to you in your current call and preserves real audio controls, other participants and server restrictions. The ghost button highlights the selected active mode. Enabling, disabling or changing modes shows a dark, animated notification at the top right that disappears after three seconds. A new notification replaces the previous one; closing it, disconnecting or disabling FakeVoice clears it. Reduced-motion preferences are respected.
+
 The local commands `/fakedeafen`, `/fakemute` and `/fakedeafen_mute` select their respective modes. Repeating the same command turns that mode off. Commands registered before Discord finishes loading are retained until its built-in command list is available.
 
 Version 1.18.31 updates the account-panel integration for current Discord Canary and includes it in the downloadable installer. Reinstall or repair with this version, then fully restart Discord. A window reload alone can keep the previous Moggcord code cached in Discord's main process.

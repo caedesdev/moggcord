@@ -32,3 +32,5 @@ The native tests use temporary resources fixtures and an isolated file cache. Th
 ## Window dragging
 
 Version 1.18.33 restores dragging from Discord's title bar while keeping buttons, inputs, dialogs and the rest of the application outside the window drag region. Fully restart Discord after installing or repairing so the main-process stylesheet is refreshed.
+
+Version 1.18.34 adds local FakeVoice mute/deafen indicators in your own voice participant row and a highlighted account-panel switch. Mode changes show an animated dark notification at the top right for three seconds. The real audio controls and other participants' indicators are unchanged. Fully restart Discord after updating to load the new display patch.
