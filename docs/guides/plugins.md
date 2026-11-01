@@ -20,7 +20,7 @@ The desktop bundle includes the built-in **Moggcord** and **Vencord** collection
 
 Platform-specific plugins keep their target restrictions. Internal API and core plugins support other features and are not listed as ordinary selectable plugins. Duplicate names are resolved by the bundle generator; the Moggcord implementation takes precedence over a matching Vencord implementation.
 
-The release's `version.json.pluginCatalog` contains generated desktop catalog counts. Counts can change between versions and should not be inferred from the number of folders in one source directory.
+The release's `version.json.pluginCatalog` contains generated desktop catalog counts. Since 1.18.44 this metadata is stored in the version-matched technical release, `updates-v<version>`. Counts can change between versions and should not be inferred from the number of folders in one source directory.
 
 ## Four default-enabled plugins
 

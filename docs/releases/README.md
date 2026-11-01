@@ -4,6 +4,7 @@
 
 | Version | Main changes | Notes |
 | --- | --- | --- |
+| [1.18.44](1.18.44.md) | Installer-only main release, separate update files and a version-matched updater lookup | [Published release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.44) |
 | [1.18.43](1.18.43.md) | Bounded downloads, real progress, cancellation and the small update archive | [Published release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.43) |
 | [1.18.42](1.18.42.md) | macOS universal DMG, Linux x64 AppImage/DEB and cross-platform connector support | [Published release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.42) |
 | [Earlier installer notes](legacy-notes.md) | Historical client/UI/import compatibility fixes through 1.18.41 | Retained context, not a current setup guide |

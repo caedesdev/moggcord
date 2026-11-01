@@ -26,6 +26,18 @@ let currentVersion = `v${VERSION}`;
 const ZIP_FILE = "moggcord-dist.zip";
 const UPDATE_FILE = "moggcord-update.zip";
 
+interface ReleaseAsset {
+    name: string;
+    browser_download_url: string;
+    size?: number;
+}
+
+interface ReleaseInfo {
+    tag_name: string;
+    draft?: boolean;
+    assets: ReleaseAsset[];
+}
+
 let pendingDownloadUrl: string | null = null;
 let pendingVersion: string | null = null;
 let pendingZipPath: string | null = null;
@@ -86,7 +98,7 @@ async function fetchUpdates(force = false): Promise<boolean> {
 
     fetchInFlight = (async () => {
         try {
-            const data = await githubGet("/releases/latest");
+            const data = await githubGet<ReleaseInfo>("/releases/latest");
             const latestTag: string = data.tag_name ?? "";
 
             if (!latestTag || !isNewer(currentVersion, latestTag)) {
@@ -96,12 +108,19 @@ async function fetchUpdates(force = false): Promise<boolean> {
                 return false;
             }
 
-            const assets = data.assets as Array<{ name: string; browser_download_url: string; size?: number; }>;
-            const asset = assets?.find(a => a.name === UPDATE_FILE) ?? assets?.find(a => a.name === ZIP_FILE);
+            if (!/^v?\d+\.\d+\.\d+$/.test(latestTag)) throw new Error("The release has an invalid version. Please use the latest installer and choose Repair.");
+            let assets = data.assets;
+            let asset = assets?.find(a => a.name === UPDATE_FILE) ?? assets?.find(a => a.name === ZIP_FILE);
+            if (!asset) {
+                const tag = `updates-v${latestTag.replace(/^v/, "")}`;
+                const updates = await githubGet<ReleaseInfo>(`/releases/tags/${tag}`);
+                if (updates.tag_name !== tag || updates.draft) throw new Error("The update files do not match this release. Please try again later or use the latest installer.");
+                assets = updates.assets;
+                asset = assets?.find(a => a.name === UPDATE_FILE) ?? assets?.find(a => a.name === ZIP_FILE);
+            }
             if (!asset) {
                 pendingDownloadUrl = null;
-                cachedUpdateCheck = { at: Date.now(), hasUpdate: false };
-                return false;
+                throw new Error("Update files are unavailable for the new release. Please use the latest installer and choose Repair.");
             }
 
             if (pendingDownloadDir && pendingVersion !== latestTag) {

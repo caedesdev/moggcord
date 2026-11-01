@@ -8,6 +8,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using System.Reflection;
 using System.Diagnostics;
+using System.IO.Compression;
+using System.Net;
 
 if (args.Contains("--fixture-process"))
 {
@@ -146,6 +148,43 @@ try
     Check(!helperProcess.HasExited, "System helpers are not shutdown targets");
     close.Invoke(backend, new object[] { selectedResources });
     Check(!unrelatedProcess.HasExited && !helperProcess.HasExited, "Repeated shutdown tolerates an already-closed target");
+    var requests = new List<string>();
+    using var zip = new MemoryStream();
+    using (var archive = new ZipArchive(zip, ZipArchiveMode.Create, true))
+    using (var writer = new StreamWriter(archive.CreateEntry("patcher.js").Open())) writer.Write("fixture patcher");
+    var payload = zip.ToArray();
+    using var fixtureHttp = new HttpClient(new ReleaseHttpHandler(request => {
+        var url = request.RequestUri!.AbsoluteUri;
+        requests.Add(url);
+        if (url.EndsWith("/releases/latest")) return new HttpResponseMessage(HttpStatusCode.OK) {
+            Content = new StringContent("{\"tag_name\":\"v1.18.44\",\"assets\":[{\"name\":\"Moggcord-Installer.exe\"}]}")
+        };
+        if (url.EndsWith("/releases/tags/updates-v1.18.44")) return new HttpResponseMessage(HttpStatusCode.OK) {
+            Content = new StringContent("{\"tag_name\":\"updates-v1.18.44\",\"assets\":[{\"name\":\"moggcord-dist.zip\",\"browser_download_url\":\"https://github.com/caedesdev/moggcord/releases/download/updates-v1.18.44/moggcord-dist.zip\"}]}")
+        };
+        Check(url == "https://github.com/caedesdev/moggcord/releases/download/updates-v1.18.44/moggcord-dist.zip", "Only the version-matched technical archive is downloaded");
+        return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(payload) };
+    }));
+    typeof(MoggcordBackend).GetField("_http", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(backend, fixtureHttp);
+    var originalTemp = Environment.GetEnvironmentVariable("TEMP");
+    var originalTmp = Environment.GetEnvironmentVariable("TMP");
+    var httpTemp = Path.Combine(root, "http-temp");
+    Directory.CreateDirectory(httpTemp);
+    try
+    {
+        Environment.SetEnvironmentVariable("TEMP", httpTemp);
+        Environment.SetEnvironmentVariable("TMP", httpTemp);
+        Check(Path.GetFullPath(Path.GetTempPath()).TrimEnd(Path.DirectorySeparatorChar) == Path.GetFullPath(httpTemp), "HTTP fixture must use its isolated temporary directory");
+        var download = typeof(MoggcordBackend).GetMethod("TryDownloadLatestDistAsync", BindingFlags.Instance | BindingFlags.NonPublic)!;
+        Check(await (Task<bool>)download.Invoke(backend, null)!, "Installer resolves an installer-only release through its technical files");
+        Check(requests.Count == 3, "Installer uses latest metadata, matching update metadata and the selected ZIP");
+        Check(File.ReadAllText(Path.Combine(root, "cache", "patcher.js")) == "fixture patcher", "Downloaded fixture is extracted only into the isolated cache");
+    }
+    finally
+    {
+        Environment.SetEnvironmentVariable("TEMP", originalTemp);
+        Environment.SetEnvironmentVariable("TMP", originalTmp);
+    }
     Console.WriteLine(checks + " native installer checks passed. Only isolated fixture processes were closed.");
 }
 finally
@@ -159,4 +198,11 @@ finally
         || !Path.GetFileName(root).StartsWith("moggcord-installer-test-"))
         throw new Exception("Unexpected fixture cleanup path");
     Directory.Delete(root, true);
+}
+
+sealed class ReleaseHttpHandler : HttpMessageHandler
+{
+    private readonly Func<HttpRequestMessage, HttpResponseMessage> respond;
+    public ReleaseHttpHandler(Func<HttpRequestMessage, HttpResponseMessage> respond) => this.respond = respond;
+    protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken) => Task.FromResult(respond(request));
 }

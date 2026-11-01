@@ -23,6 +23,10 @@ Other causes include a stale or damaged release bundle, applying files to a diff
 
 Use the latest installer's Repair action for the affected target. If the new version still does not appear, report both displayed versions and the exact channel.
 
+## An older updater does not detect the installer-only release
+
+The 1.18.44 layout keeps the normal release limited to installers and stores update payloads in `updates-v<version>`. Clients on 1.18.43 or older do not query that technical release. Download the current installer and choose Repair once; a status claiming no update in that older client does not prove it is current after this layout change.
+
 ## The download is larger than expected
 
 Compatible new clients prefer `moggcord-update.zip`; old clients request the full `moggcord-dist.zip`. The small archive contains desktop code/style files. The full bundle includes extra Windows support files. macOS/Linux installers are separate release assets and are not downloaded as part of that Windows bundle.

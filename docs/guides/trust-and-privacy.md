@@ -17,7 +17,7 @@ The optional connector's configuration determines its trusted website and Discor
 
 ## Verify a release download
 
-Each release includes `SHA256SUMS.txt`. Compare the checksum for the exact package you downloaded.
+The main release links to its version-matched technical files, tagged `updates-v<version>`. That technical release contains `SHA256SUMS.txt`, including checksums for the four installer packages. Compare the entry for the exact package and version you downloaded. Older releases may have this file attached directly.
 
 Windows PowerShell:
 

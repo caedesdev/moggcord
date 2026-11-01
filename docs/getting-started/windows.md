@@ -24,7 +24,7 @@ The icon shown beside a detected Windows target comes from its executable. That 
 
 ## First-launch prompts
 
-Windows may show an unknown-app or publisher prompt for a downloaded installer. Check that the file came from the Moggcord release and compare it with the attached `SHA256SUMS.txt`. A checksum confirms a match to that release; it does not make Windows trust the publisher.
+Windows may show an unknown-app or publisher prompt for a downloaded installer. Check that the file came from the Moggcord release and compare it with `SHA256SUMS.txt` in that release's linked technical files. A checksum confirms a match to that release; it does not make Windows trust the publisher.
 
 Do not disable Windows protection to troubleshoot an installer. If you cannot verify the file, stop and report its release URL. See [Trust and privacy](../guides/trust-and-privacy.md).
 

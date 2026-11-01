@@ -33,7 +33,7 @@ When adding a native operation, review both ends of IPC and any disabled/web fal
 ## Client updates
 
 1. The HTTP updater reads the latest release metadata and compares versions.
-2. It selects `moggcord-update.zip`, falling back to `moggcord-dist.zip` when the small archive is absent.
+2. It selects `moggcord-update.zip`, falling back to `moggcord-dist.zip` when the small archive is absent. Since 1.18.44, an installer-only main release is paired with `updates-v<version>`, and the updater reads that exact technical release for its payload.
 3. A bounded streaming download writes a temporary file and tracks actual bytes.
 4. Extraction occurs in a fresh workspace. The expected version and desktop fingerprints are verified.
 5. Existing destinations are backed up, the new files copied, and the deployed build checked again.

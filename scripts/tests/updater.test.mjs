@@ -23,7 +23,7 @@ const compiled = await build({
     } }], external: ["electron", "original-fs"]
 });
 
-function loadUpdater(t, { platform = "linux", broken = false, lean = false } = {}) {
+function loadUpdater(t, { platform = "linux", broken = false, lean = false, separated = false, updateTag = "updates-v1.18.24", missing = false } = {}) {
     const directory = fs.mkdtempSync(join(tmpdir(), "moggcord-updater-test-"));
     t.after(() => { assert.equal(dirname(resolve(directory)), resolve(tmpdir())); assert(directory.includes("moggcord-updater-test-")); fs.rmSync(directory, { recursive: true, force: true }); });
     const source = join(directory, "release"), destination = join(directory, "active"), mirror = join(directory, "mirror");
@@ -35,10 +35,16 @@ function loadUpdater(t, { platform = "linux", broken = false, lean = false } = {
     const handlers = new Map();
     const archive = zipSync(Object.fromEntries([...buildFiles, "build-info.json"].map(file => [file, fs.readFileSync(join(source, file))])));
     const requests = [];
+    const metadataRequests = [];
     const network = { respond: async () => new Response(archive, { headers: { "content-length": String(archive.length) } }) };
     const assets = ["moggcord-dist.zip", ...(lean ? ["moggcord-update.zip"] : [])].map(name => ({ name, browser_download_url: `https://github.com/caedesdev/moggcord/releases/download/1.18.24/${name}`, size: archive.length }));
     const replacements = {
-        "@main/utils/http": { fetchJson: async (_url, options) => { assert(options.signal); return { tag_name: "1.18.24", assets }; }, checkedFetch: async (url, options) => { requests.push(url); return network.respond(url, options); } },
+        "@main/utils/http": { fetchJson: async (url, options) => {
+            assert(options.signal); metadataRequests.push(url);
+            if (url.endsWith("/releases/latest")) return { tag_name: "1.18.24", assets: separated ? [{ name: "Moggcord-Installer.exe" }] : assets };
+            assert(url.endsWith("/releases/tags/updates-v1.18.24"));
+            return { tag_name: updateTag, prerelease: true, assets: missing ? [] : assets.map(asset => ({ ...asset, browser_download_url: asset.browser_download_url.replace("/1.18.24/", "/updates-v1.18.24/") })) };
+        }, checkedFetch: async (url, options) => { requests.push(url); return network.respond(url, options); } },
         "@shared/vencordUserAgent": { VENCORD_USER_AGENT: "test" },
         "@shared/IpcEvents": { IpcEvents: { GET_REPO: "repo", GET_UPDATES: "check", UPDATE: "download", BUILD: "apply", UPDATE_STATUS: "status", CANCEL_UPDATE: "cancel" } },
         "../moggcordLoader": { getPatcherInstallDir: () => destination, getMoggcordLocalDistDir: () => mirror },
@@ -54,7 +60,7 @@ function loadUpdater(t, { platform = "linux", broken = false, lean = false } = {
     const testProcess = new Proxy(process, { get: (target, property) => property === "platform" ? platform : Reflect.get(target, property) });
     const context = { require: name => replacements[name] ?? require(name), exports: {}, module: { exports: {} }, __dirname: join(directory, "wrong-bundle-directory"), console: { log() {}, warn() {}, error() {} }, setTimeout, clearTimeout, Buffer, AbortController, AbortSignal, process: testProcess };
     vm.runInNewContext(compiled.outputFiles[0].text, context);
-    return { handlers, directory, destination, mirror, network, requests, archive };
+    return { handlers, directory, destination, mirror, network, requests, metadataRequests, archive };
 }
 
 for (const platform of ["win32", "darwin", "linux"]) for (const broken of [false, true]) test(`${platform} updater ${broken ? "rejects the stale release without reporting success" : "replaces the active patcher directory and clears the repeated update"}`, async t => {
@@ -70,6 +76,27 @@ for (const platform of ["win32", "darwin", "linux"]) for (const broken of [false
     for (const folder of [destination, mirror]) assert.equal(fs.readFileSync(join(folder, "renderer.js"), "utf8"), `${broken ? "old" : "new"} renderer.js`);
     assert.equal((await handlers.get("check")()).value.length, broken ? 1 : 0);
     if (!broken) assert.equal(fs.readdirSync(directory).some(name => name.startsWith("moggcord-download-")), false);
+});
+
+test("installer-only releases resolve their matching technical release and keep the small update path", async t => {
+    const state = loadUpdater(t, { separated: true, lean: true });
+    assert.equal((await state.handlers.get("check")()).value.length, 1);
+    assert.equal(state.metadataRequests.length, 2);
+    assert.equal((await state.handlers.get("download")()).value, true);
+    assert.match(state.requests[0], /\/updates-v1\.18\.24\/moggcord-update\.zip$/);
+    assert.equal((await state.handlers.get("apply")()).value, true);
+    assert.equal((await state.handlers.get("check")()).value.length, 0);
+});
+
+test("missing or mismatched technical releases report a failure without claiming the client is up to date", async t => {
+    for (const options of [{ updateTag: "updates-v1.18.23" }, { missing: true }]) {
+        const state = loadUpdater(t, { separated: true, ...options });
+        const result = await state.handlers.get("check")();
+        assert.equal(result.ok, false);
+        assert.match(result.error.message, /do not match|unavailable/);
+        assert.equal(state.requests.length, 0);
+        assert.equal(fs.readFileSync(join(state.destination, "renderer.js"), "utf8"), "old renderer.js");
+    }
 });
 
 test("concurrent requests share one small update download and cancellation cleans up before a retry", async t => {

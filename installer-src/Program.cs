@@ -733,6 +733,15 @@ namespace MoggcordInstaller
             var zipUrl = ExtractJsonValue(json, "browser_download_url", DIST_ZIP);
             var releaseTag = ExtractJsonValue(json, "tag_name");
 
+            if (string.IsNullOrEmpty(zipUrl) && Regex.IsMatch(releaseTag ?? "", @"^v?\d+\.\d+\.\d+$"))
+            {
+                var updateTag = "updates-v" + releaseTag.TrimStart('v');
+                var updatesJson = await _http.GetStringAsync($"https://api.github.com/repos/{GITHUB_REPO}/releases/tags/{updateTag}");
+                if (ExtractJsonValue(updatesJson, "tag_name") != updateTag)
+                    throw new Exception("The update files do not match the selected release.");
+                zipUrl = ExtractJsonValue(updatesJson, "browser_download_url", DIST_ZIP);
+            }
+
             if (string.IsNullOrEmpty(zipUrl))
                 throw new Exception($"'{DIST_ZIP}' not found in the GitHub release. The release may not be published yet.");
 

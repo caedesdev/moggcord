@@ -21,6 +21,12 @@ Since version 1.18.43, the updater shows transferred megabytes, a percentage whe
 
 A transfer with no response/data for 30 seconds fails with an explanation. The download also has a 10-minute overall limit. The release request has a time limit, and Windows archive extraction is bounded. These limits prevent an unresponsive operation from leaving the button busy indefinitely.
 
+## Where the update files live
+
+Since 1.18.44, the main release contains only the four platform installer packages. Technical files are attached to a separate prerelease tagged `updates-v<version>`. The updater resolves that exact version rather than treating the technical prerelease as the latest user download.
+
+**Clients on 1.18.43 or older need the latest installer and Repair once to migrate.** Those older updaters only inspect the main release and cannot discover the new technical-file location. After migrating, future compatible updates use the version-matched technical release.
+
 ## Why there are two ZIP files
 
 | Asset | Purpose |
@@ -28,9 +34,9 @@ A transfer with no response/data for 30 seconds fails with an explanation. The d
 | `moggcord-update.zip` | The four desktop code/style files and `build-info.json`; preferred by the new updater |
 | `moggcord-dist.zip` | The full installation bundle, including additional Windows support files |
 
-The 1.18.43 small update archive is about 1.3 MB; the full bundle is about 75 MB. These are release-specific sizes, not permanent limits. The macOS and Linux installer packages are separate assets and are not bundled inside the Windows update archive.
+The 1.18.43 small update archive is about 1.3 MB; the full bundle is about 75 MB. These are release-specific sizes, not permanent limits. Both ZIPs now belong in the technical release. The macOS and Linux installer packages are separate assets and are not bundled inside the Windows update archive.
 
-Older clients do not know about the small archive and can still request the full bundle. Receiving the updater fix itself may therefore require one normal full download or Repair.
+Older clients can use the full bundle from legacy release layouts. Once a main release contains only installers, use Repair to receive the new updater rather than expecting that older discovery path to migrate itself.
 
 ## Recover an already-stuck older updater
 
