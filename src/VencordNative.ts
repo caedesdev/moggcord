@@ -8,6 +8,7 @@ import type { Settings } from "@api/Settings";
 import type { CspRequestResult } from "@main/csp/manager";
 import type { PluginIpcMappings } from "@main/ipcPlugins";
 import { IpcEvents } from "@shared/IpcEvents";
+import type { UpdateProgress } from "@shared/updater";
 import type { IpcRes } from "@utils/types";
 import { ipcRenderer } from "electron/renderer";
 
@@ -45,6 +46,8 @@ export default {
     updater: {
         getUpdates: () => invoke<IpcRes<Record<"hash" | "author" | "message", string>[]>>(IpcEvents.GET_UPDATES),
         update: () => invoke<IpcRes<boolean>>(IpcEvents.UPDATE),
+        getStatus: () => invoke<IpcRes<UpdateProgress>>(IpcEvents.UPDATE_STATUS),
+        cancel: () => invoke<IpcRes<boolean>>(IpcEvents.CANCEL_UPDATE),
         rebuild: () => invoke<IpcRes<boolean>>(IpcEvents.BUILD),
         getRepo: () => invoke<IpcRes<string>>(IpcEvents.GET_REPO),
         downloadAndRun: (url: string) => invoke<boolean>(IpcEvents.MOGGCORD_DOWNLOAD_AND_RUN, url),
@@ -120,7 +123,7 @@ export default {
             ipcRenderer.removeAllListeners(IpcEvents.THUMBAR_BUTTON_CLICK);
         },
     },
-    
+
     worldBomb: {
         type: (text: string, delay: number) => invoke(IpcEvents.WORLD_BOMB_TYPE, text, delay),
         pressEnter: () => invoke(IpcEvents.WORLD_BOMB_PRESS_ENTER),

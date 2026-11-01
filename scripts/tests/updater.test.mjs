@@ -23,7 +23,7 @@ const compiled = await build({
     } }], external: ["electron", "original-fs"]
 });
 
-for (const platform of ["win32", "darwin", "linux"]) for (const broken of [false, true]) test(`${platform} updater ${broken ? "rejects the stale release without reporting success" : "replaces the active patcher directory and clears the repeated update"}`, async t => {
+function loadUpdater(t, { platform = "linux", broken = false, lean = false } = {}) {
     const directory = fs.mkdtempSync(join(tmpdir(), "moggcord-updater-test-"));
     t.after(() => { assert.equal(dirname(resolve(directory)), resolve(tmpdir())); assert(directory.includes("moggcord-updater-test-")); fs.rmSync(directory, { recursive: true, force: true }); });
     const source = join(directory, "release"), destination = join(directory, "active"), mirror = join(directory, "mirror");
@@ -34,27 +34,79 @@ for (const platform of ["win32", "darwin", "linux"]) for (const broken of [false
     }
     const handlers = new Map();
     const archive = zipSync(Object.fromEntries([...buildFiles, "build-info.json"].map(file => [file, fs.readFileSync(join(source, file))])));
+    const requests = [];
+    const network = { respond: async () => new Response(archive, { headers: { "content-length": String(archive.length) } }) };
+    const assets = ["moggcord-dist.zip", ...(lean ? ["moggcord-update.zip"] : [])].map(name => ({ name, browser_download_url: `https://github.com/caedesdev/moggcord/releases/download/1.18.24/${name}`, size: archive.length }));
     const replacements = {
-        "@main/utils/http": { fetchJson: async () => ({ tag_name: "1.18.24", assets: [{ name: "moggcord-dist.zip", browser_download_url: "https://github.com/caedesdev/moggcord/releases/download/1.18.24/moggcord-dist.zip" }] }), fetchBuffer: async () => archive },
+        "@main/utils/http": { fetchJson: async (_url, options) => { assert(options.signal); return { tag_name: "1.18.24", assets }; }, checkedFetch: async (url, options) => { requests.push(url); return network.respond(url, options); } },
         "@shared/vencordUserAgent": { VENCORD_USER_AGENT: "test" },
-        "@shared/IpcEvents": { IpcEvents: { GET_REPO: "repo", GET_UPDATES: "check", UPDATE: "download", BUILD: "apply" } },
+        "@shared/IpcEvents": { IpcEvents: { GET_REPO: "repo", GET_UPDATES: "check", UPDATE: "download", BUILD: "apply", UPDATE_STATUS: "status", CANCEL_UPDATE: "cancel" } },
         "../moggcordLoader": { getPatcherInstallDir: () => destination, getMoggcordLocalDistDir: () => mirror },
         "../postInstallRelaunch": { markPendingRelaunch() {} },
         electron: { ipcMain: { handle: (key, callback) => handlers.set(key, callback) }, app: { on() {}, getPath: () => directory } },
         "original-fs": fs,
         child_process: { execFile: (program, args, options, callback) => {
-            assert.equal(program, "powershell.exe"); assert(options.windowsHide);
+            assert.equal(program, "powershell.exe"); assert(options.windowsHide); assert.equal(options.timeout, 120_000);
             const extracted = args.at(-1).match(/-DestinationPath '([^']+)'/)[1];
             fs.cpSync(source, extracted, { recursive: true }); callback(null);
         } }
     };
     const testProcess = new Proxy(process, { get: (target, property) => property === "platform" ? platform : Reflect.get(target, property) });
-    const context = { require: name => replacements[name] ?? require(name), exports: {}, module: { exports: {} }, __dirname: join(directory, "wrong-bundle-directory"), console: { log() {}, warn() {}, error() {} }, setTimeout, clearTimeout, Buffer, process: testProcess };
+    const context = { require: name => replacements[name] ?? require(name), exports: {}, module: { exports: {} }, __dirname: join(directory, "wrong-bundle-directory"), console: { log() {}, warn() {}, error() {} }, setTimeout, clearTimeout, Buffer, AbortController, AbortSignal, process: testProcess };
     vm.runInNewContext(compiled.outputFiles[0].text, context);
+    return { handlers, directory, destination, mirror, network, requests, archive };
+}
+
+for (const platform of ["win32", "darwin", "linux"]) for (const broken of [false, true]) test(`${platform} updater ${broken ? "rejects the stale release without reporting success" : "replaces the active patcher directory and clears the repeated update"}`, async t => {
+    const { handlers, destination, mirror, directory, requests } = loadUpdater(t, { platform, broken });
     assert.equal((await handlers.get("check")()).value.length, 1);
     assert.equal((await handlers.get("download")()).value, true);
+    assert.equal((await handlers.get("status")()).value.phase, "downloaded");
+    assert((await handlers.get("status")()).value.receivedBytes > 0);
+    assert.match(requests[0], /moggcord-dist.zip$/);
     const applied = await handlers.get("apply")();
     assert.equal(applied.ok, true); assert.equal(applied.value, !broken);
+    assert.equal((await handlers.get("status")()).value.phase, broken ? "error" : "installed");
     for (const folder of [destination, mirror]) assert.equal(fs.readFileSync(join(folder, "renderer.js"), "utf8"), `${broken ? "old" : "new"} renderer.js`);
     assert.equal((await handlers.get("check")()).value.length, broken ? 1 : 0);
+    if (!broken) assert.equal(fs.readdirSync(directory).some(name => name.startsWith("moggcord-download-")), false);
+});
+
+test("concurrent requests share one small update download and cancellation cleans up before a retry", async t => {
+    const state = loadUpdater(t, { lean: true });
+    await state.handlers.get("check")();
+    state.network.respond = async () => new Response(new ReadableStream({ start(controller) { controller.enqueue(new Uint8Array([1, 2])); } }));
+    const first = state.handlers.get("download")();
+    const second = state.handlers.get("download")();
+    await new Promise(resolve => setImmediate(resolve));
+    assert.equal((await state.handlers.get("status")()).value.phase, "downloading");
+    assert.equal((await state.handlers.get("check")()).value.length, 1);
+    assert.equal(state.requests.length, 1);
+    assert.match(state.requests[0], /moggcord-update.zip$/);
+    assert.equal((await state.handlers.get("cancel")()).value, true);
+    for (const result of await Promise.all([first, second])) {
+        assert.equal(result.ok, false);
+        assert.equal(result.error.name, "AbortError");
+    }
+    assert.equal((await state.handlers.get("status")()).value.phase, "cancelled");
+    assert.equal(fs.readdirSync(state.directory).some(name => name.startsWith("moggcord-download-")), false);
+    assert.equal(fs.readFileSync(join(state.destination, "renderer.js"), "utf8"), "old renderer.js");
+    state.network.respond = async () => new Response(state.archive);
+    assert.equal((await state.handlers.get("download")()).value, true);
+    assert.equal((await state.handlers.get("apply")()).value, true);
+    assert.equal(state.requests.length, 2);
+});
+
+test("an incomplete update clears its partial file, preserves the installed files and can be retried", async t => {
+    const state = loadUpdater(t);
+    state.network.respond = async () => new Response(state.archive.subarray(0, 20));
+    const result = await state.handlers.get("download")();
+    assert.equal(result.ok, false);
+    assert.match(result.error.message, /incomplete/);
+    assert.equal((await state.handlers.get("status")()).value.phase, "error");
+    assert.equal(fs.readdirSync(state.directory).some(name => name.startsWith("moggcord-download-")), false);
+    assert.equal(fs.readFileSync(join(state.destination, "renderer.js"), "utf8"), "old renderer.js");
+    state.network.respond = async () => new Response(state.archive);
+    assert.equal((await state.handlers.get("download")()).value, true);
+    assert.equal((await state.handlers.get("status")()).value.phase, "downloaded");
 });

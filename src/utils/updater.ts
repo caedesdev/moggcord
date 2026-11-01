@@ -6,8 +6,8 @@ import { Logger } from "./Logger";
 import { IpcRes } from "./types";
 
 export const UpdateLogger = /* #__PURE__ */ new Logger("Updater", "white");
-export let isOutdated  = false;
-export let isNewer     = false;
+export let isOutdated = false;
+export const isNewer = false;
 export let updateError: any;
 export let changes: Record<"hash" | "author" | "message", string>[] = [];
 
@@ -56,6 +56,8 @@ export async function rebuild(): Promise<boolean> {
 }
 
 export const getRepo = () => Unwrap(VencordNative.updater.getRepo());
+export const getUpdateStatus = () => Unwrap(VencordNative.updater.getStatus());
+export const cancelUpdate = () => Unwrap(VencordNative.updater.cancel());
 
 export async function maybePromptToUpdate(confirmMessage: string, checkForDev = false) {
     if (IS_WEB || IS_UPDATER_DISABLED) return;

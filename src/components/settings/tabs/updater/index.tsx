@@ -11,10 +11,11 @@ import { Link } from "@components/Link";
 import { Paragraph } from "@components/Paragraph";
 import { SettingsTab, wrapTab } from "@components/settings";
 import { Span } from "@components/Span";
+import type { UpdateProgress } from "@shared/updater";
 import { Margins } from "@utils/margins";
 import { relaunch } from "@utils/native";
-import { changes, checkForUpdates, rebuild, update, UpdateLogger } from "@utils/updater";
-import { React, Toasts, useState } from "@webpack/common";
+import { cancelUpdate, changes, checkForUpdates, getUpdateStatus, rebuild, update, UpdateLogger } from "@utils/updater";
+import { React, Toasts, useEffect, useState } from "@webpack/common";
 
 declare const VERSION: string;
 
@@ -26,6 +27,28 @@ function UpdaterTab() {
     const [outdated, setOutdated] = useState(false);
     const [updateList, setUpdateList] = useState(changes ?? []);
     const [error, setError] = useState<string | null>(null);
+    const [progress, setProgress] = useState<UpdateProgress | null>(null);
+    const busy = downloading || progress?.phase === "downloading" || progress?.phase === "installing";
+
+    useEffect(() => {
+        let mounted = true;
+        let polling = false;
+        async function refreshProgress() {
+            if (polling) return;
+            polling = true;
+            try {
+                const value = await getUpdateStatus();
+                if (mounted) setProgress(value);
+            } catch (error) {
+                UpdateLogger.debug("Unable to read update progress", error);
+            } finally {
+                polling = false;
+            }
+        }
+        void refreshProgress();
+        const timer = setInterval(refreshProgress, 500);
+        return () => { mounted = false; clearInterval(timer); };
+    }, []);
 
     async function handleCheck() {
         setChecking(true);
@@ -93,13 +116,37 @@ function UpdaterTab() {
                 setDownloading(false);
             }
         } catch (e: any) {
+            if (e?.name === "AbortError") {
+                setStatus("Download cancelled. You can try again at any time.");
+                return;
+            }
             UpdateLogger.error(e);
-            setError("Update failed. Check your connection and try again. If this repeats, run the latest installer and choose Repair.");
+            const detail = typeof e?.message === "string" ? e.message.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").slice(0, 300) : "";
+            setError(`Update failed.${detail ? ` ${detail}` : ""} Check your connection and try again. If this repeats, run the latest installer and choose Repair.`);
             setStatus(null);
             Toasts.show({ message: "Update failed. Try again or use the latest installer and choose Repair.", id: Toasts.genId(), type: Toasts.Type.FAILURE, options: { duration: 10000 } });
             setDownloading(false);
+        } finally {
+            setDownloading(false);
         }
     }
+
+    async function handleCancel() {
+        try {
+            await cancelUpdate();
+        } catch (error) {
+            UpdateLogger.error(error);
+            setError("Could not cancel the download. Please try again.");
+        }
+    }
+
+    const received = ((progress?.receivedBytes ?? 0) / 1024 / 1024).toFixed(1);
+    const total = progress?.totalBytes ? (progress.totalBytes / 1024 / 1024).toFixed(1) : null;
+    const percent = progress?.totalBytes ? Math.min(100, Math.floor(progress.receivedBytes / progress.totalBytes * 100)) : undefined;
+    const visibleError = error ?? (progress?.phase === "error" ? progress.error : null);
+    const message = progress?.phase === "downloading"
+        ? `Downloading the update: ${percent == null ? "" : `${percent}% · `}${received}${total ? ` / ${total}` : ""} MB. Keep Discord open.`
+        : progress?.phase === "installing" ? "Download complete. Verifying and installing the update..." : status;
 
     return (
         <SettingsTab>
@@ -129,19 +176,20 @@ function UpdaterTab() {
                 </Flex>
             </Card>
 
-            {error && (
+            {visibleError && (
                 <Card style={{ padding: "10px 16px", marginBottom: 12, borderLeft: "3px solid var(--status-danger)" }}>
-                    <Span size="sm" color="text-danger">{error}</Span>
+                    <Span size="sm" color="text-danger">{visibleError}</Span>
                 </Card>
             )}
 
-            {status && !error && (
+            {message && !visibleError && (
                 <Card role="status" aria-live="polite" style={{ padding: "10px 16px", marginBottom: 12 }}>
-                    <Span size="sm" color="text-strong">{status}</Span>
+                    <Span size="sm" color="text-strong">{message}</Span>
+                    {progress?.phase === "downloading" && <progress aria-label="Update download" max={100} value={percent} style={{ display: "block", width: "100%", height: 6, marginTop: 10, accentColor: "var(--brand-500)" }} />}
                 </Card>
             )}
 
-            {checked && !error && (
+            {checked && !visibleError && (
                 outdated ? (
                     <Card style={{ padding: "10px 16px", marginBottom: 12, borderLeft: "3px solid var(--status-warning)" }}>
                         <Span size="sm" style={{ color: "var(--text-warning)" }}>
@@ -158,7 +206,7 @@ function UpdaterTab() {
             <Flex gap="8px" className={Margins.top8}>
                 <Button
                     size="small"
-                    disabled={checking}
+                    disabled={checking || busy}
                     onClick={handleCheck}
                 >
                     {checking ? "Checking..." : "Check for Updates"}
@@ -169,11 +217,12 @@ function UpdaterTab() {
                         size="small"
                         variant="primary"
                         onClick={handleUpdate}
-                        disabled={downloading}
+                        disabled={busy || checking}
                     >
-                        {downloading ? "Installing..." : "🚀 Update Now (Automatic)"}
+                        {busy ? progress?.phase === "installing" ? "Installing..." : "Downloading..." : "Update Now"}
                     </Button>
                 )}
+                {progress?.phase === "downloading" && <Button size="small" variant="secondary" onClick={handleCancel}>Cancel download</Button>}
             </Flex>
 
             <Divider className={Margins.top20} />

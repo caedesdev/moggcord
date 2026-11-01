@@ -36,6 +36,8 @@ export const enum IpcEvents {
     GET_UPDATES = "VencordGetUpdates",
     GET_REPO = "VencordGetRepo",
     UPDATE = "VencordUpdate",
+    UPDATE_STATUS = "MoggcordUpdateStatus",
+    CANCEL_UPDATE = "MoggcordCancelUpdate",
     BUILD = "VencordBuild",
     OPEN_MONACO_EDITOR = "VencordOpenMonacoEditor",
     GET_MONACO_THEME = "VencordGetMonacoTheme",
@@ -70,8 +72,6 @@ export const enum IpcEvents {
     // VB-Audio Virtual Cable (Windows only)
     CHECK_VB_CABLE = "MoggcordCheckVBCable",
     INSTALL_VB_CABLE = "MoggcordInstallVBCable",
-
-
 
     RELAUNCH_APP = "MoggcordRelaunchApp",
 

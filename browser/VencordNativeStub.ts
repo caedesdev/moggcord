@@ -73,6 +73,8 @@ window.VencordNative = {
         getRepo: async () => ({ ok: true, value: "https://github.com/Equicord/Equicord" }),
         getUpdates: async () => ({ ok: true, value: [] }),
         update: async () => ({ ok: true, value: false }),
+        getStatus: async () => ({ ok: true, value: { phase: "idle", receivedBytes: 0, totalBytes: null } }),
+        cancel: async () => ({ ok: true, value: false }),
         rebuild: async () => ({ ok: true, value: true }),
     },
 

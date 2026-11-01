@@ -126,17 +126,21 @@ const updaterText = await readFile("src/components/settings/tabs/updater/index.t
 const updaterFile = ts.createSourceFile("updater.tsx", updaterText, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
 const updaterFunction = updaterFile.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "UpdaterTab");
 
-async function loadUpdater({ download = true, installed = true, failure, available = true } = {}) {
+async function loadUpdater({ download = true, installed = true, failure, available = true, progress = null } = {}) {
     const toastApi = await loadToast();
     const states = new Map(), timers = [], calls = [];
     let index = 0;
-    const setters = ["checking", "downloading", "status", "checked", "outdated", "list", "error"];
+    const setters = ["checking", "downloading", "status", "checked", "outdated", "list", "error", "progress"];
     const source = updaterFunction.getText(updaterFile);
-    const { code } = await transform(`(${source.replace(/return \([\s\S]*$/, "return {handleCheck, handleUpdate};}")})`, { loader: "tsx" });
+    const render = updaterFunction.body.statements.find(ts.isReturnStatement);
+    const handlers = source.slice(0, render.getStart(updaterFile) - updaterFunction.getStart(updaterFile)) + "return {handleCheck, handleUpdate, handleCancel, message, percent, busy};}";
+    const { code } = await transform(`(${handlers})`, { loader: "tsx" });
     const updater = vm.runInNewContext(code, {
-        useState: initial => { const name = setters[index++]; states.set(name, initial); return [initial, value => states.set(name, value)]; },
+        useState: initial => { const name = setters[index++]; const value = name === "progress" ? progress : initial; states.set(name, value); return [value, value => states.set(name, value)]; },
+        useEffect() {},
         changes: [], checkForUpdates: async () => { if (failure === "check") throw new Error("Fixture check failed"); return available; },
-        update: async () => { calls.push("download"); if (failure === "download") throw new Error("Fixture download failed"); return download; },
+        update: async () => { calls.push("download"); if (failure === "cancel") { const error = new Error("Cancelled"); error.name = "AbortError"; throw error; } if (failure === "download") throw new Error("Fixture download failed"); return download; },
+        cancelUpdate: async () => { calls.push("cancel"); return true; },
         rebuild: async () => { calls.push("install"); if (failure === "install") throw new Error("Fixture install failed"); return installed; },
         relaunch: () => calls.push("restart"), setTimeout: (fn, delay) => timers.push({ fn, delay }),
         Toasts: toastApi.Toasts, UpdateLogger: { error() {} }
@@ -155,6 +159,28 @@ test("successful update gives visible progress, confirms installation and explai
     assert.equal(state.states.get("outdated"), false);
     state.timers[0].fn();
     assert.equal(state.calls.at(-1), "restart");
+});
+
+test("the updater displays transferred bytes and restores the busy state when reopened during a download", async () => {
+    const state = await loadUpdater({ progress: { phase: "downloading", receivedBytes: 1024 * 1024, totalBytes: 4 * 1024 * 1024 } });
+    assert.equal(state.updater.busy, true);
+    assert.equal(state.updater.percent, 25);
+    assert.match(state.updater.message, /25%.*1\.0 \/ 4\.0 MB/);
+    const installing = await loadUpdater({ progress: { phase: "installing", receivedBytes: 4, totalBytes: 4 } });
+    assert.equal(installing.updater.busy, true);
+    assert.match(installing.updater.message, /Verifying and installing/);
+});
+
+test("a cancelled download clears the busy state without installing, restarting or claiming a failure", async () => {
+    const state = await loadUpdater({ failure: "cancel" });
+    await state.updater.handleCancel();
+    await state.updater.handleUpdate();
+    assert.deepEqual(state.calls, ["cancel", "download"]);
+    assert.match(state.states.get("status"), /cancelled.*try again/);
+    assert.equal(state.states.get("error"), null);
+    assert.equal(state.states.get("downloading"), false);
+    assert.equal(state.timers.length, 0);
+    assert.equal(state.shown.length, 0);
 });
 
 test("download failure never installs or restarts; deferred installation and errors explain recovery", async () => {
