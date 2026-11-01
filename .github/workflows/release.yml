@@ -161,17 +161,18 @@ jobs:
         if: matrix.platform == 'linux'
         shell: bash
         run: |
-          xvfb-run -a release/platform-installers/linux-unpacked/moggcord-installer --no-sandbox --verify-package > release/platform-installers/installer-verification-linux.json
+          xvfb-run -a node scripts/build/verify-platform-package.mjs
           test -s release/platform-installers/Moggcord-Installer-Linux.AppImage
           test -s release/platform-installers/Moggcord-Installer-Linux.deb
       - name: Verify packaged macOS installer
         if: matrix.platform == 'darwin'
         shell: bash
         run: |
-          "release/platform-installers/mac-universal/Moggcord Installer.app/Contents/MacOS/Moggcord Installer" --verify-package > release/platform-installers/installer-verification-macos.json
+          node scripts/build/verify-platform-package.mjs
           codesign --verify --deep --strict "release/platform-installers/mac-universal/Moggcord Installer.app"
           hdiutil verify release/platform-installers/Moggcord-Installer-macOS.dmg
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
           name: release-${{ matrix.platform }}
           path: |

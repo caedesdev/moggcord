@@ -4,6 +4,11 @@
  */
 
 const { app, BrowserWindow, dialog, ipcMain, shell } = require("electron");
+const verification = process.argv.includes("--verify-package") || process.env.MOGGCORD_VERIFY_PACKAGE === "1";
+if (verification) {
+    const fail = error => { process.stderr.write((error.stack || error.message || String(error)) + "\n"); app.exit(1); };
+    process.on("uncaughtException", fail); process.on("unhandledRejection", fail);
+}
 const { readFileSync } = require("node:fs");
 const { createHash } = require("node:crypto");
 const { join } = require("node:path");
@@ -15,10 +20,13 @@ const resources = app.isPackaged ? join(process.resourcesPath, "moggcord-install
 const metadata = JSON.parse(readFileSync(join(resources, "metadata.json"), "utf8"));
 verifyBuild(join(resources, "desktop"), metadata.version);
 const hash = createHash("sha256").update(readFileSync(join(resources, "equilotl"))).digest("hex");
-if (hash !== metadata.installerSha256 || metadata.platform !== process.platform || metadata.version !== app.getVersion()) throw new Error("The installer package is incomplete or damaged. Download a fresh copy from GitHub.");
-if (process.argv.includes("--verify-package")) {
-    process.stdout.write(JSON.stringify({ version: metadata.version, platform: process.platform, arch: process.arch, verified: true }) + "\n");
-    app.exit(0);
+if (hash !== metadata.installerSha256) throw new Error("The native installer fingerprint does not match its package metadata. Download a fresh copy from GitHub.");
+if (metadata.platform !== process.platform || metadata.version !== app.getVersion()) throw new Error(`The installer metadata (${metadata.platform}, ${metadata.version}) does not match this app (${process.platform}, ${app.getVersion()}).`);
+if (verification) {
+    app.whenReady().then(() => {
+        process.stdout.write(JSON.stringify({ version: metadata.version, platform: process.platform, arch: process.arch, verified: true }) + "\n");
+        app.exit(0);
+    });
 } else if (!app.requestSingleInstanceLock()) app.quit();
 else {
     let window;

@@ -15,9 +15,10 @@ test("updates extract without system commands and reject escaping paths", t => {
     const directory = mkdtempSync(join(tmpdir(), "moggcord-unix-update-"));
     t.after(() => { assert.equal(dirname(resolve(directory)), resolve(tmpdir())); assert(directory.includes("moggcord-unix-update-")); rmSync(directory, { recursive: true, force: true }); });
     const target = join(directory, "valid");
-    extractUpdate(zipSync({ "desktop/renderer.js": strToU8("verified renderer") }), target);
+    extractUpdate(zipSync({ "desktop/renderer.js": strToU8("verified renderer"), "desktop\\preload.js": strToU8("Windows ZIP entry") }), target);
     assert.equal(readFileSync(join(target, "desktop", "renderer.js"), "utf8"), "verified renderer");
-    for (const name of ["../escaped.js", "/escaped.js", "C:/escaped.js", "desktop/../../escaped.js", "desktop\\escaped.js"]) {
+    assert.equal(readFileSync(join(target, "desktop", "preload.js"), "utf8"), "Windows ZIP entry");
+    for (const name of ["../escaped.js", "/escaped.js", "C:/escaped.js", "desktop/../../escaped.js", "desktop\\..\\..\\escaped.js"]) {
         assert.throws(() => extractUpdate(zipSync({ [name]: strToU8("bad") }), join(directory, "bad")), /unsafe path/);
     }
     assert.equal(existsSync(join(directory, "escaped.js")), false);
