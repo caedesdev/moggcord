@@ -27,6 +27,7 @@ import { TooltipFallback } from "@components/TooltipFallback";
 import { LazyComponent } from "@utils/lazyReact";
 import * as t from "@vencord/discord-types";
 import { filters, find, findCssClassesLazy, mapMangledCssClasses, mapMangledModuleLazy, proxyLazyWebpack, waitFor } from "@webpack";
+import type { PropsWithChildren } from "react";
 
 import { waitForComponent } from "./internal";
 
@@ -79,7 +80,6 @@ export function setColorPicker(component: t.ColorPicker) {
     ColorPicker = component;
 }
 
-
 export const UserSummaryItem = waitForComponent("UserSummaryItem", filters.componentByCode("defaultRenderUser", "showDefaultAvatarsForNullUsers"));
 
 export let createScroller: ((scrollbarClassName: string, fadeClassName: string, customThemeClassName: string) => t.ScrollerThin) | undefined;
@@ -109,7 +109,10 @@ export const ScrollerAuto = LazyComponent(() => createScroller?.(scrollerClasses
 export const ListScrollerThin = LazyComponent(() => createListScroller(listScrollerClasses.thin, listScrollerClasses.fade, "", ResizeObserver));
 export const ListScrollerAuto = LazyComponent(() => createListScroller(listScrollerClasses.auto, listScrollerClasses.fade, "", ResizeObserver));
 
-export const FocusLock = waitForComponent<t.FocusLock>("FocusLock", filters.componentByCode(".containerRef,{keyboardModeEnabled:"));
+export const FocusLock = waitForComponent<t.FocusLock>("FocusLock",
+    filters.componentByCode(/\.containerRef,\{(?:disableReturn|keyboardModeEnabled):/),
+    ({ children }: PropsWithChildren) => children ?? null
+);
 
 export let useToken: t.useToken;
 waitFor(m => {
