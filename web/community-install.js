@@ -10,15 +10,31 @@
     if (!response.ok) throw new Error(data.error || 'Moggcord could not complete this installation.');
     return data;
   }
-  async function install(data, progress = () => {}) {
-    if (!data.install_manifest || !/^[a-f0-9]{64}$/.test(data.sha256 || '')) return false;
+  function installLink(data) {
+    if (!data.install_manifest || !/^[a-f0-9]{64}$/.test(data.sha256 || '')) throw new Error('This upload has no valid Moggcord installation link.');
+    const manifest = new URL(data.install_manifest,location.origin);
+    if (manifest.origin !== location.origin || manifest.username || manifest.password || manifest.search || manifest.hash || !/^\/api\/install\/[a-f0-9-]{36}$/.test(manifest.pathname)) throw new Error('Invalid installation link.');
+    const link = new URL('moggcord://install');
+    link.searchParams.set('manifest',manifest.href);link.searchParams.set('sha256',data.sha256);
+    return link.href;
+  }
+  async function install(data, progress = () => {}, options = {}) {
+    const link = installLink(data);
     let status;
     progress('Connecting to Moggcord…');
-    try { status = await request('/v1/status',{},30000); } catch { return false; }
-    if (status.name !== 'moggcord-community' || status.protocol !== 1) return false;
+    try { status = await request('/v1/status',{},2500); } catch {
+      if (options.launch !== false) {
+        progress('Opening Moggcord on your PC…');
+        (options.open ?? (href => window.location.assign(href)))(link);
+        for (let attempt=0; attempt<30; attempt++) {
+          await pause(500);
+          try { status = await request('/v1/status',{},1500); break; } catch { progress('Waiting for Moggcord to connect…'); }
+        }
+      }
+    }
+    if (status?.name !== 'moggcord-community' || status.protocol !== 1) throw Object.assign(new Error('Moggcord is not connected. Open Moggcord or set up the connector for this website, then try again.'),{code:'connector_unavailable'});
     if (data.files && !status.capabilities?.includes('plugin-folders')) throw new Error('Update your Moggcord connector to install plugin folders automatically.');
     const manifest = new URL(data.install_manifest,location.origin);
-    if (manifest.origin !== location.origin || !/^\/api\/install\/[a-f0-9-]{36}$/.test(manifest.pathname)) throw new Error('Invalid installation link.');
     progress('Connecting to Moggcord…');
     const job = await request('/v1/install',{method:'POST',headers:{'Content-Type':'application/json','X-Moggcord-Install':'1'},body:JSON.stringify({manifest:manifest.href,sha256:data.sha256})});
     if (!/^[a-f0-9-]{36}$/.test(job.id || '')) throw new Error('Moggcord returned an invalid installation response.');
@@ -84,15 +100,18 @@
   function connectionHelp(element,data,installed = false) {
     const toast = element.matches('[data-library-feedback], [data-profile-feedback]');
     if (!element.querySelector('.rr-alert__body') && window.MoggUI?.setAlert) window.MoggUI.setAlert(element, {
-      tone:installed ? 'success' : 'info', title:installed ? 'Installed' : 'Downloaded',
-      message:installed ? 'Moggcord has been restarted.' : 'File downloaded. Connect Moggcord for automatic installation.', toast
+      tone:installed ? 'success' : 'warning', title:installed ? 'Installed' : 'Connect to Moggcord',
+      message:installed ? 'Installed in your connected Moggcord.' : 'Open Moggcord to install this upload automatically.', toast
     });
     const row=document.createElement('p');row.className='installer-help';
+    element.querySelector('.installer-help')?.remove();
     if (!installed) {
       const setup=document.createElement('a');setup.href=documentation;setup.target='_blank';setup.rel='noopener noreferrer';setup.textContent='Set up Moggcord';row.append(setup);
+      const manual=document.createElement('button');manual.type='button';manual.className='installer-copy';manual.textContent='Download file';
+      manual.addEventListener('click',()=>download(data));row.append(document.createTextNode(' · '),manual);
     }
     if(data.install_manifest && /^[a-f0-9]{64}$/.test(data.sha256 || '')) {
-      const link=new URL('moggcord://install');link.searchParams.set('manifest',new URL(data.install_manifest,location.origin).href);link.searchParams.set('sha256',data.sha256);
+      const link=new URL(installLink(data));
       const open=document.createElement('a');open.href=link.href;open.textContent='Open in Moggcord';row.append(document.createTextNode(installed ? '' : ' · '),open);
       const copy=document.createElement('button');copy.type='button';copy.className='installer-copy';copy.textContent='Copy install link';
       copy.addEventListener('click',async()=>{try{await navigator.clipboard.writeText(link.href);copy.textContent='Link copied';}catch{copy.textContent='Could not copy link';}});
