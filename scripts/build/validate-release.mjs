@@ -11,7 +11,7 @@ const root = path.join(path.dirname(fileURLToPath(import.meta.url)), "..", "..")
 const pkg = JSON.parse(fs.readFileSync(path.join(root, "package.json"), "utf8"));
 const versionJsonPath = path.join(root, "release", "installer", "version.json");
 
-const tag = process.env.GITHUB_REF_NAME?.replace(/^v/, "") ?? pkg.version;
+const tag = (process.env.MOGGCORD_RELEASE_TAG ?? process.env.GITHUB_REF_NAME)?.replace(/^v/, "") ?? pkg.version;
 const pkgVersion = pkg.version;
 
 let errors = 0;

@@ -89,10 +89,10 @@ export async function fetchManifest(input, origin, fetcher = fetch) {
     return validateManifest(JSON.parse(Buffer.concat(chunks).toString("utf8")), address, input.sha256);
 }
 
-export async function findClient(channel, localAppData = process.env.LOCALAPPDATA) {
-    if (process.platform !== "win32") {
+export async function findClient(channel, localAppData = process.env.LOCALAPPDATA, platform = process.platform) {
+    if (platform !== "win32") {
         if (!channelNames[channel]) throw new Error("Choose stable, canary, ptb, or development.");
-        const client = discoverDesktops().find(target => target.channel === channel && target.installed);
+        const client = discoverDesktops(platform).find(target => target.channel === channel && target.installed);
         if (!client) throw new Error(`No Moggcord installation was found in ${channelNames[channel]}. Install Moggcord in this channel first.`);
         return client;
     }

@@ -279,8 +279,8 @@ test("channel discovery selects only Moggcord in the chosen channel and uses num
         await writeFile(join(folder, "resources", "app", "index.js"), `// ${marker}\n[${JSON.stringify(patcher.replaceAll("\\", "/"))}]`);
         await writeFile(join(folder, "DiscordCanary.exe"), "fixture");
     }
-    const client = await findClient("canary", f.directory); assert(client.executable.includes("app-1.0.10"));
-    await assert.rejects(findClient("stable", f.directory), /No Moggcord/);
+    const client = await findClient("canary", f.directory, "win32"); assert(client.executable.includes("app-1.0.10"));
+    await assert.rejects(findClient("stable", f.directory, "win32"), /No Moggcord/);
 });
 
 test("real HTTP bridge rejects other websites, checks downloaded manifests and runs one job at a time", async t => {

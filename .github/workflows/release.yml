@@ -98,7 +98,7 @@ jobs:
       - name: Validate release assets
         run: node scripts/build/validate-release.mjs
         env:
-          GITHUB_REF_NAME: v${{ steps.metadata.outputs.version }}
+          MOGGCORD_RELEASE_TAG: v${{ steps.metadata.outputs.version }}
 
       - name: Create release checksums
         shell: pwsh
@@ -130,7 +130,7 @@ jobs:
         include:
           - os: ubuntu-22.04
             platform: linux
-          - os: macos-14
+          - os: macos-15
             platform: darwin
     runs-on: ${{ matrix.os }}
     steps:
