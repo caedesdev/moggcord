@@ -6,7 +6,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { createPackage, extractFile } from "@electron/asar";
-import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, copyFileSync } from "node:fs";
+import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync, copyFileSync, realpathSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { execFileSync, spawn } from "node:child_process";
@@ -16,8 +16,9 @@ import { buildFiles, writeBuildInfo } from "../lib/build-info.mjs";
 import { createDesktopInstaller } from "../../installer-desktop/backend.mjs";
 
 function workspace(t) {
-    const directory = mkdtempSync(join(tmpdir(), "moggcord-platform-test-"));
-    t.after(() => { assert.equal(dirname(resolve(directory)), resolve(tmpdir())); assert(directory.includes("moggcord-platform-test-")); rmSync(directory, { recursive: true, force: true }); });
+    const tempRoot = realpathSync(tmpdir());
+    const directory = mkdtempSync(join(tempRoot, "moggcord-platform-test-"));
+    t.after(() => { assert.equal(dirname(resolve(directory)), tempRoot); assert(directory.includes("moggcord-platform-test-")); rmSync(directory, { recursive: true, force: true }); });
     return directory;
 }
 
