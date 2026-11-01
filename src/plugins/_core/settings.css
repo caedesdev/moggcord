@@ -1,0 +1,44 @@
+/*
+ * Copyright (c) 2026 Moggcord contributors
+ * SPDX-License-Identifier: GPL-3.0-or-later
+ */
+
+.vc-moggcord-settings-brand {
+    display: inline-block;
+    color: #c4b5fd;
+    font-weight: 700;
+}
+
+@supports (background-clip: text) or (-webkit-background-clip: text) {
+    .vc-moggcord-settings-brand {
+        background-image: linear-gradient(110deg, #9cb4ff, #c4a7ff, #f0b4df, #9cb4ff);
+        background-size: 300% 100%;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+        color: transparent;
+        filter: drop-shadow(0 0 5px rgb(167 139 250 / 18%));
+        animation: vc-moggcord-settings-flow 7s ease-in-out infinite;
+    }
+}
+
+@keyframes vc-moggcord-settings-flow {
+    0%, 100% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .vc-moggcord-settings-brand {
+        animation: none;
+        background-position: 50% 50%;
+    }
+}
+
+@media (forced-colors: active) {
+    .vc-moggcord-settings-brand {
+        background: none;
+        -webkit-text-fill-color: currentcolor;
+        color: CanvasText;
+        filter: none;
+        animation: none;
+    }
+}

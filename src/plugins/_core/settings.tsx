@@ -4,6 +4,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import "./settings.css";
+
 import { definePluginSettings } from "@api/Settings";
 import { BackupRestoreIcon, MainSettingsIcon, PaintbrushIcon, PatchHelperIcon, PluginsIcon, UpdaterIcon } from "@components/Icons";
 
@@ -18,12 +20,15 @@ import {
 } from "@components/settings";
 import { gitHashShort } from "@shared/vencordUserAgent";
 import { Devs } from "@utils/constants";
+import { classNameFactory } from "@utils/css";
 import { isTruthy } from "@utils/guards";
 import definePlugin, { IconProps, OptionType } from "@utils/types";
 import Plugins from "~plugins";
 import { findByPropsLazy, waitFor } from "@webpack";
 import { React } from "@webpack/common";
 import type { ComponentType, PropsWithChildren, ReactNode } from "react";
+
+const cl = classNameFactory("vc-moggcord-settings-");
 
 const enum LayoutType {
     ROOT = 0,
@@ -76,7 +81,7 @@ interface SettingsLayoutNode {
     legacySearchKey?: string;
     getLegacySearchKey?(): string;
     useLabel?(): string;
-    useTitle?(): string;
+    useTitle?(): ReactNode;
     buildLayout?(): SettingsLayoutNode[];
     icon?(): ReactNode;
     render?(): ReactNode;
@@ -265,7 +270,7 @@ export default definePlugin({
             type: LayoutTypes.SECTION,
             useTitle: () => {
                 try { if (localStorage.getItem("Moggcord_stealthMode") === "1") return ""; } catch { }
-                return "Moggcord Settings";
+                return <span className={cl("brand")}>Moggcord Settings</span>;
             },
             buildLayout: () => {
                 try { if (localStorage.getItem("Moggcord_stealthMode") === "1") return [mainEntry]; } catch { }

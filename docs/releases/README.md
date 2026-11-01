@@ -4,6 +4,7 @@
 
 | Version | Main changes | Notes |
 | --- | --- | --- |
+| [1.18.45](1.18.45.md) | Animated core sidebar branding, reduced-motion support and retirement of legacy heading polling | [Published release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.45) |
 | [1.18.44](1.18.44.md) | Installer-only main release, separate update files and a version-matched updater lookup | [Published release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.44) |
 | [1.18.43](1.18.43.md) | Bounded downloads, real progress, cancellation and the small update archive | [Published release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.43) |
 | [1.18.42](1.18.42.md) | macOS universal DMG, Linux x64 AppImage/DEB and cross-platform connector support | [Published release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.42) |
