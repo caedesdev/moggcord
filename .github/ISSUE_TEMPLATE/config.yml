@@ -1,8 +1,8 @@
 blank_issues_enabled: false
 contact_links:
-    - name: Equicord Support Server
-      url: https://equicord.org/discord
-      about: If you need help regarding Equicord, please join our support server!
-    - name: Equicord Installer
-      url: https://github.com/Equicord/Equilotl
-      about: You can find the Equicord Installer here
+    - name: Moggcord documentation and troubleshooting
+      url: https://github.com/caedesdev/moggcord/blob/main/docs/README.md
+      about: Installation, plugins, community uploads, updates and troubleshooting guides
+    - name: Moggcord installers
+      url: https://github.com/caedesdev/moggcord/releases/latest
+      about: Download the current Windows, macOS or Linux installer

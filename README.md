@@ -1,89 +1,62 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/caedesdev/moggcord/main/moggcord.ico" width="96" height="96" alt="Moggcord Logo">
+  <img src="https://raw.githubusercontent.com/caedesdev/moggcord/main/moggcord.ico" width="96" height="96" alt="Moggcord logo">
 
   # Moggcord
 
-  **A custom Discord client built for people who actually care about how Discord runs.**
+  **A Discord desktop modification with Moggcord and Vencord plugins, themes and community uploads.**
 
-  [![Discord](https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white)](https://discord.gg/moggcord)
-  [![License](https://img.shields.io/github/license/caedesdev/moggcord?color=a855f7)](./LICENSE)
-  [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-3b82f6.svg)](./docs/DESKTOP-INSTALLERS.md)
-  [![Website](https://img.shields.io/badge/website-moggcord.online-5865F2?logo=googlechrome&logoColor=white)](https://moggcord.online)
+  [![License](https://img.shields.io/github/license/caedesdev/moggcord?color=a855f7)](LICENSE)
+  [![Platforms](https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-3b82f6)](docs/getting-started/installation.md)
 
-  ---
+  [Download](https://github.com/caedesdev/moggcord/releases/latest) · [Documentation](docs/README.md) · [Website](https://moggcord.online) · [Contribute](CONTRIBUTING.md)
 </div>
 
-## Community website installation
+## Start here
 
-Plugins and themes can be installed from a connected website into your chosen Discord channel, with automatic activation and restart. See the [setup commands, shareable install links, and update-loop fix](docs/COMMUNITY-INSTALL.md).
+| I want to… | Read this |
+| --- | --- |
+| Install Moggcord | [Installation and supported platforms](docs/getting-started/installation.md) |
+| Set up plugins and themes | [First steps](docs/getting-started/first-steps.md) |
+| Install a community upload on my own computer | [Connect the community website](docs/community/setup.md) |
+| Fix a failed update or a broken client | [Troubleshooting](docs/troubleshooting/README.md) |
+| Write a plugin | [Plugin development](docs/developers/plugin-development.md) |
+| Understand the project | [Architecture](docs/architecture/README.md) |
 
-Moggcord is a fork of [Equicord](https://github.com/Equicord/Equicord), which itself builds on top of [Vencord](https://github.com/Vendicated/Vencord). We stripped out the obfuscation, cleaned things up, added our own stuff, and kept what works. No bloat, no nonsense.
+## Downloads
 
----
+Choose your operating system on the [latest release](https://github.com/caedesdev/moggcord/releases/latest). Opening the installer shows **Install**, **Repair** and **Uninstall** before changing Discord files.
 
-## What's in it
-
-The standard bundle includes **FakeVoice, ExportDM, CustomProfile and TokenImporter**, plus internal functions required by Moggcord. Other plugins can be added separately. See [Included plugins](docs/PLUGINS.md) for defaults and community plugin support.
-
-- **Faster startup** — no obfuscation means the client loads noticeably quicker and sits lighter on your CPU and RAM.
-- **Auto-updates** — checks for updates in the background on launch and applies them silently. You don't have to think about it.
-- **Plugin support** — compatible with the existing plugin ecosystem. Install community plugins straight from Git links.
-- **Better audio** — hardware-optimized voice modules for cleaner, louder audio out of the box.
-- **Custom styling** — our own visual tweaks on top of the base: smoother UI, custom icons, a few quality-of-life details here and there.
-
----
-
-## Installation
-
-Download the matching installer from [GitHub releases](https://github.com/caedesdev/moggcord/releases/latest), open it, choose Install Moggcord and select your Discord installation. Repair and Uninstall are available in the same setup screen.
-
-| Platform | Download | Status |
+| Platform | Package | Support |
 | --- | --- | --- |
-| Windows x64 | `Moggcord-Installer.exe` | Existing installer |
-| macOS Intel and Apple Silicon | `Moggcord-Installer-macOS.dmg` | Initial preview |
-| Linux x64 | `Moggcord-Installer-Linux.AppImage` or `.deb` | Initial preview |
+| Windows x64 | `Moggcord-Installer.exe` | Windows installer |
+| macOS Intel and Apple Silicon | `Moggcord-Installer-macOS.dmg` | Preview; not Apple notarized |
+| Linux x64 | `Moggcord-Installer-Linux.AppImage` or `.deb` | Preview; official Discord DEB/TAR installations |
 
-See the [desktop installation guide](./docs/DESKTOP-INSTALLERS.md) for requirements, macOS approval and the supported Linux installations. The new platforms have native packaging and ASAR restoration checks; live Discord behavior and individual plugins still need real-machine testing.
+The selected Discord channel closes and restarts during installation. Stable, Canary and PTB are separate installations. See the [Windows](docs/getting-started/windows.md), [macOS](docs/getting-started/macos.md) and [Linux](docs/getting-started/linux.md) guides for requirements and custom locations. There is no Android installer in this release line.
 
----
+## Plugins, themes and updates
 
-## Building from source
+Both built-in plugin collections are included. **FakeVoice, ExportDM, CustomProfile and TokenImporter** are the four default-enabled plugins on fresh installations; other available plugins can be enabled individually. Saved choices and platform restrictions affect what is active. See [Plugins and defaults](docs/guides/plugins.md).
 
-If you want to dig into the code or build it yourself:
+Themes can be installed locally or through a connected community website. Community installation needs a connector on **each visitor's computer**. It installs into that visitor's selected channel, not the website owner's PC. See [Community downloads and sharing](docs/community/installing-and-sharing.md).
 
-**You'll need:**
-- [Git](https://git-scm.com/download)
-- [Node.js (LTS)](https://nodejs.dev/en/)
-- [pnpm](https://pnpm.io/installation) — `npm install -g pnpm`
+The client updater verifies the downloaded desktop files before applying them. Since 1.18.43 it reports download progress, supports cancellation and uses a smaller desktop-only archive when available. See [Updates and repair](docs/guides/updates-and-repair.md).
 
-```bash
+## Development
+
+Use Node.js 24 and the pnpm version pinned in [package.json](package.json).
+
+```sh
 git clone https://github.com/caedesdev/moggcord.git
 cd moggcord
-pnpm install
-pnpm build
+pnpm install --frozen-lockfile
+pnpm buildStandalone
 ```
 
-Then inject into Discord:
+Building does not inject the result into Discord. Read [Development setup](docs/developers/setup.md) before installing a local build. Installer packaging, tests and release publication have separate [maintainer instructions](docs/developers/releasing.md).
 
-```bash
-pnpm inject
-```
+## Credits and license
 
-To go back to stock Discord:
+Moggcord is a fork of [Equicord](https://github.com/Equicord/Equicord), which builds on [Vencord](https://github.com/Vendicated/Vencord). Their source, APIs and contributors are a substantial part of this project. Existing copyright and license notices remain in the source.
 
-```bash
-pnpm uninject
-```
-
----
-
-## Credits
-
-Moggcord wouldn't exist without [Equicord](https://github.com/Equicord/Equicord) and [Vencord](https://github.com/Vendicated/Vencord). A huge chunk of what makes this work comes directly from their projects. We're fully aware of that and genuinely appreciate everything they've built — we're just taking it in a different direction. Big thanks to everyone who's contributed to both.
-
----
-
-## Disclaimer
-
-*Moggcord is not affiliated with Discord Inc. in any way.*
-Using third-party clients is technically against Discord's Terms of Service. You're doing this at your own risk.
+The project is licensed under [GPL-3.0](LICENSE). Moggcord is not affiliated with Discord. Read [Trust and privacy](docs/guides/trust-and-privacy.md) before installing client modifications or community code.

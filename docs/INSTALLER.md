@@ -1,48 +1,12 @@
-# Moggcord Installer
+# Moggcord installer
 
-Download the current [Windows installer](https://github.com/caedesdev/moggcord/releases/latest/download/Moggcord-Installer.exe). Opening it shows three actions before any Discord files are changed:
+The installer documentation is now organized by task and platform:
 
-- **Install Moggcord** adds Moggcord to the Discord installation you choose. If Moggcord is already installed there, Install leaves it untouched and offers Repair.
-- **Repair Moggcord** restores Moggcord files on the selected installation and preserves your settings, plugins and themes.
-- **Uninstall Moggcord** removes Moggcord from the selected installation and keeps its saved settings.
+- [Installation overview](getting-started/installation.md)
+- [Windows](getting-started/windows.md), [macOS](getting-started/macos.md) and [Linux](getting-started/linux.md)
+- [Updates and repair](guides/updates-and-repair.md)
+- [Installer troubleshooting](troubleshooting/installation.md)
+- [Build and publish installers](developers/releasing.md)
+- [Historical installer notes](releases/legacy-notes.md)
 
-After choosing an action, select Discord, PTB, Canary or Development and press the action button to continue. The selected Discord closes and restarts during the operation. A detected third-party mod needs explicit replacement confirmation before Install can proceed.
-
-Installer notifications appear at the top right on dark surfaces with green success, red error, yellow warning and blue information accents. They animate in and out and automatically disappear after five seconds. Hovering or keyboard focus pauses the timer. Each notification includes an icon, heading, details and a dismiss button. The result screen's **View details** button can show the result notification again. Dismissing a notification never starts an operation or bypasses a required replacement confirmation.
-
-For a custom location, use **Custom path** below the installation list. Press **Browse…** to select a folder, or paste a Discord installation folder, an app folder, its resources folder or the full path to Discord.exe, then press **Use path**. A versioned installation root resolves to the newest valid numeric app version. The selected target shows the original icon extracted from its Discord executable.
-
-Install, Repair and Uninstall close only matching Discord processes inside the selected installation directory. Protected DiscordSystemHelper processes are not shutdown targets. If Windows still refuses to close the selected Discord, the error includes the process ID and Windows error details.
-
-The version in the footer is the actual installer version, including when offline. The Inter variable font is embedded for consistent typography; its [SIL Open Font License](../installer-src/fonts/Inter.LICENSE.txt) is included with the font and embedded in the executable.
-
-## Development checks
-
-Use Node 24, pnpm and the .NET 8 SDK on Windows:
-
-```powershell
-pnpm test:installer
-dotnet run --project scripts/tests/installer-native --configuration Release
-pnpm buildStandalone
-.\build-installer.ps1
-```
-
-The native tests use temporary resources fixtures and an isolated file cache. They check existing-install skips, third-party mod protection, path resolution and invalid targets. Shutdown checks start temporary test processes, close only the selected fixture and verify that an unrelated installation and helper remain running. They do not install into or stop a real Discord installation. The packaging script also checks the embedded desktop version and file fingerprints using the installer's read-only `--verify-bundle` command.
-
-## Window dragging
-
-Version 1.18.33 restores dragging from Discord's title bar while keeping buttons, inputs, dialogs and the rest of the application outside the window drag region. Fully restart Discord after installing or repairing so the main-process stylesheet is refreshed.
-
-Version 1.18.34 adds local FakeVoice mute/deafen indicators in your own voice participant row and a highlighted account-panel switch. Mode changes show an animated dark notification at the top right for three seconds. The real audio controls and other participants' indicators are unchanged. Fully restart Discord after updating to load the new display patch.
-
-Version 1.18.35 restores the Vencord plugins alongside the Moggcord collection, including their native helpers and required profile-section API. The plugin page initially shows both collections and offers a Vencord filter. The four default plugins remain enabled; other plugins are available to enable individually. Fully restart Discord after updating or repairing to load the expanded catalog.
-
-Version 1.18.37 removes the automatic microphone mute introduced in 1.18.36. Fake Deafen again leaves both real audio controls unchanged and only changes the advertised voice flags and local fake-status display. Existing microphone mute is not cleared automatically. Fully restart Discord after updating or repairing.
-
-Version 1.18.38 updates notifications for Discord's current toast format so settings imports, updates and other plugin messages show readable text instead of an empty notification. Import success explains the required full restart; invalid backups show an error. Update settings retain a visible progress or result message and explain when to restart, retry or use the latest installer with Repair. An unsuccessful download does not start installation or restart Discord. Fully restart Discord after updating or repairing to load the notification fix.
-
-Version 1.18.39 previews plugin settings before importing. It separates saved entries, enabled choices, internal helpers, missing or platform-specific plugins and the expected visible enabled count. A backup contains configuration, not plugin source files: missing entries are retained but cannot run until compatible plugin code is installed separately. Existing bundled plugins need no additional installation. Review the list, choose Import settings and then Restart Discord or Restart later. Cancel writes nothing; failed imports do not restart Discord. Disabled entries stay disabled and other plugin choices are preserved.
-
-Version 1.18.40 refines the import review with a dark violet layout, readable plugin names, compact expandable lists, count badges and a persistent action footer. Long names have full-name tooltips. Import completion is shown inside the dialog without a duplicate toast covering the header. Standalone QuickCSS imports and import failures retain their notification feedback. Fully restart Discord after updating or repairing to load the refreshed review.
-
-Version 1.18.41 restores server settings when BetterSettings is enabled on current Discord Canary. It recognizes Discord's updated focus component and keeps settings content visible if the component cannot be found. The relaunch UI guard now waits until the document is ready, and message send/edit hooks support Discord's current callbacks. Fully close Discord, including its tray process, and reopen it after updating or repairing. Plugin choices and saved settings are preserved.
+[Documentation home](README.md)

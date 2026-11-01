@@ -1,20 +1,5 @@
-## Moggcord 1.18.43
+# Moggcord 1.18.43 release notes
 
-### Updater recovery
+The notes have moved to [releases/1.18.43.md](releases/1.18.43.md).
 
-- Update downloads now show actual transferred bytes, a percentage and a progress bar.
-- Downloads can be cancelled and retried without restarting Discord.
-- A download that receives no data for 30 seconds stops with an explanation. Release checks and archive extraction also have time limits.
-- Update files stream to a temporary file instead of keeping the complete download in memory. Incomplete downloads are removed and are never installed.
-- Future updates use a smaller, verified `moggcord-update.zip` containing only the desktop code. The complete installer bundle remains available for installation and repair.
-- Concurrent update requests share one download. Reopening the updater shows the current download progress.
-
-If an older version is already stuck on “Installing…”, fully close Discord and use the latest installer’s **Repair** action once to receive this fix. The old updater cannot change its running code while its download is stuck.
-
-### Downloads
-
-- **Windows x64:** `Moggcord-Installer.exe`
-- **macOS Intel / Apple Silicon:** `Moggcord-Installer-macOS.dmg` (preview, ad hoc signed, not Apple notarized)
-- **Linux x64:** `Moggcord-Installer-Linux.AppImage` or `Moggcord-Installer-Linux.deb` (preview; official Discord DEB/TAR installations)
-
-All three installers are built and verified on their target operating systems before publication. Checksums and verification reports are attached to this release.
+[Release history](releases/README.md) · [Documentation home](README.md)

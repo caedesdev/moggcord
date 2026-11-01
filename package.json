@@ -15,6 +15,7 @@
     "license": "GPL-3.0-or-later",
     "author": "Equicord",
     "scripts": {
+        "docs:check": "node scripts/check-docs.mjs",
         "test:platform-installer": "node --test scripts/tests/platform-installer.test.mjs scripts/tests/unix-updater.test.mjs",
         "build:platform-installer": "node scripts/build/platform-installer.mjs",
         "community:setup": "node scripts/community/setup.mjs",
