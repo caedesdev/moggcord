@@ -11,6 +11,7 @@ import { dirname, join, resolve } from "node:path";
 import vm from "node:vm";
 import { createRequire } from "node:module";
 import { build } from "esbuild";
+import { zipSync } from "fflate";
 import { buildFiles, writeBuildInfo } from "../lib/build-info.mjs";
 
 const require = createRequire(import.meta.url);
@@ -22,7 +23,7 @@ const compiled = await build({
     } }], external: ["electron", "original-fs"]
 });
 
-for (const broken of [false, true]) test(`updater ${broken ? "rejects the stale release without reporting success" : "replaces the active patcher directory and clears the repeated update"}`, async t => {
+for (const platform of ["win32", "darwin", "linux"]) for (const broken of [false, true]) test(`${platform} updater ${broken ? "rejects the stale release without reporting success" : "replaces the active patcher directory and clears the repeated update"}`, async t => {
     const directory = fs.mkdtempSync(join(tmpdir(), "moggcord-updater-test-"));
     t.after(() => { assert.equal(dirname(resolve(directory)), resolve(tmpdir())); assert(directory.includes("moggcord-updater-test-")); fs.rmSync(directory, { recursive: true, force: true }); });
     const source = join(directory, "release"), destination = join(directory, "active"), mirror = join(directory, "mirror");
@@ -32,8 +33,9 @@ for (const broken of [false, true]) test(`updater ${broken ? "rejects the stale 
         writeBuildInfo(folder, folder === source && !broken ? "1.18.24" : "1.18.23");
     }
     const handlers = new Map();
+    const archive = zipSync(Object.fromEntries([...buildFiles, "build-info.json"].map(file => [file, fs.readFileSync(join(source, file))])));
     const replacements = {
-        "@main/utils/http": { fetchJson: async () => ({ tag_name: "1.18.24", assets: [{ name: "moggcord-dist.zip", browser_download_url: "https://github.com/caedesdev/moggcord/releases/download/1.18.24/moggcord-dist.zip" }] }), fetchBuffer: async () => Buffer.from("fixture zip") },
+        "@main/utils/http": { fetchJson: async () => ({ tag_name: "1.18.24", assets: [{ name: "moggcord-dist.zip", browser_download_url: "https://github.com/caedesdev/moggcord/releases/download/1.18.24/moggcord-dist.zip" }] }), fetchBuffer: async () => archive },
         "@shared/vencordUserAgent": { VENCORD_USER_AGENT: "test" },
         "@shared/IpcEvents": { IpcEvents: { GET_REPO: "repo", GET_UPDATES: "check", UPDATE: "download", BUILD: "apply" } },
         "../moggcordLoader": { getPatcherInstallDir: () => destination, getMoggcordLocalDistDir: () => mirror },
@@ -46,7 +48,8 @@ for (const broken of [false, true]) test(`updater ${broken ? "rejects the stale 
             fs.cpSync(source, extracted, { recursive: true }); callback(null);
         } }
     };
-    const context = { require: name => replacements[name] ?? require(name), exports: {}, module: { exports: {} }, __dirname: join(directory, "wrong-bundle-directory"), console: { log() {}, warn() {}, error() {} }, setTimeout, clearTimeout, Buffer, process };
+    const testProcess = new Proxy(process, { get: (target, property) => property === "platform" ? platform : Reflect.get(target, property) });
+    const context = { require: name => replacements[name] ?? require(name), exports: {}, module: { exports: {} }, __dirname: join(directory, "wrong-bundle-directory"), console: { log() {}, warn() {}, error() {} }, setTimeout, clearTimeout, Buffer, process: testProcess };
     vm.runInNewContext(compiled.outputFiles[0].text, context);
     assert.equal((await handlers.get("check")()).value.length, 1);
     assert.equal((await handlers.get("download")()).value, true);

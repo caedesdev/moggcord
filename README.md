@@ -7,7 +7,7 @@
 
   [![Discord](https://img.shields.io/badge/Discord-Join%20us-5865F2?logo=discord&logoColor=white)](https://discord.gg/moggcord)
   [![License](https://img.shields.io/github/license/caedesdev/moggcord?color=a855f7)](./LICENSE)
-  [![Platform](https://img.shields.io/badge/platform-Windows-3b82f6.svg?logo=windows&logoColor=white)](https://github.com/caedesdev/moggcord)
+  [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-3b82f6.svg)](./docs/DESKTOP-INSTALLERS.md)
   [![Website](https://img.shields.io/badge/website-moggcord.online-5865F2?logo=googlechrome&logoColor=white)](https://moggcord.online)
 
   ---
@@ -33,11 +33,17 @@ The standard bundle includes **FakeVoice, ExportDM, CustomProfile and TokenImpor
 
 ---
 
-## Installation (Windows)
+## Installation
 
-1. Download [**`moggcord-install.ps1`**](./moggcord-install.ps1)
-2. Right-click → **Run with PowerShell**
-3. Follow the steps, restart Discord, done.
+Download the matching installer from [GitHub releases](https://github.com/caedesdev/moggcord/releases/latest), open it, choose Install Moggcord and select your Discord installation. Repair and Uninstall are available in the same setup screen.
+
+| Platform | Download | Status |
+| --- | --- | --- |
+| Windows x64 | `Moggcord-Installer.exe` | Existing installer |
+| macOS Intel and Apple Silicon | `Moggcord-Installer-macOS.dmg` | Initial preview |
+| Linux x64 | `Moggcord-Installer-Linux.AppImage` or `.deb` | Initial preview |
+
+See the [desktop installation guide](./docs/DESKTOP-INSTALLERS.md) for requirements, macOS approval and the supported Linux installations. The new platforms have native packaging and ASAR restoration checks; live Discord behavior and individual plugins still need real-machine testing.
 
 ---
 

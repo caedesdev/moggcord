@@ -1,12 +1,12 @@
 # Install community uploads in Moggcord
 
-The website can install a selected plugin or theme, enable it, and restart the Discord channel you chose. This connection runs on each user's own Windows PC. The website server never writes into its own filesystem to pretend a visitor's client was updated.
+The website can install a selected plugin or theme, enable it, and restart the Discord channel you chose. This connection runs on each user's own Windows, macOS or Linux computer. The website server never writes into its own filesystem to pretend a visitor's client was updated.
 
 ## One-time setup
 
 Install Moggcord in your chosen Discord channel first. The connector checks the actual Moggcord loader and refuses a channel that uses Vencord or unmodified Discord. Stable, Canary, PTB, and Development are separate targets.
 
-Requirements: Windows, Node.js 24, Git, and pnpm 10. Keep this checkout in place after setup; it supplies the plugin compiler. Use a separate checkout if your usual checkout has personal changes.
+Requirements: a supported Discord desktop installation, Node.js 24, Git, and pnpm 10. Keep this checkout in place after setup; it supplies the plugin compiler. Use a separate checkout if your usual checkout has personal changes. On macOS and Linux, install Moggcord with the [desktop installer](DESKTOP-INSTALLERS.md) first. Linux Flatpak and Snap are not supported by this installer.
 
 ```powershell
 git clone https://github.com/caedesdev/moggcord.git moggcord-community
@@ -21,7 +21,7 @@ Use `--channel stable`, `--channel ptb`, or `--channel development` for another 
 
 Setup builds this checkout, repairs Moggcord in the chosen channel, and restarts that channel once. This installs the corrected internal version and removes the Hub. It then registers the `moggcord://` link handler and a per-user startup entry. It needs no administrator account. It records the selected website, checkout, channel, and settings directory in `%APPDATA%\MoggcordCommunity\config.json`. Your current Moggcord settings are preserved.
 
-The connector starts immediately and on Windows sign-in. You can also start it manually from the checkout:
+The connector starts immediately and when you sign in. macOS stores configuration in `~/Library/Application Support/Moggcord/community`, creates a per-user LaunchAgent and a small application for installation links. Linux respects `XDG_CONFIG_HOME` and `XDG_DATA_HOME`, creates per-user desktop and autostart entries, and registers the `moggcord` link handler. The same setup commands work in Terminal; replace the Windows example for `--data-dir` with your own absolute path if needed. You can also start it manually from the checkout:
 
 ```powershell
 pnpm community:start
@@ -97,3 +97,5 @@ reg delete "HKCU\Software\Classes\moggcord" /f
 ```
 
 This leaves installed themes, plugins, and your Moggcord account settings in place.
+
+On Linux, remove only `moggcord-community.desktop` from your user `applications` and `autostart` directories and stop its Node process. On macOS, run `launchctl bootout gui/$(id -u)/dev.moggcord.community`, remove `~/Library/LaunchAgents/dev.moggcord.community.plist`, and remove the generated `Moggcord Community.app` inside the community configuration directory. Keep settings and source files if you intend to reconnect later.

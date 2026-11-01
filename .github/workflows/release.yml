@@ -1,6 +1,12 @@
 name: Build & Release Moggcord
 
 on:
+  workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish a release after all three platform builds pass
+        type: boolean
+        default: false
   push:
     tags:
       - "v*"
@@ -11,6 +17,8 @@ permissions:
 jobs:
   build:
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
 
     steps:
       - name: Checkout
@@ -61,18 +69,20 @@ jobs:
           dotnet run --project scripts/tests/installer-native --configuration Release
 
       - name: Create version metadata
+        id: metadata
         shell: pwsh
         run: |
           node scripts/build/catalog-stats.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $catalog = Get-Content "dist\plugin-catalog.json" -Raw | ConvertFrom-Json
-          $tagVersion = "${{ github.ref_name }}" -replace '^v',''
           $pkgVersion = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tagVersion = if ("${{ github.ref }}".StartsWith('refs/tags/')) { "${{ github.ref_name }}" -replace '^v','' } else { $pkgVersion }
           if ($tagVersion -ne $pkgVersion) {
             Write-Error "package.json version ($pkgVersion) must match tag (v$tagVersion). Bump package.json before releasing."
             exit 1
           }
           $version = $pkgVersion
+          "version=$version" | Out-File -FilePath $env:GITHUB_OUTPUT -Append -Encoding utf8
           $meta = [ordered]@{
             version = $version
             pluginCatalog = $catalog
@@ -88,7 +98,7 @@ jobs:
       - name: Validate release assets
         run: node scripts/build/validate-release.mjs
         env:
-          GITHUB_REF_NAME: ${{ github.ref_name }}
+          GITHUB_REF_NAME: v${{ steps.metadata.outputs.version }}
 
       - name: Create release checksums
         shell: pwsh
@@ -100,16 +110,100 @@ jobs:
           }
           $lines | Set-Content -LiteralPath "release\installer\SHA256SUMS.txt" -Encoding ascii
 
-      - name: Upload release assets
-        uses: softprops/action-gh-release@v2
+      - name: Stage Windows assets
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path release/release-assets -Force | Out-Null
+          Copy-Item release/installer/Moggcord-Installer.exe,release/installer/moggcord-dist.zip,release/installer/version.json,dist/desktop.asar,dist/moggcord.asar,release/installer/installer-verification.json -Destination release/release-assets
+
+      - name: Retain Windows assets
+        uses: actions/upload-artifact@v4
         with:
-          files: |
-            release/installer/Moggcord-Installer.exe
-            release/installer/moggcord-dist.zip
-            release/installer/version.json
-            dist/desktop.asar
-            dist/moggcord.asar
-            release/installer/SHA256SUMS.txt
-            release/installer/installer-verification.json
+          name: release-windows
+          path: release/release-assets/*
+          if-no-files-found: error
+
+  desktop:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            platform: linux
+          - os: macos-14
+            platform: darwin
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 10.30.3
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm buildStandalone
+      - run: pnpm build:platform-installer
+      - name: Test native patching and restoration
+        shell: bash
+        run: |
+          MOGGCORD_NATIVE_INSTALLER="$PWD/.codex-temp/platform-installer/${{ matrix.platform }}/resources/equilotl" pnpm test:platform-installer
+          pnpm test:installer
+          node --test scripts/tests/community.test.mjs scripts/tests/updater.test.mjs
+      - name: Package native installer
+        shell: bash
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: pnpm exec electron-builder --projectDir "$PWD/.codex-temp/platform-installer/${{ matrix.platform }}" --config "$PWD/installer-desktop/electron-builder.cjs" --publish never
+      - name: Verify packaged Linux installer
+        if: matrix.platform == 'linux'
+        shell: bash
+        run: |
+          xvfb-run -a release/platform-installers/linux-unpacked/moggcord-installer --no-sandbox --verify-package > release/platform-installers/installer-verification-linux.json
+          test -s release/platform-installers/Moggcord-Installer-Linux.AppImage
+          test -s release/platform-installers/Moggcord-Installer-Linux.deb
+      - name: Verify packaged macOS installer
+        if: matrix.platform == 'darwin'
+        shell: bash
+        run: |
+          "release/platform-installers/mac-universal/Moggcord Installer.app/Contents/MacOS/Moggcord Installer" --verify-package > release/platform-installers/installer-verification-macos.json
+          codesign --verify --deep --strict "release/platform-installers/mac-universal/Moggcord Installer.app"
+          hdiutil verify release/platform-installers/Moggcord-Installer-macOS.dmg
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}
+          path: |
+            release/platform-installers/*.dmg
+            release/platform-installers/*.AppImage
+            release/platform-installers/*.deb
+            release/platform-installers/installer-verification-*.json
+          if-no-files-found: error
+
+  publish:
+    needs: [build, desktop]
+    if: startsWith(github.ref, 'refs/tags/') || inputs.publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          merge-multiple: true
+          path: release-assets
+      - name: Create release checksums
+        run: |
+          cd release-assets
+          sha256sum * > ../SHA256SUMS.txt
+          mv ../SHA256SUMS.txt .
+      - uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.build.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          name: Moggcord ${{ needs.build.outputs.version }}
+          body_path: docs/RELEASE-1.18.42.md
+          files: release-assets/*
+          fail_on_unmatched_files: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

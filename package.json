@@ -1,7 +1,7 @@
 {
     "name": "moggcord",
     "private": "true",
-    "version": "1.18.41",
+    "version": "1.18.42",
     "description": "Everything Discord doesn't build, we create",
     "main": "dist/js/main.js",
     "homepage": "https://github.com/caedesdev/moggcord",
@@ -15,6 +15,8 @@
     "license": "GPL-3.0-or-later",
     "author": "Equicord",
     "scripts": {
+        "test:platform-installer": "node --test scripts/tests/platform-installer.test.mjs scripts/tests/unix-updater.test.mjs",
+        "build:platform-installer": "node scripts/build/platform-installer.mjs",
         "community:setup": "node scripts/community/setup.mjs",
         "community:start": "node scripts/community/bridge.mjs",
         "test:community": "node --test scripts/tests/community.test.mjs scripts/tests/release.test.mjs scripts/tests/updater.test.mjs scripts/tests/developer-team.test.mjs",

@@ -7,10 +7,11 @@ import { IpcEvents } from "@shared/IpcEvents";
 import { VENCORD_USER_AGENT } from "@shared/vencordUserAgent";
 import { execFile } from "child_process";
 import { app,ipcMain } from "electron";
-import { cpSync, existsSync, mkdtempSync,readdirSync, rmSync, writeFileSync } from "original-fs";
+import { cpSync, existsSync, mkdtempSync,readFileSync,readdirSync, rmSync, writeFileSync } from "original-fs";
 import { dirname,join, resolve } from "path";
 
 import { verifyBuild } from "../../../scripts/lib/build-info.mjs";
+import { extractUpdate } from "../../../scripts/lib/extract-update.mjs";
 import { getMoggcordLocalDistDir,getPatcherInstallDir } from "../moggcordLoader";
 import { markPendingRelaunch } from "../postInstallRelaunch";
 import { serializeErrors } from "./common";
@@ -160,8 +161,10 @@ async function applyUpdates(): Promise<boolean> {
     const copied: Array<{ destination: string; backup: string; }> = [];
 
     try {
-        const psExtract = `Expand-Archive -LiteralPath '${psQuote(zipPath)}' -DestinationPath '${psQuote(tmpExtract)}' -Force`;
-        await runPowerShell(psExtract);
+        if (process.platform === "win32") {
+            const psExtract = `Expand-Archive -LiteralPath '${psQuote(zipPath)}' -DestinationPath '${psQuote(tmpExtract)}' -Force`;
+            await runPowerShell(psExtract);
+        } else extractUpdate(readFileSync(zipPath), tmpExtract);
 
         const sourceDir = resolveExtractRoot(tmpExtract);
         verifyBuild(sourceDir, pendingVersion);

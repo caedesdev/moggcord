@@ -4,11 +4,12 @@
 
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "original-fs";
 import { basename, dirname, join } from "path";
+import { desktopPaths } from "../../scripts/lib/desktop-paths.mjs";
 
 const MIN_VALID_ASAR_BYTES = 1_000_000;
 
 export function getMoggcordLocalDistDir() {
-    return join(process.env.LOCALAPPDATA || "", "Moggcord", "dist", "desktop");
+    return desktopPaths().distDir;
 }
 
 /** Directory containing patcher.js / renderer.js (survives sourceURL-only eval contexts). */
@@ -32,7 +33,7 @@ export function getPatcherCandidates(primaryInstallDir: string): string[] {
     return [
         join(primaryInstallDir, "patcher.js"),
         join(localDist, "patcher.js"),
-        join(process.env.LOCALAPPDATA || "", "Moggcord", "dist", "patcher.js"),
+        join(desktopPaths().localDir, "dist", "patcher.js"),
     ];
 }
 
@@ -55,8 +56,6 @@ const fs = require("fs");
 const path = require("path");
 const candidates = [
 ${lines}
-    path.join(process.env.LOCALAPPDATA || "", "Moggcord", "dist", "desktop", "patcher.js"),
-    path.join(process.env.LOCALAPPDATA || "", "Moggcord", "dist", "patcher.js"),
 ];
 const resolved = candidates.find(p => { try { return fs.existsSync(p); } catch { return false; } });
 if (!resolved) {

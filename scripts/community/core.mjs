@@ -14,6 +14,7 @@ import ts from "typescript";
 import { buildFiles, verifyBuild } from "../lib/build-info.mjs";
 import pluginPackage from "../../web/plugin-package.js";
 import { pluginBundleKind } from "../lib/plugin-bundle.mjs";
+import { discoverDesktops, startDesktop, stopDesktop } from "../lib/discord-desktop.mjs";
 
 export const bridgePort = 6469;
 export const bridgeName = "moggcord-community";
@@ -89,6 +90,12 @@ export async function fetchManifest(input, origin, fetcher = fetch) {
 }
 
 export async function findClient(channel, localAppData = process.env.LOCALAPPDATA) {
+    if (process.platform !== "win32") {
+        if (!channelNames[channel]) throw new Error("Choose stable, canary, ptb, or development.");
+        const client = discoverDesktops().find(target => target.channel === channel && target.installed);
+        if (!client) throw new Error(`No Moggcord installation was found in ${channelNames[channel]}. Install Moggcord in this channel first.`);
+        return client;
+    }
     if (!channelNames[channel] || !localAppData) throw new Error("Choose stable, canary, ptb, or development.");
     const base = join(localAppData, channelNames[channel]);
     const versions = (await readdir(base)).filter(name => /^app-\d+\.\d+\.\d+$/.test(name))
@@ -183,6 +190,7 @@ export const defaultBuild = sourceRoot => run(process.execPath, ["scripts/build/
 }).catch(() => { throw new Error("Moggcord could not build this plugin. Your installed version was kept. Check the plugin source."); });
 
 export async function stopClient(client) {
+    if (client.platform && client.platform !== "win32") return stopDesktop(client);
     const command = "$base=$env:MOGGCORD_COMMUNITY_CLIENT_BASE+'\\'; $items=@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -and $_.ExecutablePath.StartsWith($base,[StringComparison]::OrdinalIgnoreCase) -and $_.Name -like 'Discord*.exe'}); foreach($item in $items){ $p=Get-Process -Id $item.ProcessId -ErrorAction SilentlyContinue; if($p){[void]$p.CloseMainWindow()} }; Start-Sleep -Milliseconds 1000; foreach($item in $items){Stop-Process -Id $item.ProcessId -Force -ErrorAction SilentlyContinue}; Start-Sleep -Milliseconds 100; $remaining=@(Get-CimInstance Win32_Process | Where-Object {$_.ExecutablePath -and $_.ExecutablePath.StartsWith($base,[StringComparison]::OrdinalIgnoreCase) -and $_.Name -like 'Discord*.exe'}); if($remaining.Count){throw 'Discord could not be closed. Please close the selected channel and try again.'}; exit 0";
     await run("powershell.exe", ["-NoProfile", "-NonInteractive", "-Command", command], {
         windowsHide: true, timeout: 20_000, env: { ...process.env, MOGGCORD_COMMUNITY_CLIENT_BASE: client.base }
@@ -190,6 +198,7 @@ export async function stopClient(client) {
 }
 
 export async function startClient(client) {
+    if (client.platform && client.platform !== "win32") return startDesktop(client);
     const child = spawn(client.executable, [], { detached: true, stdio: "ignore", windowsHide: true });
     await new Promise((resolvePromise, reject) => { child.once("spawn", resolvePromise); child.once("error", reject); });
     child.unref();

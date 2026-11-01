@@ -9,6 +9,7 @@ import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
 import { bridgeName, bridgePort, fetchManifest, installedEntries, installEntry, manifestAddress, parseLink, trustedOrigin } from "./core.mjs";
+import { desktopPaths } from "../lib/desktop-paths.mjs";
 
 export function createBridge(config, dependencies = {}) {
     const origin = trustedOrigin(config.origin);
@@ -71,7 +72,7 @@ export function createBridge(config, dependencies = {}) {
 
 if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
     const value = name => process.argv[process.argv.indexOf(name) + 1];
-    const configFile = process.argv.includes("--config") ? value("--config") : join(process.env.APPDATA ?? "", "MoggcordCommunity", "config.json");
+    const configFile = process.argv.includes("--config") ? value("--config") : process.platform === "win32" ? join(process.env.APPDATA ?? "", "MoggcordCommunity", "config.json") : join(desktopPaths().communityDir, "config.json");
     const config = JSON.parse(readFileSync(configFile, "utf8"));
     const input = process.argv.includes("--link") ? parseLink(value("--link"), config.origin) : null;
     let running = false;

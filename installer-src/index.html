@@ -597,6 +597,7 @@
       if (!busy) return;
       try {
         const status = window.moggcord.getInjectStatus();
+        if (status.state === 'running' && typeof status.percent === 'number') setLoading(true, status.label || 'Preparing…', status.percent);
         if (status.state === 'done') finishOperation(true, status.result);
         else if (status.state === 'error') finishOperation(false, status.error || 'The operation failed. Please try again.');
       } catch (error) {
