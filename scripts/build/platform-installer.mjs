@@ -30,7 +30,8 @@ await chmod(join(resources, "equilotl"), 0o755);
 await writeFile(join(resources, "metadata.json"), JSON.stringify({ version: pkg.version, platform, installerSha256: upstream[platform].sha256 }));
 await copyFile(join(root, "installer-src", "default-settings.json"), join(resources, "default-settings.json"));
 await writeFile(join(destination, "package.json"), JSON.stringify({ name: "moggcord-platform-installer", productName: "Moggcord Installer", version: pkg.version, description: "Install, repair and uninstall Moggcord in Discord Desktop.", main: "main.cjs", homepage: pkg.homepage, repository: pkg.repository, author: "Moggcord contributors", license: "GPL-3.0-or-later" }, null, 2));
-await build({ entryPoints: [join(root, "installer-desktop", "main.cjs")], outfile: join(destination, "main.cjs"), bundle: true, platform: "node", format: "cjs", target: "node22", external: ["electron", "original-fs"] });
+await build({ entryPoints: [join(root, "installer-desktop", "main.cjs")], outfile: join(destination, "main.cjs"), bundle: true, platform: "node", format: "cjs", target: "node22", external: ["electron", "original-fs"],
+    banner: { js: 'const __moggcord_import_meta_url = require("node:url").pathToFileURL(__filename).href;' }, define: { "import.meta.url": "__moggcord_import_meta_url" } });
 await copyFile(join(root, "installer-desktop", "preload.cjs"), join(destination, "preload.cjs"));
 const ico = await readFile(join(root, "installer-src", "icon.ico"));
 const frames = Array.from({ length: ico.readUInt16LE(4) }, (_, index) => {

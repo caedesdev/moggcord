@@ -3,7 +3,8 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
-import { access, mkdir, readFile, writeFile, cp, rm } from "node:fs/promises";
+import { access, chmod, mkdir, readFile, writeFile, cp, rm } from "node:fs/promises";
+import { createHash } from "node:crypto";
 import { constants, existsSync } from "node:fs";
 import { execFile } from "node:child_process";
 import { userInfo } from "node:os";
@@ -18,10 +19,11 @@ const quote = value => `'${value.replaceAll("'", "'\\''")}'`;
 
 export function createDesktopInstaller({ platform = process.platform, resources, version, paths = desktopPaths(platform), dependencies = {} }) {
     const resolveClient = dependencies.resolve ?? (input => resolveDesktop(input, platform));
+    const command = dependencies.execute ?? execute;
     let state = { state: "idle" };
     const status = (label, percent) => { state = { state: "running", label, percent }; };
     const runInstaller = async (action, target) => {
-        const binary = join(resources, "equilotl");
+        let binary = join(resources, "equilotl");
         const variables = {
             EQUICORD_USER_DATA_DIR: paths.dataDir,
             EQUICORD_DIRECTORY: join(paths.distDir, "patcher.js"),
@@ -29,14 +31,23 @@ export function createDesktopInstaller({ platform = process.platform, resources,
         };
         const args = [action === "uninstall" ? "-uninstall" : "-install", "-location", target.path];
         let writable = true;
-        try { await access(target.resources, constants.W_OK); } catch { writable = false; }
-        if (writable) return execute(binary, args, { env: { ...process.env, ...variables }, timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
+        try { await (dependencies.access ?? access)(target.resources, constants.W_OK); } catch { writable = false; }
+        if (writable) return command(binary, args, { env: { ...process.env, ...variables }, timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
         status("Waiting for permission to update this Discord installation…", 65);
-        const environment = Object.entries({ ...variables, SUDO_USER: userInfo().username, SUDO_UID: String(process.getuid()), SUDO_GID: String(process.getgid()) }).map(([key, value]) => `${key}=${value}`);
-        if (platform === "linux") return execute("pkexec", ["/usr/bin/env", ...environment, binary, ...args], { timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
-        const command = ["/usr/bin/env", ...environment, binary, ...args].map(quote).join(" ");
-        const appleScript = `do shell script "${command.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}" with administrator privileges`;
-        return execute("/usr/bin/osascript", ["-e", appleScript], { timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
+        const user = userInfo();
+        const environment = Object.entries({ ...variables, SUDO_USER: user.username, SUDO_UID: String(user.uid), SUDO_GID: String(user.gid) }).map(([key, value]) => `${key}=${value}`);
+        if (platform === "linux") {
+            const metadata = JSON.parse(await readFile(join(resources, "metadata.json"), "utf8"));
+            const cache = join(paths.localDir, "installer"); await mkdir(cache, { recursive: true, mode: 0o700 });
+            const cached = join(cache, `equilotl-${metadata.installerSha256.slice(0, 16)}`);
+            await cp(binary, cached); await chmod(cached, 0o755);
+            if (createHash("sha256").update(await readFile(cached)).digest("hex") !== metadata.installerSha256) throw new Error("The cached native installer is damaged. Download a fresh installer.");
+            binary = cached;
+            return command("pkexec", ["/usr/bin/env", ...environment, binary, ...args], { timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
+        }
+        const shellCommand = ["/usr/bin/env", ...environment, binary, ...args].map(quote).join(" ");
+        const appleScript = `do shell script "${shellCommand.replaceAll("\\", "\\\\").replaceAll('"', '\\"')}" with administrator privileges`;
+        return command("/usr/bin/osascript", ["-e", appleScript], { timeout: 120000, maxBuffer: 4 * 1024 * 1024 });
     };
     async function operate(action, input, replaceOtherMod) {
         const target = await resolveClient(input);

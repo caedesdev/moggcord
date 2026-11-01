@@ -10,6 +10,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, rmSync, existsSync
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { execFileSync, spawn } from "node:child_process";
+import { createHash } from "node:crypto";
 import { desktopPaths } from "../lib/desktop-paths.mjs";
 import { installedPatcher, resolveDesktop, stopDesktop } from "../lib/discord-desktop.mjs";
 import { buildFiles, writeBuildInfo } from "../lib/build-info.mjs";
@@ -119,6 +120,23 @@ test("failed patching restores the previous build and keeps the original setting
     backend.start("install", f.root); assert.equal((await finish(backend)).state, "error");
     assert.match(readFileSync(join(f.paths.distDir, "renderer.js"), "utf8"), /old renderer/);
     assert.equal(existsSync(f.paths.distDir + ".installer-backup"), false);
+});
+
+test("system Linux installations stage the verified helper outside an AppImage mount before requesting permission", async t => {
+    const f = await fixture(t, "linux"), helper = Buffer.from("native helper fixture");
+    writeFileSync(join(f.installerResources, "equilotl"), helper);
+    writeFileSync(join(f.installerResources, "metadata.json"), JSON.stringify({ installerSha256: createHash("sha256").update(helper).digest("hex") }));
+    let invoked = false;
+    const backend = createDesktopInstaller({ platform: "linux", resources: f.installerResources, version: "1.18.42", paths: f.paths, dependencies: {
+        stop: async () => {}, start: async () => {}, access: async () => { throw new Error("permission required"); },
+        execute: async (program, args) => {
+            invoked = true; assert.equal(program, "pkexec"); assert.equal(args[0], "/usr/bin/env");
+            const cached = args.find(value => value.includes("equilotl-"));
+            assert(cached.startsWith(f.paths.localDir)); assert.deepEqual(readFileSync(cached), helper);
+            assert.equal(args.at(-1), f.root); await f.apply("install");
+        }
+    } });
+    backend.start("install", f.root); assert.equal((await finish(backend)).state, "done"); assert.equal(invoked, true);
 });
 
 test("the pinned native installer actually patches and restores an ASAR on its target OS", { skip: !process.env.MOGGCORD_NATIVE_INSTALLER }, async t => {
