@@ -50,7 +50,7 @@ export default definePlugin({
     name: "UiRelaunchFix",
     enabledByDefault: true,
     required: true,
-    startAt: StartAt.Init,
+    startAt: StartAt.DOMContentLoaded,
     description: "Keeps the UI clickable after launch by clearing stuck title-bar drag regions (sidebar, modals, bot verification checkboxes).",
     authors: [{ name: "Moggcord", id: 0n }],
 

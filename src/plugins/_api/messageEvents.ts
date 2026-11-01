@@ -27,9 +27,9 @@ export default definePlugin({
         {
             find: "#{intl::EDIT_TEXTAREA_HELP}",
             replacement: {
-                match: /(?<=,channel:\i\}\)\.then\().+?(?=\i\.content!==this\.props\.message\.content&&\i\((.+?)\)\})/,
-                replace: (match, args) => "" +
-                    `async ${match}` +
+                match: /(?<=,channel:\i(?:,message:\i)?\}\)\.then\()(?:async )?(.+?)(?=\i\.content!==this\.props\.message\.content&&\i\((.+?)\)\})/,
+                replace: (_match, restCode, args) => "" +
+                    `async ${restCode}` +
                     `if(await Vencord.Api.MessageEvents._handlePreEdit(${args}))` +
                     "return Promise.resolve({shouldClear:false,shouldRefocus:true});"
             }
@@ -38,8 +38,8 @@ export default definePlugin({
             find: ".handleSendMessage,onResize:",
             replacement: {
                 // https://regex101.com/r/7iswuk/1
-                match: /let (\i)=\i\.\i\.parse\((\i),.+?\.getSendMessageOptions\(\{.+?\}\)?;(?=.+?(\i)\.flags=)(?<=\)\(({.+?})\)\.then.+?)/,
-                replace: (m, parsedMessage, channel, replyOptions, extra) => m +
+                match: /(?<=channel:\i\}\)\.then\()(?:async )?(\i=>.{0,2000}?let (\i)=\i\.\i\.parse\((\i),.+?\.getSendMessageOptions\(\{.+?\}\)?;)(?=.{0,2000}?(\b\i)\.flags=)(?<=\)\(({.+?})\)\.then.+?)/,
+                replace: (_match, restCode, parsedMessage, channel, replyOptions, extra) => "async " + restCode +
                     `if(await Vencord.Api.MessageEvents._handlePreSend(${channel}.id,${parsedMessage},${extra},${replyOptions}))` +
                     "return{shouldClear:false,shouldRefocus:true};"
             }
