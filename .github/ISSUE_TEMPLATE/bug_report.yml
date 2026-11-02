@@ -1,66 +1,75 @@
-name: Bug/Crash Report
-description: Create a bug or crash report for Equicord. ALWAYS FIRST USE OUR SUPPORT CHANNEL! ONLY USE THIS FORM IF YOU ARE A CONTRIBUTOR OR WERE TOLD TO DO SO IN THE SUPPORT CHANNEL.
+name: Bug report
+description: Report a reproducible problem with Moggcord, its installer or the community connector.
+title: "[Bug] "
 labels: [bug]
-title: "[Bug] <title>"
-
 body:
-    - type: markdown
-      attributes:
-          value: |
-              ![Are you a developer? No? This form is not for you!](https://github.com/Equicord/Equicord/blob/main/.github/ISSUE_TEMPLATE/developer-banner.png?raw=true)
-
-              GitHub Issues are for development, not support! Please use our [support server](https://equicord.org/discord) unless you are a Equicord/Vencord Developer.
-
-    - type: textarea
-      id: bug-description
-      attributes:
-          label: What happens when the bug or crash occurs?
-          description: Where does this bug or crash occur, when does it occur, etc.
-          placeholder: The bug/crash happens sometimes when I do ..., causing this to not work/the app to crash. I think it happens because of ...
-      validations:
-          required: true
-
-    - type: textarea
-      id: expected-behaviour
-      attributes:
-          label: What is the expected behaviour?
-          description: Simply detail what the expected behaviour is.
-          placeholder: I expect Equicord/Discord to open the ... page instead of ..., it prevents me from doing ...
-      validations:
-          required: true
-
-    - type: textarea
-      id: steps-to-take
-      attributes:
-          label: How do you recreate this bug or crash?
-          description: Give us a list of steps in order to recreate the bug or crash.
-          placeholder: |
-              1. Do ...
-              2. Then ...
-              3. Do this ..., ... and then ...
-              4. Observe "the bug" or "the crash"
-      validations:
-          required: true
-
-    - type: textarea
-      id: crash-log
-      attributes:
-          label: Errors
-          description: Open the Developer Console with Ctrl/Cmd + Shift + i. Then look for any red errors (Ignore network errors like Failed to load resource) and paste them between the "```".
-          value: |
-              ```
-              Replace this text with your crash-log.
-              ```
-      validations:
-          required: false
-
-    - type: checkboxes
-      id: agreement-check
-      attributes:
-          label: Request Agreement
-          description: We only accept reports for bugs that happen on Discord Stable. Canary and PTB are Development branches and may be unstable
-          options:
-              - label: I am using Discord Stable or tried on Stable and this bug happens there as well
-                required: true
-              - label: I am a Equicord/Vencord Developer
-                required: true
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for helping improve Moggcord. Check the [troubleshooting guide](https://github.com/caedesdev/moggcord/blob/main/docs/troubleshooting/README.md) and search existing issues first.
+        Never include account tokens, cookies, private messages or unreviewed settings exports.
+  - type: dropdown
+    id: area
+    attributes:
+      label: Affected area
+      options:
+        - Installer or repair
+        - Client or settings
+        - Plugin
+        - Theme or QuickCSS
+        - Updates
+        - Community connector
+        - Documentation
+        - Other or unsure
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Operating system and architecture
+      placeholder: Windows 11 x64, macOS Apple Silicon, Ubuntu 24.04 x64…
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Moggcord version and installation method
+      description: Use the version shown in settings or the installer. Write unknown if you cannot open it.
+      placeholder: Version…, published installer / local build / community connector
+    validations:
+      required: true
+  - type: dropdown
+    id: channel
+    attributes:
+      label: Discord channel
+      options:
+        - Stable
+        - Canary
+        - PTB
+        - Not applicable or unknown
+    validations:
+      required: true
+  - type: textarea
+    id: description
+    attributes:
+      label: What happened, and what did you expect?
+      description: Include the affected plugin or theme if relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open…
+        2. Choose…
+        3. Observe…
+    validations:
+      required: true
+  - type: textarea
+    id: diagnostics
+    attributes:
+      label: Relevant errors, screenshots and recovery attempts
+      description: Share a small, redacted log excerpt. Mention whether a restart, Repair or disabling the affected plugin changed the result.
+    validations:
+      required: false
