@@ -24,7 +24,7 @@ The service returns `Access-Control-Allow-Origin` only for the configured origin
 | GET | `/v1/jobs/<job-id>` | No body | Current job state/message, or 404 for an unknown/expired job |
 | POST | `/v1/installed` | `{ "entries": [...] }` | Read-only installation state for up to 24 entries |
 
-Status currently advertises `name: "moggcord-community"`, `protocol: 1` and capabilities `plugin-folders` and `installed-status`. Check capabilities rather than treating every protocol-1 connector as folder-aware.
+Status currently advertises `name: "moggcord-community"`, `protocol: 1` and capabilities `plugin-folders`, `installed-status` and `enable-installed`. Check capabilities rather than treating every protocol-1 connector as folder-aware or able to reactivate existing uploads.
 
 Only one installation is active at a time. A repeated request for its same manifest/hash returns that active job; another package receives an error. Jobs move through `downloading`, `building` where applicable, `installing`, `restarting`, then `complete` or `failed`. A completed no-op can return `alreadyInstalled: true`.
 

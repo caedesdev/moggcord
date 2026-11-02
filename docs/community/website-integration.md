@@ -47,6 +47,8 @@ Use `moggcordInstaller.connectionHelp(...)` for setup help. Keep `moggcordInstal
 
 The reference integration's `inspect`/`watchButtons` functions use the connector's `installed-status` capability. Unavailable inspection returns unknown rather than a false success. Folder installation requires the `plugin-folders` capability; an older connector should produce an update instruction.
 
+Use both `installed` and `enabled`: an installed but disabled upload needs an **Enable** action, not a disabled **Installed** button. `watchButtons` refreshes every five seconds while visible and when the page regains focus or visibility. Call its cleanup function before replacing cards. After an installation attempt, only keep a button disabled when `button.dataset.installationState === "installed"`; a failed activation must remain retryable.
+
 Keep upload IDs, kinds, filenames and plugin names consistent between public entries, manifests and status requests. Do not send private filesystem paths to the website or assume every upload present on the server is installed on a visitor's machine.
 
 ## Deployment boundary

@@ -29,9 +29,11 @@ Saving a file alone does not compile it, enable it or restart Discord. The separ
 
 ## Installed detection
 
-When supported by the connector, the site checks the selected local client when a library/profile opens and when the window regains focus. It reads registered plugin names in the compiled renderer or the connector's theme directory. A leftover settings key or previous download is not sufficient.
+When supported by the connector, the site checks the selected local client when a library/profile opens, when the window regains focus or becomes visible, and every five seconds while the page is visible. It reads registered plugin names in the compiled renderer or the connector's theme directory. A leftover settings key or previous download is not sufficient.
 
 A disabled plugin can still be installed. An unavailable connection means **unknown**, not proof that the plugin is absent. The inspection does not modify files, increment download totals or restart Discord.
+
+An installed and enabled upload shows **Installed**. An installed but disabled upload shows **Enable**; a missing upload shows **Download**. Enabling an unchanged plugin updates its settings and restarts the selected client without rebuilding or replacing its compiled code. A failed activation restores the previous settings. Unchanged enabled uploads do not cause another restart.
 
 Reinstalling identical content already present in the selected installation skips compilation, file writes and restart. A changed package can still require installation even when its plugin name exists.
 

@@ -58,7 +58,7 @@ function DevTeamSection() {
                 <QuickAction
                     Icon={PlanetIcon}
                     text="Mogged Site"
-                    action={() => window.open("https://moggcord.online", "_blank")}
+                    action={() => window.open("https://moggcord.cc", "_blank")}
                 />
             </QuickActionCard>
 

@@ -311,7 +311,8 @@ export async function installEntry(entry, config, dependencies = {}, progress = 
     const client = await (dependencies.findClient ?? findClient)(config.channel);
     const plugin_name = pluginPackage.pluginName(entry.source_code);
     const [existing] = await installedEntries([{ id: entry.id, kind: entry.kind, file_name: entry.file_name, plugin_name, sha256: entry.sha256 }], config, { ...dependencies, findClient: async () => client });
-    if (existing.installed && existing.current) return { name: entry.name, channel: config.channel, sha256: entry.sha256, alreadyInstalled: true };
+    const unchanged = existing.installed && existing.current;
+    if (unchanged && existing.enabled) return { name: entry.name, channel: config.channel, sha256: entry.sha256, alreadyInstalled: true };
     const stylesheet = entry.protocol === 1 && /\.(css|style)$/i.test(entry.file_name);
     const pluginDirectory = join(sourceRoot, "src", "userplugins", `community-${entry.id}`);
     const pluginFiles = entry.files ?? [{ path: /\.[jt]sx$/i.test(entry.file_name) ? "index.tsx" : "index.ts", content: entry.source_code }];
@@ -320,8 +321,8 @@ export async function installEntry(entry, config, dependencies = {}, progress = 
     const stop = dependencies.stop ?? stopClient;
     const start = dependencies.start ?? startClient;
     try {
-        let name;
-        if (!stylesheet) {
+        let name = plugin_name;
+        if (!stylesheet && !unchanged) {
             const files = [...pluginFiles];
             if (!files.some(file => ["index.ts", "index.tsx"].includes(file.path)))
                 files.push({ path: "index.ts", content: `export { default } from ${JSON.stringify("./" + entry.file_name)};\nexport * from ${JSON.stringify("./" + entry.file_name)};\n` });
@@ -354,7 +355,7 @@ export async function installEntry(entry, config, dependencies = {}, progress = 
             const version = JSON.parse(await readFile(join(sourceRoot, "package.json"), "utf8")).version;
             verifyBuild(join(sourceRoot, "dist", "desktop"), version);
         }
-        progress("installing", "Installing in Moggcord…");
+        progress("installing", unchanged ? "Enabling in Moggcord…" : "Installing in Moggcord…");
         stopped = true;
         await stop(client);
         const settingsFile = join(config.dataDir, "settings", "settings.json");
@@ -363,12 +364,14 @@ export async function installEntry(entry, config, dependencies = {}, progress = 
         if (stylesheet) {
             const filename = `community-${entry.id}.theme.css`;
             const target = join(config.dataDir, "themes", filename);
-            await snapshot(target, backups);
-            await atomicWrite(target, entry.source_code);
+            if (!unchanged) {
+                await snapshot(target, backups);
+                await atomicWrite(target, entry.source_code);
+            }
             settings.enabledThemes = [...new Set([...(settings.enabledThemes ?? []), filename])];
             settings.themeNames = { ...settings.themeNames, [filename]: entry.name };
         } else {
-            await deployBuild(client, config, backups);
+            if (!unchanged) await deployBuild(client, config, backups);
             settings.plugins ??= {};
             settings.plugins[name] = { ...settings.plugins[name], enabled: true, communityInstallHash: entry.sha256 };
         }

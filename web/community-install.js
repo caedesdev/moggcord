@@ -3,9 +3,10 @@
   'use strict';
   const base = 'http://127.0.0.1:6469';
   const documentation = 'https://github.com/caedesdev/moggcord/blob/main/docs/COMMUNITY-INSTALL.md';
+  const inspectionInterval = 5000;
   const pause = duration => new Promise(resolve => setTimeout(resolve,duration));
   async function request(route, options = {}, timeout = 5000) {
-    const response = await fetch(base+route,{...options,credentials:'omit',signal:AbortSignal.timeout(timeout)});
+    const response = await fetch(base+route,{...options,cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(timeout)});
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || 'Moggcord could not complete this installation.');
     return data;
@@ -33,6 +34,7 @@
       }
     }
     if (status?.name !== 'moggcord-community' || status.protocol !== 1) throw Object.assign(new Error('Moggcord is not connected. Open Moggcord or set up the connector for this website, then try again.'),{code:'connector_unavailable'});
+    if (options.enable && !status.capabilities?.includes('enable-installed')) throw new Error('Update your Moggcord connector to enable installed plugins and themes from this website.');
     if (data.files && !status.capabilities?.includes('plugin-folders')) throw new Error('Update your Moggcord connector to install plugin folders automatically.');
     const manifest = new URL(data.install_manifest,location.origin);
     progress('Connecting to Moggcord…');
@@ -68,28 +70,35 @@
   }
   function watchButtons(bindings) {
     if (!bindings.length) return () => {};
-    let stopped=false,ticket=0;
+    let stopped=false,ticket=0,pending=0;
     const originals=new Map(bindings.map(({button})=>[button,{icon:button.querySelector('svg,i')?.cloneNode(true),label:button.getAttribute('aria-label'),title:button.title}]));
     async function refresh() {
+      if (stopped) return;
       const current=++ticket;
+      pending++;
       const results=await inspect(bindings.map(({entry})=>entry));
+      pending--;
       if (stopped || current!==ticket) return;
       for (const {entry,button} of bindings) {
-        const installed=results?.find(item=>item.id===entry.id)?.installed === true;
-        button.dataset.installationState=results===null?'unknown':installed?'installed':'not-installed';
-        button.dataset.installed=String(installed); button.classList.toggle('is-installed',installed);
-        if (button.getAttribute('aria-busy')!=='true') button.disabled=installed;
-        const label=button.querySelector('span'); if (label) label.textContent=installed?'Installed':'Download';
-        button.setAttribute('aria-label',installed ? `${entry.name} is installed` : originals.get(button).label || `Download ${entry.name}`);
-        button.title=installed ? 'Already installed in your connected Moggcord' : originals.get(button).title;
+        const state=results?.find(item=>item.id===entry.id);
+        const installed=state?.installed === true,enabled=installed && state.enabled!==false;
+        button.dataset.installationState=results===null?'unknown':enabled?'installed':installed?'disabled':'not-installed';
+        button.dataset.installed=String(installed); button.classList.toggle('is-installed',enabled);
+        if (button.getAttribute('aria-busy')!=='true') button.disabled=enabled;
+        const label=button.querySelector('span'); if (label) label.textContent=enabled?'Installed':installed?'Enable':'Download';
+        button.setAttribute('aria-label',enabled ? `${entry.name} is installed and enabled` : installed ? `Enable ${entry.name} in Moggcord` : originals.get(button).label || `Download ${entry.name}`);
+        button.title=enabled ? 'Already installed and enabled in your connected Moggcord' : installed ? 'Installed but turned off. Click to enable it in Moggcord.' : originals.get(button).title;
         const icon=button.querySelector('svg,i');
-        if (installed && window.MoggUI?.createIcon) icon?.replaceWith(window.MoggUI.createIcon('check'));
+        if (enabled && window.MoggUI?.createIcon) icon?.replaceWith(window.MoggUI.createIcon('check'));
         else if (originals.get(button).icon) icon?.replaceWith(originals.get(button).icon.cloneNode(true));
       }
     }
+    const refreshVisible=()=>{if (!document.hidden) void refresh();};
+    const timer=window.setInterval(()=>{if (!pending) refreshVisible();},inspectionInterval);
     window.addEventListener('focus',refresh);window.addEventListener('moggcord:installationchange',refresh);
+    document.addEventListener('visibilitychange',refreshVisible);
     void refresh();
-    return () => {stopped=true;ticket++;window.removeEventListener('focus',refresh);window.removeEventListener('moggcord:installationchange',refresh);};
+    return () => {stopped=true;ticket++;window.clearInterval(timer);window.removeEventListener('focus',refresh);window.removeEventListener('moggcord:installationchange',refresh);document.removeEventListener('visibilitychange',refreshVisible);};
   }
   function download(data) {
     const blob=data.files ? new Blob([window.MoggcordPackage.zip(data.files,data.file_name)],{type:'application/zip'}) : new Blob([data.source_code],{type:'text/plain;charset=utf-8'});

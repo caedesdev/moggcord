@@ -86,9 +86,9 @@ export function SecurityModal(props: ModalProps) {
                             <strong>Mogged Site:</strong>{" "}
                             <span
                                 style={{ color: "var(--text-link)", cursor: "pointer" }}
-                                onClick={() => window.open("https://moggcord.online", "_blank")}
+                                onClick={() => window.open("https://moggcord.cc", "_blank")}
                             >
-                                moggcord.online
+                                moggcord.cc
                             </span>
                         </li>
                     </ul>

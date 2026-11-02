@@ -20,7 +20,7 @@ const ChannelStore = findStoreLazy("ChannelStore");
 const UserStore = findStoreLazy("UserStore");
 const MessageStore = findStoreLazy("MessageStore");
 const logger = new Logger("ExportDM");
-const WATERMARK_URL = "https://moggcord.online";
+const WATERMARK_URL = "https://moggcord.cc";
 const STICKER_EXT = ["", "png", "png", "json", "gif"] as const;
 const Native = VencordNative.pluginHelpers.ExportDM as PluginNative<typeof import("./native")> | undefined;
 
@@ -642,7 +642,7 @@ function buildHtml(messages: RichMessage[], channelName: string): string {
 <main class="dm-shell">
 <header class="dm-topbar">
 <div class="dm-header-user">${headerAvatarHtml}<div><div class="dm-title">${escapeHtml(channelName)}</div><div class="dm-subtitle">${messages.length} ${t("messages")} - ${t("Exported on")} ${escapeHtml(exportedAt)}</div></div></div>
-<div class="dm-actions"><svg class="dm-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M7.6 10.8c1.5 3 3.6 5.1 6.6 6.6l2.2-2.2c.3-.3.8-.4 1.2-.3 1.3.4 2.6.6 4 .6.7 0 1.2.5 1.2 1.2v3.5c0 .7-.5 1.2-1.2 1.2C9.7 21.4.6 12.3.6 1.2.6.5 1.1 0 1.8 0h3.5c.7 0 1.2.5 1.2 1.2 0 1.4.2 2.7.6 4 .1.4 0 .9-.3 1.2l-2.2 2.2Z"></path></svg><svg class="dm-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M4 5h10a3 3 0 0 1 3 3v1.2l4-2.4A1 1 0 0 1 22.5 8v8a1 1 0 0 1-1.5.9l-4-2.4V16a3 3 0 0 1-3 3H4a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3Z"></path></svg><svg class="dm-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2a1 1 0 0 1 1 1v4.2l4.2 4.2a1 1 0 0 1-.7 1.7H13v8a1 1 0 1 1-2 0v-8H5.5a1 1 0 0 1-.7-1.7L9 7.2V3a1 1 0 0 1 1-1h4Z"></path></svg><a class="watermark" href="${WATERMARK_URL}" target="_blank" rel="noreferrer"><strong>Moggcord</strong><span>moggcord.online</span></a></div>
+<div class="dm-actions"><svg class="dm-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M7.6 10.8c1.5 3 3.6 5.1 6.6 6.6l2.2-2.2c.3-.3.8-.4 1.2-.3 1.3.4 2.6.6 4 .6.7 0 1.2.5 1.2 1.2v3.5c0 .7-.5 1.2-1.2 1.2C9.7 21.4.6 12.3.6 1.2.6.5 1.1 0 1.8 0h3.5c.7 0 1.2.5 1.2 1.2 0 1.4.2 2.7.6 4 .1.4 0 .9-.3 1.2l-2.2 2.2Z"></path></svg><svg class="dm-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M4 5h10a3 3 0 0 1 3 3v1.2l4-2.4A1 1 0 0 1 22.5 8v8a1 1 0 0 1-1.5.9l-4-2.4V16a3 3 0 0 1-3 3H4a3 3 0 0 1-3-3V8a3 3 0 0 1 3-3Z"></path></svg><svg class="dm-icon" viewBox="0 0 24 24" fill="currentColor"><path d="M14 2a1 1 0 0 1 1 1v4.2l4.2 4.2a1 1 0 0 1-.7 1.7H13v8a1 1 0 1 1-2 0v-8H5.5a1 1 0 0 1-.7-1.7L9 7.2V3a1 1 0 0 1 1-1h4Z"></path></svg><a class="watermark" href="${WATERMARK_URL}" target="_blank" rel="noreferrer"><strong>Moggcord</strong><span>moggcord.cc</span></a></div>
 </header>
 <section class="message-list">
 <div class="export-meta">${t("Exported on")} ${escapeHtml(exportedAt)} - ${messages.length} ${t("messages")}</div>

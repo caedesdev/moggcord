@@ -8,7 +8,7 @@
   [![License](https://img.shields.io/github/license/caedesdev/moggcord?color=a855f7)](LICENSE)
   [![Platforms](https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-3b82f6)](docs/getting-started/installation.md)
 
-  [Download](https://github.com/caedesdev/moggcord/releases/latest) · [Documentation](docs/README.md) · [Website](https://moggcord.online) · [Contribute](CONTRIBUTING.md)
+  [Download](https://github.com/caedesdev/moggcord/releases/latest) · [Documentation](docs/README.md) · [Website](https://moggcord.cc) · [Contribute](CONTRIBUTING.md)
 </div>
 
 ## Start here

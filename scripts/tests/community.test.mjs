@@ -112,11 +112,51 @@ test("reinstalling the same plugin or stylesheet skips the compiler, file writes
             await writeFile(f.settings, JSON.stringify({ ...f.original, plugins: { ...f.original.plugins, CommunityExample: { enabled: true, communityInstallHash: data.sha256 } } }));
         } else {
             await mkdir(join(f.config.dataDir, "themes"));await writeFile(join(f.config.dataDir, "themes", `community-${data.id}.theme.css`), data.source_code);
+            await writeFile(f.settings, JSON.stringify({ ...f.original, enabledThemes: [...f.original.enabledThemes, `community-${data.id}.theme.css`] }));
         }
         const before = await readFile(f.settings);
         const result = await installEntry(data, f.config, f.dependencies);
         assert.equal(result.alreadyInstalled, true);assert.deepEqual(f.events, []);assert.deepEqual(await readFile(f.settings), before);
     }
+});
+
+test("disabled plugins and themes are enabled without rebuilding or replacing their installed code", async t => {
+    for (const kind of ["plugin", "theme"]) {
+        const f = await fixture(t), data = kind === "plugin" ? entry() : entry("theme", "body{}", "example.css");
+        const disabled = { ...f.original, plugins: { ...f.original.plugins, CommunityExample: { enabled: false, communityInstallHash: data.sha256, preference: "keep" } } };
+        await writeFile(f.settings, JSON.stringify(disabled));
+        await writeFile(join(f.client.installDir, "renderer.js"), compiled);
+        if (kind === "theme") {
+            await mkdir(join(f.config.dataDir, "themes"));
+            await writeFile(join(f.config.dataDir, "themes", `community-${data.id}.theme.css`), data.source_code);
+        }
+        const result = await installEntry(data, f.config, f.dependencies);
+        assert.notEqual(result.alreadyInstalled, true);
+        assert.deepEqual(f.events, ["stop canary", "start canary"]);
+        assert.equal(await readFile(join(f.client.installDir, "renderer.js"), "utf8"), compiled);
+        const settings = JSON.parse(await readFile(f.settings, "utf8"));
+        if (kind === "plugin") {
+            assert.equal(settings.plugins.CommunityExample.enabled, true);
+            assert.equal(settings.plugins.CommunityExample.preference, "keep");
+        } else assert.deepEqual(settings.enabledThemes, [...f.original.enabledThemes, `community-${data.id}.theme.css`]);
+        assert.deepEqual(settings.plugins.Existing, f.original.plugins.Existing);
+        assert.deepEqual(settings.unrelated, f.original.unrelated);
+        assert.equal((await installEntry(data, f.config, f.dependencies)).alreadyInstalled, true);
+        assert.deepEqual(f.events, ["stop canary", "start canary"]);
+    }
+});
+
+test("failed activation restores the disabled settings and reopens the previous client", async t => {
+    const f = await fixture(t), data = entry();
+    const disabled = { ...f.original, plugins: { ...f.original.plugins, CommunityExample: { enabled: false, communityInstallHash: data.sha256 } } };
+    await writeFile(f.settings, JSON.stringify(disabled));
+    await writeFile(join(f.client.installDir, "renderer.js"), compiled);
+    let attempts = 0;
+    f.dependencies.start = async () => { if (!attempts++) throw new Error("Start failed"); f.events.push("recovered"); };
+    await assert.rejects(installEntry(data, f.config, f.dependencies), /Start failed/);
+    assert.deepEqual(f.events, ["stop canary", "recovered"]);
+    assert.deepEqual(JSON.parse(await readFile(f.settings, "utf8")), disabled);
+    assert.equal(await readFile(join(f.client.installDir, "renderer.js"), "utf8"), compiled);
 });
 
 test("installed-state HTTP queries keep the configured origin and custom-header restrictions", async t => {

@@ -8,7 +8,7 @@ import definePlugin, { PluginNative } from "@utils/types";
 
 const Native = VencordNative.pluginHelpers.TitlebarLink as PluginNative<typeof import("./native")>;
 
-const TARGET_URL = "https://moggcord.online";
+const TARGET_URL = "https://moggcord.cc";
 
 const CSS = `
 #moggcord-titlebar-btn {
@@ -59,7 +59,7 @@ function remove() {
 export default definePlugin({
     name: "TitlebarLink",
     enabledByDefault: true,
-    description: "Click on the central Discord title to open moggcord.online",
+    description: "Click on the central Discord title to open moggcord.cc",
     authors: [{ name: "Moggcord", id: 0n }],
     required: true,
     patches: [],
