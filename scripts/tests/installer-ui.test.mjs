@@ -17,6 +17,7 @@ class Element {
     get textContent() { return this._text + this.children.map(child => child.textContent).join(""); }
     set textContent(value) { this._text = String(value); this.children = []; }
     setAttribute(name, value) { this.attrs.set(name, value); }
+    removeAttribute(name) { this.attrs.delete(name); }
     addEventListener(name, handler) { this.events.set(name, handler); }
     append(...children) { this.children.push(...children); }
     replaceChildren(...children) { this._text = ""; this.children = children; }
@@ -25,13 +26,15 @@ class Element {
     click() { if (!this.disabled) this.events.get("click")?.({ preventDefault() {} }); }
 }
 
-async function mount({ targets = [{ name: "Discord", path: "fresh" }, { name: "Discord Canary", path: "installed" }, { name: "Discord PTB", path: "other" }], detectError = false, resolve, browse = "", reducedMotion = false } = {}) {
+async function mount({ targets = [{ name: "Discord", path: "fresh" }, { name: "Discord Canary", path: "installed" }, { name: "Discord PTB", path: "other" }], detectError = false, resolve, browse = "", reducedMotion = false, installerUpdate = null } = {}) {
     const elements = new Map([...html.matchAll(/id="([^"]+)"/g)].map(([, id]) => [id, new Element()]));
     for (const match of html.matchAll(/<[^>]+\bid="([^"]+)"[^>]*>/g))
         if (/\shidden(?=[\s=>])/.test(match[0])) elements.get(match[1]).hidden = true;
     const buttons = ["install", "repair", "uninstall"].map(action => { const el = new Element(); el.dataset.action = action; return el; });
     const intervals = new Map(), timers = new Map(), calls = [], main = new Element();
     let status = { state: "running" }, intervalId = 0, timerId = 0, now = 0;
+    let installerStatus = installerUpdate;
+    let installerChecks = 0;
     const advance = milliseconds => {
         const end = now + milliseconds;
         while (true) {
@@ -53,6 +56,10 @@ async function mount({ targets = [{ name: "Discord", path: "fresh" }, { name: "D
         getInjectStatus: () => status,
         closeApp: () => calls.push(["close"]), minimizeApp() {}, openUrl() {}
     };
+    if (installerUpdate) {
+        bridge.startInstallerUpdate = () => { installerChecks++; return true; };
+        bridge.getInstallerUpdateStatus = () => installerStatus;
+    }
     const context = vm.createContext({
         document, window: { moggcord: bridge, matchMedia: () => ({ matches: reducedMotion }) }, performance: { now: () => now },
         setInterval: fn => { intervals.set(++intervalId, fn); return intervalId; }, clearInterval: id => intervals.delete(id),
@@ -60,8 +67,40 @@ async function mount({ targets = [{ name: "Discord", path: "fresh" }, { name: "D
     });
     vm.runInContext(script, context);
     await flush();
-    return { get: id => elements.get(id), buttons, calls, context, status: value => { status = value; }, tick: () => { for (const fn of intervals.values()) fn(); }, intervals, timers, advance };
+    return { get: id => elements.get(id), buttons, calls, context, status: value => { status = value; }, installerStatus: value => { installerStatus = value; }, installerChecks: () => installerChecks, tick: () => { for (const fn of intervals.values()) fn(); }, intervals, timers, advance };
 }
+
+test("startup checks update only the installer and show its download progress without starting a Discord operation", async () => {
+    const s = await mount({ installerUpdate: { state: "checking", message: "Checking for a newer installer…", percent: 0 } });
+    assert.equal(s.installerChecks(), 1);
+    assert.equal(s.get("installer-update-page").hidden, false);
+    assert.equal(s.get("home-page").hidden, true);
+    assert.equal(s.get("installer-update-track").attrs.has("aria-valuenow"), false);
+    s.installerStatus({ state: "downloading", message: "Downloading installer 1.18.50…", percent: 42.5 }); s.tick();
+    assert.equal(s.get("installer-update-fill").style.width, "42.5%");
+    assert.equal(s.get("installer-update-track").attrs.get("aria-valuenow"), "42");
+    assert.equal(s.get("installer-update-percent").textContent, "42%");
+    s.installerStatus({ state: "launching", message: "Opening installer 1.18.50…", percent: 100 }); s.tick();
+    assert.equal(s.get("installer-update-page").hidden, false);
+    assert.equal(s.get("installer-update-message").textContent, "Opening installer 1.18.50…");
+    assert.equal(s.calls.length, 0);
+    assert.equal(s.get("close").disabled, false);
+});
+
+test("current and unavailable installer updates return to usable setup and stop polling", async () => {
+    for (const state of ["current", "unavailable"]) {
+        const s = await mount({ installerUpdate: { state: "checking", message: "Checking", percent: 0 } });
+        s.installerStatus({ state, message: "Opening setup.", percent: 0 }); s.tick();
+        await flush();
+        assert.equal(s.get("installer-update-page").hidden, true);
+        assert.equal(s.get("home-page").hidden, false);
+        assert.equal(s.intervals.size, 0);
+        vm.runInContext("pollInstallerUpdate()", s.context);
+        s.buttons[0].click();
+        assert.equal(s.get("run-operation").disabled, false);
+        assert.equal(s.calls.length, 0);
+    }
+});
 
 test("launch and action selection never install anything; existing Moggcord redirects to Repair", async () => {
     const s = await mount();

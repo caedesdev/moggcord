@@ -136,7 +136,7 @@
     .progress-icon { display: grid; place-items: center; width: 75px; height: 75px; margin: 0 auto 31px; border: 1px solid #a1b2ff4d; border-radius: 24px; color: #c3ceff; background: linear-gradient(145deg, #939cf429, #6e4d9e0a); box-shadow: 0 0 70px #8882f51c; }
     .progress-icon svg { width: 29px; height: 29px; }
     .progress-track { height: 5px; margin-top: 32px; border-radius: 5px; background: #a0acf013; overflow: hidden; }
-    #progress-fill { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #8baffc, #b496f9); transition: width 250ms ease; }
+    #progress-fill, #installer-update-fill { width: 0; height: 100%; border-radius: inherit; background: linear-gradient(90deg, #8baffc, #b496f9); transition: width 250ms ease; }
     .progress-meta { display: flex; justify-content: space-between; gap: 20px; margin-top: 13px; color: #9ba7cb; font-size: 11px; text-align: left; }
     #progress-pct { color: #c0c9ef; }
     #progress-mb { min-height: 18px; margin: 12px 0 0; color: #6f7c9e; font-size: 10px; }
@@ -187,6 +187,14 @@
       </div>
     </header>
     <main>
+      <section id="installer-update-page" class="page progress-page" aria-labelledby="installer-update-title" hidden>
+        <div class="progress-icon" aria-hidden="true"><svg class="spinning"><use href="#icon-refresh" /></svg></div>
+        <p class="eyebrow">Installer update</p>
+        <h1 id="installer-update-title">Keeping things fresh.</h1>
+        <p class="intro">A newer installer opens automatically when an update is available.</p>
+        <div id="installer-update-track" class="progress-track" role="progressbar" aria-label="Installer update progress" aria-valuemin="0" aria-valuemax="100"><div id="installer-update-fill"></div></div>
+        <div class="progress-meta"><span id="installer-update-message" role="status">Checking for a newer installer…</span><span id="installer-update-percent"></span></div>
+      </section>
       <section id="home-page" class="page" aria-labelledby="welcome-title">
         <div class="hero">
           <div>
@@ -288,6 +296,7 @@
     let resolving = false;
     let detectionFailed = false;
     let pollTimer = null;
+    let installerUpdateTimer = null;
     const noticeStates = new Map();
     const noticeDuration = 5000;
     const noticeExitDuration = 180;
@@ -302,7 +311,7 @@
         showNotice('target-error');
       }
       if (id !== 'progress-page') showNotice('progress-notice');
-      for (const page of ['home-page', 'target-page', 'progress-page']) $(page).hidden = page !== id;
+      for (const page of ['home-page', 'target-page', 'progress-page', 'installer-update-page']) $(page).hidden = page !== id;
       document.querySelector('main').scrollTop = 0;
     }
 
@@ -652,7 +661,41 @@
     document.addEventListener('keydown', event => { if (event.key === 'Escape' && !busy && !$('target-page').hidden) showPage('home-page'); });
     try { $('installer-version').textContent = 'v' + window.moggcord.getInstallerVersion(); }
     catch (error) { $('installer-version').textContent = 'Moggcord Installer'; }
-    loadDiscords();
+    function finishInstallerUpdate() {
+      clearInterval(installerUpdateTimer);
+      installerUpdateTimer = null;
+      showPage('home-page');
+      loadDiscords();
+    }
+
+    function pollInstallerUpdate() {
+      if (installerUpdateTimer === null) return;
+      try {
+        const status = window.moggcord.getInstallerUpdateStatus();
+        $('installer-update-message').textContent = status.message;
+        const downloading = status.state === 'downloading';
+        const percent = Math.max(0, Math.min(100, Number(status.percent) || 0));
+        $('installer-update-percent').textContent = downloading ? Math.floor(percent) + '%' : '';
+        $('installer-update-fill').style.width = downloading ? percent + '%' : '0%';
+        if (downloading) $('installer-update-track').setAttribute('aria-valuenow', String(Math.floor(percent)));
+        else $('installer-update-track').removeAttribute('aria-valuenow');
+        if (status.state === 'current' || status.state === 'unavailable') finishInstallerUpdate();
+      } catch (error) { finishInstallerUpdate(); }
+    }
+
+    function checkInstallerUpdate() {
+      try {
+        if (typeof window.moggcord.startInstallerUpdate !== 'function' || !window.moggcord.startInstallerUpdate()) {
+          loadDiscords();
+          return;
+        }
+        showPage('installer-update-page');
+        installerUpdateTimer = setInterval(pollInstallerUpdate, 250);
+        pollInstallerUpdate();
+      } catch (error) { finishInstallerUpdate(); }
+    }
+
+    checkInstallerUpdate();
   </script>
 </body>
 </html>
