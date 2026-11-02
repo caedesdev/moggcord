@@ -28,9 +28,9 @@ button, input, textarea, select, a, label,
     -webkit-app-region: no-drag !important;
 }
 
-[role="dialog"]:has([data-mana-component="layer-modal"]),
-[role="dialog"] :is([class^="outerContainer_"], [class*=" outerContainer_"]):has(> [data-mana-component="layer-modal"]),
-[role="dialog"] [data-mana-component="layer-modal"] {
+[role="dialog"]:has(:is([data-mana-component="layer-modal"], [data-mana-component="modal"])),
+[role="dialog"] :is([class^="outerContainer_"], [class*=" outerContainer_"]):has(> :is([data-mana-component="layer-modal"], [data-mana-component="modal"])),
+[role="dialog"] :is([data-mana-component="layer-modal"], [data-mana-component="modal"]) {
     -webkit-app-region: initial !important;
 }
 `;

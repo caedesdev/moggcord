@@ -4,7 +4,20 @@
   const base = 'http://127.0.0.1:6469';
   const documentation = 'https://github.com/caedesdev/moggcord/blob/main/docs/COMMUNITY-INSTALL.md';
   const inspectionInterval = 5000;
+  const permissionPrompt = 'Choose Allow when your browser asks to access apps and services on this device…';
+  let connected = false;
   const pause = duration => new Promise(resolve => setTimeout(resolve,duration));
+  async function localAccess() {
+    if (typeof navigator === 'undefined' || !navigator.permissions?.query) return null;
+    try { return (await navigator.permissions.query({name:'loopback-network'})).state; }
+    catch { return null; }
+  }
+  function localAccessError(state) {
+    return Object.assign(new Error(state === 'denied'
+      ? 'Your browser is blocking Moggcord. Open this website\'s site permissions, allow access to apps and services on this device, then try Download again.'
+      : 'Allow this website to access apps and services on this device when your browser asks, then try Download again.'),
+    {code:state === 'denied' ? 'local_access_denied' : 'local_access_required'});
+  }
   async function request(route, options = {}, timeout = 5000) {
     const response = await fetch(base+route,{...options,cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(timeout)});
     const data = await response.json();
@@ -22,19 +35,32 @@
   async function install(data, progress = () => {}, options = {}) {
     const link = installLink(data);
     let status;
-    progress('Connecting to Moggcord…');
-    try { status = await request('/v1/status',{},30000); } catch (error) {
+    const permission = await localAccess();
+    if (permission === 'denied') throw localAccessError(permission);
+    progress(permission === 'prompt' ? permissionPrompt : 'Connecting to Moggcord…');
+    try { status = await request('/v1/status',{},permission === 'prompt' ? 120000 : 30000); } catch (error) {
       if (error.code === 'target_unavailable') throw error;
+      const permission = await localAccess();
+      if (permission === 'denied' || (permission === 'prompt' && error.name === 'TimeoutError')) throw localAccessError(permission);
       if (options.launch !== false) {
         progress('Opening Moggcord on your PC…');
         (options.open ?? (href => window.location.assign(href)))(link);
         for (let attempt=0; attempt<400; attempt++) {
           await pause(500);
-          try { status = await request('/v1/status',{},1500); break; } catch (error) { if (error.code === 'target_unavailable') throw error; progress('Waiting for Moggcord to connect…'); }
+          const permission = await localAccess();
+          if (permission === 'denied') throw localAccessError(permission);
+          if (permission === 'prompt') progress(permissionPrompt);
+          try { status = await request('/v1/status',{},permission === 'prompt' ? 120000 : 1500); break; } catch (error) {
+            if (error.code === 'target_unavailable') throw error;
+            const permission = await localAccess();
+            if (permission === 'denied' || (permission === 'prompt' && error.name === 'TimeoutError')) throw localAccessError(permission);
+            progress('Waiting for Moggcord to connect…');
+          }
         }
       }
     }
     if (status?.name !== 'moggcord-community' || status.protocol !== 1) throw Object.assign(new Error('Moggcord is not connected. Open Moggcord or set up the connector for this website, then try again.'),{code:'connector_unavailable'});
+    connected = true;
     if (options.enable && !status.capabilities?.includes('enable-installed')) throw new Error('Update your Moggcord connector to enable installed plugins and themes from this website.');
     if (data.files && !status.capabilities?.includes('plugin-folders')) throw new Error('Update your Moggcord connector to install plugin folders automatically.');
     const manifest = new URL(data.install_manifest,location.origin);
@@ -56,6 +82,8 @@
   }
   async function inspect(entries) {
     try {
+      const permission = await localAccess();
+      if (permission !== 'granted' && (permission !== null || !connected)) return null;
       const status=await request('/v1/status',{},3000);
       if (status.name!=='moggcord-community' || status.protocol!==1 || !status.capabilities?.includes('installed-status')) return null;
       const valid=entries.filter(entry=>/^[a-f0-9-]{36}$/.test(entry.id || '') && ['plugin','theme'].includes(entry.kind));
