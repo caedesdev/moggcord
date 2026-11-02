@@ -7,5 +7,5 @@ contact_links:
       url: https://github.com/caedesdev/moggcord/releases/latest
       about: Download the current Windows, macOS or Linux installer
     - name: Support Moggcord
-      url: https://github.com/caedesdev/moggcord/blob/main/docs/donations.md
-      about: Optional Litecoin, Bitcoin and Solana donations
+      url: https://github.com/sponsors/caedesdev
+      about: Optional support through GitHub Sponsors

@@ -24,7 +24,7 @@ macOS and Linux installers are previews. See the [installation guide](docs/getti
 
 ## Support
 
-Support Moggcord through [GitHub Sponsors](https://github.com/sponsors/caedesdev) or the crypto addresses on the profile.
+Support Moggcord through [GitHub Sponsors](https://github.com/sponsors/caedesdev).
 
 ## Credits and license
 

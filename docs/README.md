@@ -66,6 +66,7 @@ docs/
 | [Testing](developers/testing.md) | Focused checks, native fixtures and the limits of automated verification |
 | [Release process](developers/releasing.md) | Version metadata, platform builds, release assets and publication |
 | [Writing documentation](developers/documentation.md) | Folder conventions, page structure, source evidence and link checks |
+| [Sponsor records](developers/sponsor-records.md) | Local statement imports, duplicate checks and records for review |
 | [System architecture](architecture/README.md) | Process boundaries and how the installer, client and connector fit together |
 | [Client startup and updates](architecture/client-lifecycle.md) | Loader, preload, renderer, IPC and verified replacement |
 | [Community installation flow](architecture/community-installation.md) | Manifest validation, compilation, activation and rollback |

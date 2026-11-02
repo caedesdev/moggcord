@@ -1,0 +1,28 @@
+name: Check sponsor records
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'scripts/sponsor-records.mjs'
+      - 'scripts/tests/sponsor-records.test.mjs'
+      - '.github/workflows/sponsor-records.yml'
+  pull_request:
+    paths:
+      - 'scripts/sponsor-records.mjs'
+      - 'scripts/tests/sponsor-records.test.mjs'
+      - '.github/workflows/sponsor-records.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  imports-and-watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      - run: node --test scripts/tests/sponsor-records.test.mjs
