@@ -27,6 +27,12 @@ button, input, textarea, select, a, label,
 [class*="modal" i] button {
     -webkit-app-region: no-drag !important;
 }
+
+[role="dialog"]:has([data-mana-component="layer-modal"]),
+[role="dialog"] :is([class^="outerContainer_"], [class*=" outerContainer_"]):has(> [data-mana-component="layer-modal"]),
+[role="dialog"] [data-mana-component="layer-modal"] {
+    -webkit-app-region: initial !important;
+}
 `;
 
 export const NO_DRAG_INTERACTIVE_SELECTOR = [

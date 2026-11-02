@@ -208,6 +208,13 @@ test("update checks explain available, current and failed results and always cle
         if (options.failure) {
             assert.equal(state.shown.at(-1).variant, "critical");
             assert.match(state.shown.at(-1).text, /connection.*try again/);
-        } else assert.match(state.states.get("status"), options.available ? /Update Now/ : /No action is needed/);
+        } else if (options.available) assert.match(state.states.get("status"), /Update Now/);
+        else {
+            assert.equal(state.states.get("status"), null);
+            assert.equal(state.states.get("checked"), true);
+            assert.equal(state.states.get("outdated"), false);
+            assert.equal(state.shown.at(-1).variant, "success");
+            assert.match(state.shown.at(-1).text, /latest version/);
+        }
     }
 });
