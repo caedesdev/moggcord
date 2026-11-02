@@ -74,7 +74,7 @@ if (Test-Path $distZip) {
     --nologo `
     -v quiet `
     -p:PublishSingleFile=true `
-    -p:SelfContained=false `
+    -p:PublishSelfContained=true `
     -p:Version=$packageVersion `
     -r win-x64
 

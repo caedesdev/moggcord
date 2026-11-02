@@ -4,6 +4,8 @@
 
 Use `Moggcord-Installer.exe` from the [latest release](https://github.com/caedesdev/moggcord/releases/latest). This package is for Windows x64. You do not need Node.js, pnpm or a source checkout for the normal graphical installer.
 
+Starting with version 1.18.50, the Windows installer includes the required .NET runtime. No separate .NET Desktop Runtime installation is needed for these installer files.
+
 ## Install or repair
 
 1. Open the installer.
