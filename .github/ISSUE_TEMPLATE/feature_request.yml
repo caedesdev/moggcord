@@ -1,0 +1,30 @@
+name: Feature request
+description: Suggest a focused improvement to Moggcord.
+title: "[Idea] "
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Search existing issues and available plugins before suggesting a new feature. One idea per issue makes it easier to discuss.
+  - type: textarea
+    id: problem
+    attributes:
+      label: What would you like to improve?
+      description: Describe the problem or task from a user's perspective.
+    validations:
+      required: true
+  - type: textarea
+    id: suggestion
+    attributes:
+      label: How should it work?
+      description: A concrete example or sketch helps. You do not need to write code.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives and extra context
+      description: Mention existing settings or plugins you tried, and any relevant platform details.
+    validations:
+      required: false

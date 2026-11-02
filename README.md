@@ -1,46 +1,60 @@
 <div align="center">
-  <img src="https://raw.githubusercontent.com/caedesdev/moggcord/main/moggcord.ico" width="96" height="96" alt="Moggcord logo">
 
-  # Moggcord
+![Moggcord: Your Discord. Your way.](.github/assets/header.svg)
 
-  **A Discord desktop modification with Moggcord and Vencord plugins, themes and community uploads.**
+# Moggcord
 
-  [![License](https://img.shields.io/github/license/caedesdev/moggcord?color=a855f7)](LICENSE)
-  [![Platforms](https://img.shields.io/badge/Windows%20%7C%20macOS%20%7C%20Linux-3b82f6)](docs/getting-started/installation.md)
+**Make Discord feel like yours.** Plugins, themes and community uploads for your desktop.
 
-  [Download](https://github.com/caedesdev/moggcord/releases/latest) · [Documentation](docs/README.md) · [Website](https://moggcord.cc) · [Contribute](CONTRIBUTING.md)
+[![Latest release](https://img.shields.io/github/v/release/caedesdev/moggcord?style=flat-square&color=b8b2ff)](https://github.com/caedesdev/moggcord/releases/latest)
+[![License](https://img.shields.io/github/license/caedesdev/moggcord?style=flat-square&color=b8b2ff)](LICENSE)
+[![Documentation](https://img.shields.io/github/actions/workflow/status/caedesdev/moggcord/docs.yml?branch=main&label=docs&style=flat-square)](https://github.com/caedesdev/moggcord/actions/workflows/docs.yml)
+
+[**Download**](https://github.com/caedesdev/moggcord/releases/latest) · [Documentation](docs/README.md) · [Website](https://moggcord.cc) · [Contribute](CONTRIBUTING.md) · [♡ Support](docs/donations.md)
+
 </div>
 
-## Start here
+## Get Moggcord
 
-| I want to… | Read this |
-| --- | --- |
-| Install Moggcord | [Installation and supported platforms](docs/getting-started/installation.md) |
-| Set up plugins and themes | [First steps](docs/getting-started/first-steps.md) |
-| Install a community upload on my own computer | [Connect the community website](docs/community/setup.md) |
-| Fix a failed update or a broken client | [Troubleshooting](docs/troubleshooting/README.md) |
-| Write a plugin | [Plugin development](docs/developers/plugin-development.md) |
-| Understand the project | [Architecture](docs/architecture/README.md) |
-
-## Downloads
-
-Choose your operating system on the [latest release](https://github.com/caedesdev/moggcord/releases/latest). Opening the installer shows **Install**, **Repair** and **Uninstall** before changing Discord files.
-
-| Platform | Package | Support |
+| Your platform | Download | Status |
 | --- | --- | --- |
-| Windows x64 | `Moggcord-Installer.exe` | Windows installer |
-| macOS Intel and Apple Silicon | `Moggcord-Installer-macOS.dmg` | Preview; not Apple notarized |
-| Linux x64 | `Moggcord-Installer-Linux.AppImage` or `.deb` | Preview; official Discord DEB/TAR installations |
+| Windows x64 | [Windows installer](https://github.com/caedesdev/moggcord/releases/latest/download/Moggcord-Installer.exe) | Desktop setup |
+| macOS Intel & Apple Silicon | [Universal DMG](https://github.com/caedesdev/moggcord/releases/latest/download/Moggcord-Installer-macOS.dmg) | Preview; not Apple notarized |
+| Linux x64 | [AppImage](https://github.com/caedesdev/moggcord/releases/latest/download/Moggcord-Installer-Linux.AppImage) · [DEB](https://github.com/caedesdev/moggcord/releases/latest/download/Moggcord-Installer-Linux.deb) | Preview; official Discord DEB/TAR installations |
 
-The selected Discord channel closes and restarts during installation. Stable, Canary and PTB are separate installations. See the [Windows](docs/getting-started/windows.md), [macOS](docs/getting-started/macos.md) and [Linux](docs/getting-started/linux.md) guides for requirements and custom locations. There is no Android installer in this release line.
+Open the installer, choose **Install**, **Repair** or **Uninstall**, then select your Discord installation. The selected Discord channel closes and restarts during installation. Stable, Canary and PTB are separate installations.
 
-## Plugins, themes and updates
+Start with the [installation guide](docs/getting-started/installation.md) for requirements and custom locations. There is no Android installer in this release line. Release downloads contain the latest **published** version; `main` can include changes that have not shipped yet.
 
-Both built-in plugin collections are included. **FakeVoice, ExportDM, CustomProfile and TokenImporter** are the four default-enabled plugins on fresh installations; other available plugins can be enabled individually. Saved choices and platform restrictions affect what is active. See [Plugins and defaults](docs/guides/plugins.md).
+## Make it yours
 
-Themes can be installed locally or through a connected community website. Community installation needs a connector on **each visitor's computer**. It installs into that visitor's selected channel, not the website owner's PC. See [Community downloads and sharing](docs/community/installing-and-sharing.md).
+| Plugins | Themes | Community |
+| --- | --- | --- |
+| Built-in Moggcord and Vencord plugin collections. Choose what to enable in settings. | Add local themes, online stylesheets or your own QuickCSS. | Browse community uploads and install them through the local connector. |
+| [Explore plugins](docs/guides/plugins.md) | [Set up a theme](docs/guides/themes.md) | [Connect your computer](docs/community/setup.md) |
 
-The client updater verifies the downloaded desktop files before applying them. Since 1.18.43 it reports download progress, supports cancellation and uses a smaller desktop-only archive when available. See [Updates and repair](docs/guides/updates-and-repair.md).
+Saved plugin choices and platform restrictions affect what is active. Community installation needs a connector on **each visitor's computer** and uses that visitor's selected Discord channel. See [Downloads and sharing](docs/community/installing-and-sharing.md).
+
+The client updater checks downloaded desktop files before applying them. [Updates and repair](docs/guides/updates-and-repair.md) explains progress, cancellation and recovery.
+
+## Find your next step
+
+| I want to… | Start here |
+| --- | --- |
+| Set up Moggcord for the first time | [First steps](docs/getting-started/first-steps.md) |
+| Move my settings to another computer | [Backup and restore](docs/guides/backup-and-restore.md) |
+| Fix a failed update or a broken client | [Troubleshooting](docs/troubleshooting/README.md) |
+| Report a bug | [Bug report](https://github.com/caedesdev/moggcord/issues/new?template=bug_report.yml) |
+| Suggest an improvement | [Feature request](https://github.com/caedesdev/moggcord/issues/new?template=feature_request.yml) |
+| Write a plugin or understand the code | [Plugin development](docs/developers/plugin-development.md) · [Architecture](docs/architecture/README.md) |
+
+## Support Moggcord
+
+If Moggcord is useful to you, you can support the project with **Litecoin, Bitcoin or Solana**. Choose your own amount and send directly from your wallet.
+
+**[Donation addresses and QR codes →](docs/donations.md)**
+
+You can also help by reporting reproducible bugs, improving the docs or [contributing code](CONTRIBUTING.md).
 
 ## Development
 

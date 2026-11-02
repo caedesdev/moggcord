@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="420" viewBox="0 0 1280 420" fill="none">
+  <title>Moggcord. Your Discord. Your way.</title>
+  <desc>A lavender wordmark and a minimal settings illustration on a dark background.</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1280" y2="420" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#10111D"/>
+      <stop offset="1" stop-color="#090A11"/>
+    </linearGradient>
+    <linearGradient id="accent" x1="800" y1="80" x2="1120" y2="360" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#252338"/>
+      <stop offset="1" stop-color="#12131F"/>
+    </linearGradient>
+  </defs>
+  <rect width="1280" height="420" rx="24" fill="url(#background)"/>
+  <rect x=".5" y=".5" width="1279" height="419" rx="23.5" stroke="#292A3C"/>
+  <g font-family="Segoe UI, Arial, sans-serif">
+    <circle cx="66" cy="64" r="5" fill="#BDB7FF"/>
+    <text x="84" y="72" fill="#F2F1FC" font-size="27" font-weight="700" letter-spacing="-.8">moggcord</text>
+    <text x="60" y="169" fill="#F2F1FC" font-size="62" font-weight="700" letter-spacing="-3">Your Discord.</text>
+    <text x="60" y="237" fill="#BDB7FF" font-size="62" font-weight="700" letter-spacing="-3">Your way.</text>
+    <text x="63" y="282" fill="#9B9DB5" font-size="20">Plugins, themes and a little more you.</text>
+    <path d="M63 321H561" stroke="#2A2B3D"/>
+    <text x="63" y="359" fill="#8588A1" font-size="14" letter-spacing="1.8">WINDOWS · macOS · LINUX</text>
+    <rect x="773" y="75" width="398" height="275" rx="20" fill="url(#accent)" stroke="#39364F"/>
+    <path d="M773 130H1171" stroke="#343146"/>
+    <circle cx="803" cy="102" r="4" fill="#69647F"/>
+    <circle cx="819" cy="102" r="4" fill="#69647F"/>
+    <circle cx="835" cy="102" r="4" fill="#69647F"/>
+    <text x="856" y="108" fill="#C0BCD5" font-size="14">Make yourself at home</text>
+    <text x="802" y="178" fill="#F2F1FC" font-size="19" font-weight="600">Plugins</text>
+    <rect x="1090" y="159" width="50" height="26" rx="13" fill="#BDB7FF"/>
+    <circle cx="1127" cy="172" r="9" fill="#171424"/>
+    <path d="M802 203H1141" stroke="#333045"/>
+    <text x="802" y="241" fill="#F2F1FC" font-size="19" font-weight="600">Your theme</text>
+    <rect x="1041" y="224" width="23" height="23" rx="7" fill="#BDB7FF"/>
+    <rect x="1079" y="224" width="23" height="23" rx="7" fill="#8696C3"/>
+    <rect x="1117" y="224" width="23" height="23" rx="7" fill="#767085"/>
+    <path d="M802 266H1141" stroke="#333045"/>
+    <circle cx="809" cy="307" r="5" fill="#AAA4ED"/>
+    <text x="825" y="312" fill="#A6A2BB" font-size="15">A setup that feels like you.</text>
+  </g>
+</svg>
