@@ -7,7 +7,7 @@ import { createHash } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 
-export const buildFiles = ["patcher.js", "preload.js", "renderer.js", "renderer.css"];
+export const buildFiles = ["patcher.js", "preload.js", "renderer.js", "renderer.css", "community-service.cjs"];
 export const fileHash = file => createHash("sha256").update(readFileSync(file)).digest("hex");
 
 export function writeBuildInfo(directory, version) {

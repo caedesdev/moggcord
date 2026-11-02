@@ -8,7 +8,7 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { pathToFileURL } from "node:url";
-import { bridgeName, bridgePort, fetchManifest, installedEntries, installEntry, manifestAddress, parseLink, trustedOrigin } from "./core.mjs";
+import { bridgeName, bridgePort, fetchManifest, findClient, installedEntries, installEntry, manifestAddress, parseLink, trustedOrigin } from "./core.mjs";
 import { desktopPaths } from "../lib/desktop-paths.mjs";
 
 export function createBridge(config, dependencies = {}) {
@@ -37,8 +37,10 @@ export function createBridge(config, dependencies = {}) {
         return job;
     };
     const server = http.createServer(async (req, res) => {
-        if (req.headers.origin !== origin || !["127.0.0.1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress)
+        if (!["127.0.0.1", "::ffff:127.0.0.1"].includes(req.socket.remoteAddress)
             || req.headers.host !== `127.0.0.1:${server.address().port}`) return json(res, 403, { error: "This website is not connected to Moggcord." });
+        if (await dependencies.handleControl?.(req, res, { busy: Boolean(active), submit })) return;
+        if (req.headers.origin !== origin) return json(res, 403, { error: "This website is not connected to Moggcord." });
         res.setHeader("Access-Control-Allow-Origin", origin);
         res.setHeader("Vary", "Origin");
         res.setHeader("Access-Control-Allow-Private-Network", "true");
@@ -48,7 +50,12 @@ export function createBridge(config, dependencies = {}) {
             res.setHeader("Access-Control-Allow-Headers", "Content-Type, X-Moggcord-Install");
             return res.writeHead(204).end();
         }
-        if (req.method === "GET" && req.url === "/v1/status") return json(res, 200, { name: bridgeName, protocol: 1, channel: config.channel, capabilities: ["plugin-folders", "installed-status", "enable-installed"] });
+        if (req.method === "GET" && req.url === "/v1/status") {
+            try {
+                const client = await (dependencies.findClient ?? findClient)(config.channel);
+                return json(res, 200, { name: bridgeName, protocol: 1, channel: client.channel ?? config.channel, capabilities: ["plugin-folders", "installed-status", "enable-installed"] });
+            } catch (error) { return json(res, 409, { name: bridgeName, protocol: 1, error: error.message, code: "target_unavailable" }); }
+        }
         const match = req.url?.match(/^\/v1\/jobs\/([a-f0-9-]{36})$/);
         if (req.method === "GET" && match) return jobs.has(match[1]) ? json(res, 200, jobs.get(match[1])) : json(res, 404, { error: "Installation not found." });
         if (req.method !== "POST" || !["/v1/install", "/v1/installed"].includes(req.url)) return json(res, 404, { error: "Not found." });
@@ -70,7 +77,7 @@ export function createBridge(config, dependencies = {}) {
     return { server, submit, jobs };
 }
 
-if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href) {
+async function main() {
     const value = name => process.argv[process.argv.indexOf(name) + 1];
     const configFile = process.argv.includes("--config") ? value("--config") : process.platform === "win32" ? join(process.env.APPDATA ?? "", "MoggcordCommunity", "config.json") : join(desktopPaths().communityDir, "config.json");
     const config = JSON.parse(readFileSync(configFile, "utf8"));
@@ -91,3 +98,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
         bridge.server.listen(bridgePort, "127.0.0.1", () => { if (input) bridge.submit(input); });
     }
 }
+
+if ((typeof MOGGCORD_BUNDLED_SERVICE === "undefined" || !MOGGCORD_BUNDLED_SERVICE)
+    && process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1])).href)
+    main().catch(error => { process.stderr.write(`Moggcord connection failed: ${error.message}\n`); process.exitCode = 1; });

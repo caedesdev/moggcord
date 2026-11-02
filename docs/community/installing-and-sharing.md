@@ -4,11 +4,11 @@
 
 ## Automatic installation
 
-After [one-time setup](setup.md), choose **Download** on a plugin or theme. The same flow can be used from an author's profile.
+With Moggcord 1.18.46, start the updated client and choose **Download** on a plugin or theme. Allow access to local apps and services when the browser asks. Moggcord includes and starts the local service, so normal moggcord.cc downloads require no separate setup page or terminal commands. The same flow can be used from an author's profile. Other website origins use [advanced manual setup](setup.md).
 
 1. The website connects to the connector on the visitor's computer.
 2. The connector downloads the upload manifest and checks its identity and file fingerprint.
-3. A code plugin is validated and compiled. A stylesheet uses the theme installation path.
+3. A code plugin is validated and compiled when necessary. The version-matched compiler is prepared only if a build is needed. A stylesheet uses the theme installation path.
 4. The selected Discord channel closes; the compiled files or stylesheet are installed and enabled.
 5. That channel restarts, and the website receives the installation result.
 
@@ -39,15 +39,15 @@ Reinstalling identical content already present in the selected installation skip
 
 ## Share a link
 
-Use **Copy install link**. The recipient needs Moggcord, a connector configured for the same website origin and an available target channel on their own machine.
+Use **Copy install link**. The recipient needs the updated Moggcord and permission for the same website to contact its local service. The managed service connects to moggcord.cc; another origin requires advanced manual configuration. Installation happens on the recipient's own machine.
 
 Install links contain the manifest URL and a SHA-256 fingerprint. They identify the exact package version. Editing a nested plugin file changes the package fingerprint; an old link must not silently install the changed upload. Deleted uploads can make old links unavailable.
 
 ## After an official update
 
-Community source is retained in the connector checkout under `src/userplugins/community-<upload-id>`. Official client releases replace compiled desktop code and do not bundle every user's private community source.
+Community source is retained under `src/userplugins/community-<upload-id>` in the managed compiler source or advanced manual checkout. Official client releases replace compiled desktop code and do not bundle every user's private community source.
 
-If a community plugin disappears after updating, use the retained checkout to rebuild/reconnect as described in [Setup](setup.md#update-or-reconnect). Keep that checkout in sync with the Moggcord version you intend to run; rebuilding an old checkout can deploy an older client build.
+If a community plugin disappears after updating, choose **Download** again. The managed service uses the compiler matching the running Moggcord version and preserves retained community source. Advanced manual users should follow [Update or reconnect](setup.md#update-or-reconnect), keeping the checkout in sync with the intended client version.
 
 ## When installation fails
 

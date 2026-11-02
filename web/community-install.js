@@ -8,7 +8,7 @@
   async function request(route, options = {}, timeout = 5000) {
     const response = await fetch(base+route,{...options,cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(timeout)});
     const data = await response.json();
-    if (!response.ok) throw new Error(data.error || 'Moggcord could not complete this installation.');
+    if (!response.ok) throw Object.assign(new Error(data.error || 'Moggcord could not complete this installation.'),{code:data.code});
     return data;
   }
   function installLink(data) {
@@ -23,13 +23,14 @@
     const link = installLink(data);
     let status;
     progress('Connecting to Moggcord…');
-    try { status = await request('/v1/status',{},2500); } catch {
+    try { status = await request('/v1/status',{},30000); } catch (error) {
+      if (error.code === 'target_unavailable') throw error;
       if (options.launch !== false) {
         progress('Opening Moggcord on your PC…');
         (options.open ?? (href => window.location.assign(href)))(link);
-        for (let attempt=0; attempt<30; attempt++) {
+        for (let attempt=0; attempt<400; attempt++) {
           await pause(500);
-          try { status = await request('/v1/status',{},1500); break; } catch { progress('Waiting for Moggcord to connect…'); }
+          try { status = await request('/v1/status',{},1500); break; } catch (error) { if (error.code === 'target_unavailable') throw error; progress('Waiting for Moggcord to connect…'); }
         }
       }
     }
@@ -40,7 +41,7 @@
     progress('Connecting to Moggcord…');
     const job = await request('/v1/install',{method:'POST',headers:{'Content-Type':'application/json','X-Moggcord-Install':'1'},body:JSON.stringify({manifest:manifest.href,sha256:data.sha256})});
     if (!/^[a-f0-9-]{36}$/.test(job.id || '')) throw new Error('Moggcord returned an invalid installation response.');
-    for (let attempt=0; attempt<400; attempt++) {
+    for (let attempt=0; attempt<1800; attempt++) {
       const current = await request(`/v1/jobs/${job.id}`);
       if (current.state === 'failed') throw new Error(current.message || 'Installation failed.');
       if (current.state === 'complete') {

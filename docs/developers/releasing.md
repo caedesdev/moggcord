@@ -41,6 +41,7 @@ The publish job depends on all platform jobs. It merges their artifacts, creates
 | `Moggcord-Installer-macOS.dmg` | Main release | Universal macOS preview setup |
 | `Moggcord-Installer-Linux.AppImage`, `.deb` | Main release | Linux x64 preview setup |
 | `moggcord-update.zip` | Technical release | Small verified desktop-only update |
+| `moggcord-community-compiler.tar.gz` | Technical release | Version-matched source and dependencies for community plugin compilation |
 | `moggcord-dist.zip` | Technical release | Full installation/repair bundle |
 | `desktop.asar`, `moggcord.asar` | Technical release | Additional bundled application artifacts |
 | `version.json` | Technical release | Version, pinned update URLs and generated plugin catalog statistics |

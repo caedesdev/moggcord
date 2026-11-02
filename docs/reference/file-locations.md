@@ -12,7 +12,7 @@ These are the installer/connector defaults defined by `desktopPaths`:
 | --- | --- | --- | --- |
 | Moggcord data | `%APPDATA%\Moggcord` | `~/Library/Application Support/Moggcord` | `${XDG_CONFIG_HOME:-~/.config}/Moggcord` |
 | Deployed desktop build | `%LOCALAPPDATA%\Moggcord\dist\desktop` | `~/Library/Application Support/Moggcord/dist/desktop` | `${XDG_DATA_HOME:-~/.local/share}/Moggcord/dist/desktop` |
-| Connector configuration | `%APPDATA%\MoggcordCommunity\config.json` | `~/Library/Application Support/Moggcord/community/config.json` | `${XDG_CONFIG_HOME:-~/.config}/Moggcord/community/config.json` |
+| Manual connector configuration | `%APPDATA%\MoggcordCommunity\config.json` | `~/Library/Application Support/Moggcord/community/config.json` | `${XDG_CONFIG_HOME:-~/.config}/Moggcord/community/config.json` |
 
 The Linux notation describes a default/fallback; it is not a command to paste literally. Existing Windows injections can point at the legacy `%LOCALAPPDATA%\Moggcord\dist` directory instead. The loader's actual selected build matters more than a guessed folder.
 
@@ -24,14 +24,15 @@ The Linux notation describes a default/fallback; it is not a command to paste li
 | `settings/native-settings.json` | Native settings and custom CSP rules |
 | `settings/quickCss.css` | Personal QuickCSS |
 | `themes/` | Local stylesheets |
+| `community/` | Automatically managed community service, its private runtime and version-matched compiler source |
 
 Plugin DataStore is separate from these plain settings files. Use **Backup & Restore** to export it rather than assuming a copy of `settings.json` contains all plugin data.
 
 ## Build and source files
 
-The verified desktop build consists of `patcher.js`, `preload.js`, `renderer.js`, `renderer.css` and `build-info.json`. The manifest records the version and four desktop-file SHA-256 fingerprints.
+The verified desktop build consists of `patcher.js`, `preload.js`, `renderer.js`, `renderer.css`, `community-service.cjs` and `build-info.json`. The manifest records the version and five desktop-file SHA-256 fingerprints.
 
-Community code lives in the retained checkout at `src/userplugins/community-<upload-id>/`. Community stylesheets are written into the active data directory as `themes/community-<upload-id>.theme.css`. Source, compiled output and settings should be backed up according to their different roles.
+Community code lives in the managed compiler source or advanced manual checkout at `src/userplugins/community-<upload-id>/`. Community stylesheets are written into the active data directory as `themes/community-<upload-id>.theme.css`. Source, compiled output and settings should be backed up according to their different roles.
 
 ## Environment overrides
 

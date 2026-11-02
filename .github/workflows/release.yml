@@ -61,6 +61,9 @@ jobs:
           node scripts/build/verify-dist.mjs
           node scripts/build/verify-release.mjs
 
+      - name: Package community plugin compiler
+        run: node scripts/build/community-compiler.mjs
+
       - name: Build installer
         shell: pwsh
         run: .\build-installer.ps1
@@ -107,7 +110,7 @@ jobs:
       - name: Create release checksums
         shell: pwsh
         run: |
-          $files = @("release\installer\Moggcord-Installer.exe", "release\installer\moggcord-dist.zip", "release\installer\version.json", "dist\desktop.asar", "dist\moggcord.asar", "release\installer\installer-verification.json")
+          $files = @("release\installer\Moggcord-Installer.exe", "release\installer\moggcord-dist.zip", "release\installer\moggcord-community-compiler.tar.gz", "release\installer\version.json", "dist\desktop.asar", "dist\moggcord.asar", "release\installer\installer-verification.json")
           $lines = foreach ($file in $files) {
             $fingerprint = (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash.ToLowerInvariant()
             "$fingerprint  $([IO.Path]::GetFileName($file))"
@@ -118,7 +121,7 @@ jobs:
         shell: pwsh
         run: |
           New-Item -ItemType Directory -Path release/release-assets -Force | Out-Null
-          Copy-Item release/installer/Moggcord-Installer.exe,release/installer/moggcord-dist.zip,release/installer/version.json,dist/desktop.asar,dist/moggcord.asar,release/installer/installer-verification.json -Destination release/release-assets
+          Copy-Item release/installer/Moggcord-Installer.exe,release/installer/moggcord-dist.zip,release/installer/moggcord-community-compiler.tar.gz,release/installer/version.json,dist/desktop.asar,dist/moggcord.asar,release/installer/installer-verification.json -Destination release/release-assets
           node scripts/build/update-archive.mjs
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -188,8 +191,27 @@ jobs:
             release/platform-installers/installer-verification-*.json
           if-no-files-found: error
 
+  compiler-smoke:
+    needs: build
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+      - uses: actions/download-artifact@v4
+        with:
+          name: release-windows
+          path: compiler-assets
+      - name: Build with the Windows compiler artifact
+        run: node scripts/tests/community-compiler-smoke.mjs --archive compiler-assets/moggcord-community-compiler.tar.gz
+
   publish:
-    needs: [build, desktop]
+    needs: [build, desktop, compiler-smoke]
     if: startsWith(github.ref, 'refs/tags/') || inputs.publish
     runs-on: ubuntu-latest
     steps:

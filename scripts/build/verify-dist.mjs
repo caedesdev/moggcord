@@ -2,12 +2,13 @@
 import fs from "fs";
 import path from "path";
 import { fileURLToPath } from "url";
+import { buildFiles } from "../lib/build-info.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.join(__dirname, "..", "..");
 const distDir = path.join(rootDir, "dist", "desktop");
 
-const CORE_FILES = ["patcher.js", "renderer.js", "preload.js"];
+const CORE_FILES = buildFiles;
 const OPTIONAL_FILES = ["node.exe", "ffmpeg.exe"];
 const OPTIONAL_DIRS = [
     "ghost-server",

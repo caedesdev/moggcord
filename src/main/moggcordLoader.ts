@@ -4,6 +4,7 @@
 
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "original-fs";
 import { basename, dirname, join } from "path";
+import { buildFiles } from "../../scripts/lib/build-info.mjs";
 import { desktopPaths } from "../../scripts/lib/desktop-paths.mjs";
 
 const MIN_VALID_ASAR_BYTES = 1_000_000;
@@ -184,8 +185,7 @@ export function repatchLatestDiscordHost(installDir = getPatcherInstallDir()): b
 }
 
 export function validateMoggcordDist(installDir = getPatcherInstallDir()): boolean {
-    const required = ["patcher.js", "preload.js", "renderer.js"];
-    const missing = required.filter(f => !existsSync(join(installDir, f)));
+    const missing = buildFiles.filter(f => !existsSync(join(installDir, f)));
     if (missing.length) {
         console.error(`[Moggcord] Missing ${missing.join(", ")} in ${installDir} — plugins will not load.`);
         return false;

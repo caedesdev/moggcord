@@ -89,30 +89,42 @@ export async function fetchManifest(input, origin, fetcher = fetch) {
     return validateManifest(JSON.parse(Buffer.concat(chunks).toString("utf8")), address, input.sha256);
 }
 
-export async function findClient(channel, localAppData = process.env.LOCALAPPDATA, platform = process.platform) {
+export async function findClient(channel = "auto", localAppData = process.env.LOCALAPPDATA, platform = process.platform) {
+    channel ??= "auto";
+    if (channel !== "auto" && !Object.hasOwn(channelNames, channel)) throw new Error("Choose auto, stable, canary, ptb, or development.");
+    const clients = [];
     if (platform !== "win32") {
-        if (!channelNames[channel]) throw new Error("Choose stable, canary, ptb, or development.");
-        const client = discoverDesktops(platform).find(target => target.channel === channel && target.installed);
-        if (!client) throw new Error(`No Moggcord installation was found in ${channelNames[channel]}. Install Moggcord in this channel first.`);
-        return client;
+        clients.push(...discoverDesktops(platform).filter(target => target.installed && (channel === "auto" || target.channel === channel)));
+    } else {
+        if (!localAppData) throw new Error("The local Discord application directory is unavailable.");
+        for (const [targetChannel, directory] of Object.entries(channelNames)) {
+            if (channel !== "auto" && targetChannel !== channel) continue;
+            const base = join(localAppData, directory);
+            const versions = (await readdir(base).catch(error => {
+                if (error.code === "ENOENT") return [];
+                throw error;
+            })).filter(name => /^app-\d+\.\d+\.\d+$/.test(name))
+                .sort((a, b) => b.localeCompare(a, "en", { numeric: true }));
+            for (const version of versions) {
+                const folder = join(base, version);
+                const executable = join(folder, `${directory}.exe`);
+                if (!existsSync(executable) || !lstatSync(executable).isFile()) continue;
+                const loaderFile = join(folder, "resources", "app", "index.js");
+                if (!existsSync(loaderFile)) break;
+                const loader = await readFile(loaderFile, "utf8");
+                if (!loader.includes("Moggcord Injector")) break;
+                const candidates = [...loader.matchAll(/"([^"\r\n]+\/patcher\.js)"/g)].map(match => match[1]);
+                candidates.push(join(localAppData, "Moggcord", "dist", "desktop", "patcher.js"), join(localAppData, "Moggcord", "dist", "patcher.js"));
+                const patcher = candidates.find(file => existsSync(file));
+                if (!patcher || !(await readFile(patcher, "utf8")).startsWith("// Moggcord ")) break;
+                clients.push({ channel: targetChannel, base, executable, installDir: realpathSync(dirname(patcher)) });
+                break;
+            }
+        }
     }
-    if (!channelNames[channel] || !localAppData) throw new Error("Choose stable, canary, ptb, or development.");
-    const base = join(localAppData, channelNames[channel]);
-    const versions = (await readdir(base)).filter(name => /^app-\d+\.\d+\.\d+$/.test(name))
-        .sort((a, b) => b.localeCompare(a, "en", { numeric: true }));
-    for (const version of versions) {
-        const folder = join(base, version);
-        const loaderFile = join(folder, "resources", "app", "index.js");
-        if (!existsSync(loaderFile)) continue;
-        const loader = await readFile(loaderFile, "utf8");
-        if (!loader.includes("Moggcord Injector")) continue;
-        const candidates = [...loader.matchAll(/"([^"\r\n]+\/patcher\.js)"/g)].map(match => match[1]);
-        candidates.push(join(localAppData, "Moggcord", "dist", "desktop", "patcher.js"), join(localAppData, "Moggcord", "dist", "patcher.js"));
-        const patcher = candidates.find(file => existsSync(file));
-        if (!patcher || !(await readFile(patcher, "utf8")).startsWith("// Moggcord ")) continue;
-        const executable = (await readdir(folder)).find(name => /^Discord(?:Canary|PTB|Development)?\.exe$/i.test(name));
-        if (executable) return { base, executable: join(folder, executable), installDir: realpathSync(dirname(patcher)) };
-    }
+    if (clients.length === 1 || (clients.length && channel !== "auto")) return clients[0];
+    if (clients.length > 1) throw new Error(`Moggcord was found in multiple Discord installations (${clients.map(client => client.channel).join(", ")}). Choose one with --channel.`);
+    if (channel === "auto") throw new Error("No Moggcord installation was found. Install Moggcord in a Discord channel first.");
     throw new Error(`No Moggcord installation was found in ${channelNames[channel]}. Install Moggcord in this channel first.`);
 }
 
@@ -312,7 +324,7 @@ export async function installEntry(entry, config, dependencies = {}, progress = 
     const plugin_name = pluginPackage.pluginName(entry.source_code);
     const [existing] = await installedEntries([{ id: entry.id, kind: entry.kind, file_name: entry.file_name, plugin_name, sha256: entry.sha256 }], config, { ...dependencies, findClient: async () => client });
     const unchanged = existing.installed && existing.current;
-    if (unchanged && existing.enabled) return { name: entry.name, channel: config.channel, sha256: entry.sha256, alreadyInstalled: true };
+    if (unchanged && existing.enabled) return { name: entry.name, channel: client.channel ?? config.channel, sha256: entry.sha256, alreadyInstalled: true };
     const stylesheet = entry.protocol === 1 && /\.(css|style)$/i.test(entry.file_name);
     const pluginDirectory = join(sourceRoot, "src", "userplugins", `community-${entry.id}`);
     const pluginFiles = entry.files ?? [{ path: /\.[jt]sx$/i.test(entry.file_name) ? "index.tsx" : "index.ts", content: entry.source_code }];
@@ -323,6 +335,7 @@ export async function installEntry(entry, config, dependencies = {}, progress = 
     try {
         let name = plugin_name;
         if (!stylesheet && !unchanged) {
+            await dependencies.prepareSource?.(sourceRoot, progress);
             const files = [...pluginFiles];
             if (!files.some(file => ["index.ts", "index.tsx"].includes(file.path)))
                 files.push({ path: "index.ts", content: `export { default } from ${JSON.stringify("./" + entry.file_name)};\nexport * from ${JSON.stringify("./" + entry.file_name)};\n` });
@@ -351,7 +364,7 @@ export async function installEntry(entry, config, dependencies = {}, progress = 
                 await snapshot(path, backups); await atomicWrite(path, file.content);
             }
             progress("building", "Building your plugin…");
-            await (dependencies.build ?? defaultBuild)(sourceRoot);
+            await (dependencies.build ?? defaultBuild)(sourceRoot, progress);
             const version = JSON.parse(await readFile(join(sourceRoot, "package.json"), "utf8")).version;
             verifyBuild(join(sourceRoot, "dist", "desktop"), version);
         }
@@ -378,7 +391,7 @@ export async function installEntry(entry, config, dependencies = {}, progress = 
         await atomicWrite(settingsFile, JSON.stringify(settings, null, 4));
         progress("restarting", "Restarting Moggcord…");
         await start(client);
-        return { name: entry.name, channel: config.channel, sha256: entry.sha256 };
+        return { name: entry.name, channel: client.channel ?? config.channel, sha256: entry.sha256 };
     } catch (error) {
         for (const [file, bytes] of [...backups].reverse())
             if (bytes === null) await rm(file, { force: true });
