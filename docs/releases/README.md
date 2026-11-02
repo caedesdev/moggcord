@@ -4,6 +4,7 @@
 
 | Version | Main changes | Notes |
 | --- | --- | --- |
+| [1.18.50](1.18.50.md) | Windows installer includes the .NET runtime in its executable | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.50) |
 | [1.18.49](1.18.49.md) | Automatic Windows installer updates, verified download caching and a compact welcome card | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.49) |
 | [1.18.48](1.18.48.md) | Draggable privacy dialogs, website local-app permissions and animated website login artwork | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.48) |
 | [1.18.47](1.18.47.md) | Remove the duplicate updater status and keep the title bar draggable with user settings open | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.47) |
