@@ -24,7 +24,7 @@ macOS and Linux installers are previews. See the [installation guide](docs/getti
 
 ## Support
 
-Optional [crypto donations](docs/donations.md) with Litecoin, Bitcoin or Solana. Choose your own amount.
+Support Moggcord through [GitHub Sponsors](https://github.com/sponsors/caedesdev) or the crypto addresses on the profile.
 
 ## Credits and license
 
