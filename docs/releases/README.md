@@ -4,6 +4,7 @@
 
 | Version | Main changes | Notes |
 | --- | --- | --- |
+| [1.18.47](1.18.47.md) | Remove the duplicate status message after checking for updates | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.47) |
 | [1.18.46](1.18.46.md) | Automatic community service startup, installed Discord channel detection and version-matched plugin compilation | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.46) |
 | [1.18.45](1.18.45.md) | Animated core sidebar branding, reduced-motion support and retirement of legacy heading polling | [Published release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.45) |
 | [1.18.44](1.18.44.md) | Installer-only main release, separate update files and a version-matched updater lookup | [Published release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.44) |
