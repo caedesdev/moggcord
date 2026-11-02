@@ -71,7 +71,7 @@ namespace MoggcordInstaller
             if (manifest.RootElement.GetProperty("version").GetString() != version)
                 throw new InvalidDataException("The installer and embedded desktop versions do not match.");
             var fingerprints = new Dictionary<string, string>();
-            foreach (var file in new[] { "patcher.js", "preload.js", "renderer.js", "renderer.css" })
+            foreach (var file in new[] { "patcher.js", "preload.js", "renderer.js", "renderer.css", "community-service.cjs" })
             {
                 var entry = archive.GetEntry(file);
                 if (entry == null) throw new InvalidDataException($"Missing desktop file: {file}");

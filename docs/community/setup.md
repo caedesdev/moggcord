@@ -2,7 +2,17 @@
 
 [Documentation](../README.md) / Community / Setup
 
-The connector lets a website install an upload into **your own** Moggcord client. Each visitor sets up their own connection. Running a connector on the website server does not connect other people's PCs.
+The local service lets a website install an upload into **your own** Moggcord client. Each visitor's service runs on that visitor's computer.
+
+## Use moggcord.cc
+
+In Moggcord 1.18.46, the normal client update includes this service. Start the updated Moggcord, choose **Download** on moggcord.cc and allow access to local apps and services if the browser asks. The service detects the Discord installation with Moggcord and installs the upload there. No separate setup page, checkout or terminal commands are needed for this flow.
+
+Moggcord starts an independent local worker that can finish an installation while the selected Discord restarts. A private runtime is prepared automatically. A compiler package matching the running Moggcord version is downloaded only when a code plugin needs to be built. Enabling an unchanged installed plugin or installing a stylesheet does not require that compiler download.
+
+Only a valid Moggcord installation is accepted. Unmodified Discord and other loaders are excluded. If no unique target is available, the service reports the problem instead of choosing an arbitrary installation.
+
+The remaining sections describe advanced manual setup for another website origin or development. Running a connector on a website server does not connect visitors' PCs.
 
 ## Before you start
 
@@ -21,10 +31,12 @@ From a terminal:
 git clone https://github.com/caedesdev/moggcord.git moggcord-community
 cd moggcord-community
 pnpm install --frozen-lockfile
-pnpm community:setup --channel canary --site https://community.example.com
+pnpm community:setup --site https://community.example.com
 ```
 
 Replace `https://community.example.com` with the real website origin. This example domain is not a Moggcord service. For development on this same computer, use `--site http://127.0.0.1:4173`.
+
+Setup automatically detects the Discord installation that already has Moggcord. Stable, PTB, Canary and Development are checked. Unmodified Discord and other loaders are excluded. If Moggcord is installed in more than one channel, setup lists the matches and asks you to choose one with `--channel`. It does not choose an arbitrary installation.
 
 **Setup rebuilds Moggcord and restarts the selected channel once.** Leave active calls and save work first. Keep this checkout after setup; moving or deleting it breaks the recorded compiler path.
 
@@ -32,7 +44,7 @@ Replace `https://community.example.com` with the real website origin. This examp
 
 | Option | Accepted value | Purpose |
 | --- | --- | --- |
-| `--channel` | `stable`, `canary`, `ptb`, `development` | Choose one Discord installation |
+| `--channel` | `auto` (default), `stable`, `canary`, `ptb`, `development` | Detect Moggcord automatically or choose one Discord installation |
 | `--site` | An HTTPS origin, or HTTP loopback for development | Choose the website allowed to install uploads |
 | `--data-dir` | An absolute directory path | Use a custom Moggcord settings/themes directory |
 
@@ -42,13 +54,17 @@ When using a custom data directory, make sure it is the same one used by your ru
 
 ## What setup registers
 
-| Platform | Configuration and startup integration |
+| Platform | Manual configuration and startup integration |
 | --- | --- |
 | Windows | `%APPDATA%\MoggcordCommunity\config.json`, a per-user startup entry and `moggcord://` handler |
 | macOS | `~/Library/Application Support/Moggcord/community/config.json`, a per-user LaunchAgent and generated link-handler application |
 | Linux | The XDG Moggcord community directory, per-user application/autostart desktop entries and the `moggcord` scheme handler |
 
-The connector listens on `127.0.0.1:6469`. It can start at sign-in or through the registered install link. To run it from the retained checkout manually:
+The connector listens on `127.0.0.1:6469`. It can start at sign-in or through the registered install link.
+
+Automatic mode is retained in the configuration. The connector checks the installed Moggcord target again when reporting its status or installing an upload, so it is not permanently tied to the channel found during setup.
+
+To run it from the retained checkout manually:
 
 ```sh
 pnpm community:start
@@ -81,4 +97,4 @@ Removing registration does not remove installed plugins, themes or saved setting
 
 ## Source of truth
 
-[Setup implementation](../../scripts/community/setup.mjs) · [Connector startup](../../scripts/community/bridge.mjs) · [Platform paths](../../scripts/lib/desktop-paths.mjs)
+[Automatic client startup](../../src/main/community.ts) · [Managed service](../../scripts/community/service.mjs) · [Compiler preparation](../../scripts/community/compiler.mjs) · [Manual setup](../../scripts/community/setup.mjs) · [Platform paths](../../scripts/lib/desktop-paths.mjs)

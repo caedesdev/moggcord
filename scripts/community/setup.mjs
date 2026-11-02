@@ -11,18 +11,18 @@ import { channelNames, findClient, repairClient, trustedOrigin } from "./core.mj
 import { desktopPaths } from "../lib/desktop-paths.mjs";
 
 const option = name => { const i = process.argv.indexOf(name); return i < 0 ? null : process.argv[i + 1]; };
-const channel = option("--channel");
-if (!channelNames[channel]) throw new Error("Choose a Discord channel, for example --channel canary.");
+const channel = option("--channel") ?? "auto";
+if (channel !== "auto" && !Object.hasOwn(channelNames, channel)) throw new Error("Choose auto, stable, canary, ptb, or development.");
 if (!option("--site")) throw new Error("Add --site with the address of the website you want to connect.");
 const origin = trustedOrigin(option("--site"));
-await findClient(channel);
+const client = await findClient(channel);
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "../..");
 if (!existsSync(join(sourceRoot, "node_modules", "typescript"))) throw new Error("Run pnpm install --frozen-lockfile first.");
 const paths = desktopPaths();
 const directory = process.platform === "win32" ? join(process.env.APPDATA, "MoggcordCommunity") : paths.communityDir;
 mkdirSync(directory, { recursive: true });
 const config = { origin, channel, sourceRoot, dataDir: option("--data-dir") ? resolve(option("--data-dir")) : paths.dataDir, mirrorDir: paths.distDir };
-process.stdout.write(`Building the current source and updating Moggcord in ${channelNames[channel]}…\n`);
+process.stdout.write(`Building the current source and updating Moggcord in ${channelNames[client.channel]}…\n`);
 await repairClient(config);
 const configFile = join(directory, "config.json");
 writeFileSync(configFile, JSON.stringify(config, null, 2));
@@ -67,4 +67,4 @@ registry("HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Run", "MoggcordCom
 } else throw new Error("Community installation is supported on Windows, macOS and Linux.");
 const child = spawn(process.execPath, [bridge, "--config", configFile], { detached: true, stdio: "ignore", windowsHide: true });
 await new Promise((resolvePromise, reject) => { child.once("spawn", resolvePromise); child.once("error", reject); }); child.unref();
-process.stdout.write(`Connected ${origin} to Moggcord in ${channelNames[channel]}.\nDownload buttons can now install uploads and restart this channel.\nConfiguration: ${configFile}\n`);
+process.stdout.write(`Connected ${origin} to Moggcord in ${channelNames[client.channel]}.\nDownload buttons can now install uploads and restart this channel.\nConfiguration: ${configFile}\n`);

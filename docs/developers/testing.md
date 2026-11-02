@@ -14,8 +14,8 @@ Run checks that exercise the changed behavior. A fixture test can verify file ha
 | Installer interface | `pnpm test:installer` | Action selection, custom paths, replacement guards, progress and notification behavior |
 | macOS/Linux backend | `pnpm test:platform-installer` | Platform paths, install/repair/restore, permission staging and archive extraction |
 | Windows native backend | `dotnet run --project scripts/tests/installer-native --configuration Release` | Temporary installation fixtures, target resolution and selected-process shutdown |
-| Desktop compilation | `pnpm buildStandalone` | Current renderer/main/preload bundles and build information |
-| Built desktop files | `node scripts/build/verify-release.mjs` | Build version and the four desktop file fingerprints |
+| Desktop compilation | `pnpm buildStandalone` | Current renderer/main/preload and local-service bundles with build information |
+| Built desktop files | `node scripts/build/verify-release.mjs` | Build version and the five desktop file fingerprints |
 
 The Windows native tests need the .NET 8 SDK and Windows. Target-platform native tests can skip on another OS or without the pinned helper. A skip is not evidence that native installation succeeded.
 

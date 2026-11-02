@@ -23,7 +23,7 @@ const compiled = await build({
     } }], external: ["electron", "original-fs"]
 });
 
-function loadUpdater(t, { platform = "linux", broken = false, lean = false, separated = false, updateTag = "updates-v1.18.24", missing = false } = {}) {
+function loadUpdater(t, { platform = "linux", broken = false, lean = false, separated = false, updateTag = "updates-v1.18.24", missing = false, missingService = false } = {}) {
     const directory = fs.mkdtempSync(join(tmpdir(), "moggcord-updater-test-"));
     t.after(() => { assert.equal(dirname(resolve(directory)), resolve(tmpdir())); assert(directory.includes("moggcord-updater-test-")); fs.rmSync(directory, { recursive: true, force: true }); });
     const source = join(directory, "release"), destination = join(directory, "active"), mirror = join(directory, "mirror");
@@ -33,7 +33,8 @@ function loadUpdater(t, { platform = "linux", broken = false, lean = false, sepa
         writeBuildInfo(folder, folder === source && !broken ? "1.18.24" : "1.18.23");
     }
     const handlers = new Map();
-    const archive = zipSync(Object.fromEntries([...buildFiles, "build-info.json"].map(file => [file, fs.readFileSync(join(source, file))])));
+    if (missingService) fs.rmSync(join(source, "community-service.cjs"));
+    const archive = zipSync(Object.fromEntries([...buildFiles, "build-info.json"].filter(file => !missingService || file !== "community-service.cjs").map(file => [file, fs.readFileSync(join(source, file))])));
     const requests = [];
     const metadataRequests = [];
     const network = { respond: async () => new Response(archive, { headers: { "content-length": String(archive.length) } }) };
@@ -73,9 +74,21 @@ for (const platform of ["win32", "darwin", "linux"]) for (const broken of [false
     const applied = await handlers.get("apply")();
     assert.equal(applied.ok, true); assert.equal(applied.value, !broken);
     assert.equal((await handlers.get("status")()).value.phase, broken ? "error" : "installed");
-    for (const folder of [destination, mirror]) assert.equal(fs.readFileSync(join(folder, "renderer.js"), "utf8"), `${broken ? "old" : "new"} renderer.js`);
+    for (const folder of [destination, mirror]) for (const file of ["renderer.js", "community-service.cjs"])
+        assert.equal(fs.readFileSync(join(folder, file), "utf8"), `${broken ? "old" : "new"} ${file}`);
     assert.equal((await handlers.get("check")()).value.length, broken ? 1 : 0);
     if (!broken) assert.equal(fs.readdirSync(directory).some(name => name.startsWith("moggcord-download-")), false);
+});
+
+for (const platform of ["win32", "darwin", "linux"]) test(`${platform} refuses an update that omits its required local community service`, async t => {
+    const state = loadUpdater(t, { platform, missingService: true });
+    await state.handlers.get("check")();
+    assert.equal((await state.handlers.get("download")()).value, true);
+    assert.equal((await state.handlers.get("apply")()).value, false);
+    assert.equal((await state.handlers.get("status")()).value.phase, "error");
+    for (const folder of [state.destination, state.mirror]) for (const file of ["renderer.js", "community-service.cjs"])
+        assert.equal(fs.readFileSync(join(folder, file), "utf8"), `old ${file}`);
+    assert.equal((await state.handlers.get("check")()).value.length, 1);
 });
 
 test("installer-only releases resolve their matching technical release and keep the small update path", async t => {

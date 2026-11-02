@@ -26,6 +26,8 @@ The service returns `Access-Control-Allow-Origin` only for the configured origin
 
 Status currently advertises `name: "moggcord-community"`, `protocol: 1` and capabilities `plugin-folders`, `installed-status` and `enable-installed`. Check capabilities rather than treating every protocol-1 connector as folder-aware or able to reactivate existing uploads.
 
+In automatic mode, `channel` reports the detected Moggcord channel, rather than `auto`. If no unique Moggcord target is available, status returns HTTP 409 with `code: "target_unavailable"` and an explanation. The connector identity remains in that response. Browser clients should display the explanation instead of launching another connector or reporting an unrelated connection failure.
+
 Only one installation is active at a time. A repeated request for its same manifest/hash returns that active job; another package receives an error. Jobs move through `downloading`, `building` where applicable, `installing`, `restarting`, then `complete` or `failed`. A completed no-op can return `alreadyInstalled: true`.
 
 Job history is in memory and retains up to 20 jobs. It is not a durable installation database.

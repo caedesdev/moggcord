@@ -12,7 +12,7 @@ import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import http from "node:http";
 import { createBridge } from "../community/bridge.mjs";
-import { fetchManifest, findClient, installedEntries, installEntry, parseLink, repairClient, sourceLimit, trustedOrigin, validateManifest } from "../community/core.mjs";
+import { channelNames, fetchManifest, findClient, installedEntries, installEntry, parseLink, repairClient, sourceLimit, trustedOrigin, validateManifest } from "../community/core.mjs";
 import { buildFiles, writeBuildInfo } from "../lib/build-info.mjs";
 import pluginPackage from "../../web/plugin-package.js";
 import { resolvePluginName } from "../build/common.mjs";
@@ -62,6 +62,16 @@ async function fixture(t) {
         }
     };
     return { directory, config, client, dependencies, events, settings, original };
+}
+
+async function windowsInstallation(directory, channel, version = "app-1.0.0", marker = "Moggcord Injector") {
+    const base = join(directory, channelNames[channel]), folder = join(base, version), patcher = join(base, "dist", "patcher.js");
+    await mkdir(join(folder, "resources", "app"), { recursive: true });
+    await mkdir(dirname(patcher), { recursive: true });
+    await writeFile(patcher, "// Moggcord test");
+    await writeFile(join(folder, "resources", "app", "index.js"), `// ${marker}\n[${JSON.stringify(patcher.replaceAll("\\", "/"))}]`);
+    await writeFile(join(folder, `${channelNames[channel]}.exe`), "fixture");
+    return { folder, patcher };
 }
 
 test("installation manifests enforce size, type, origin, identity and file fingerprints", () => {
@@ -166,11 +176,64 @@ test("installed-state HTTP queries keep the configured origin and custom-header 
     await new Promise(resolvePromise => bridge.server.listen(0, "127.0.0.1", resolvePromise));
     t.after(() => new Promise(resolvePromise => bridge.server.close(resolvePromise)));
     const base = `http://127.0.0.1:${bridge.server.address().port}`;
+    const status = await fetch(base + "/v1/status", { headers: { Origin: origin } });
+    assert.equal(status.status, 200);
+    assert.equal((await status.json()).channel, "canary");
     const send = headers => fetch(base + "/v1/installed", { method: "POST", headers, body: JSON.stringify({ entries: [{ id, kind: "plugin", file_name: "index.ts", plugin_name: "CommunityExample" }] }) });
     assert.equal((await send({ Origin: "https://other.example" })).status, 403);
     assert.equal((await send({ Origin: origin, "Content-Type": "application/json" })).status, 415);
     const response = await send({ Origin: origin, "Content-Type": "application/json", "X-Moggcord-Install": "1" });
     assert.equal(response.status, 200);assert.deepEqual(await response.json(), { entries: [{ id, installed: true, enabled: true }] });assert.deepEqual(f.events, []);
+});
+
+test("HTTP status reports the detected channel for automatic target selection", async t => {
+    const origin = "https://moggcord.example", selections = [];
+    let detected = "stable";
+    const bridge = createBridge({ origin, channel: "auto" }, { findClient: async channel => { selections.push(channel); return { channel: detected }; } });
+    await new Promise(resolvePromise => bridge.server.listen(0, "127.0.0.1", resolvePromise));
+    t.after(() => new Promise(resolvePromise => bridge.server.close(resolvePromise)));
+    const url = `http://127.0.0.1:${bridge.server.address().port}/v1/status`;
+    for (const channel of ["stable", "canary", "ptb"]) {
+        detected = channel;
+        const response = await fetch(url, { headers: { Origin: origin } });
+        assert.equal(response.status, 200);
+        assert.equal(response.headers.get("access-control-allow-origin"), origin);
+        assert.equal(response.headers.get("access-control-allow-private-network"), "true");
+        const status = await response.json();
+        assert.equal(status.name, "moggcord-community");
+        assert.equal(status.protocol, 1);
+        assert.equal(status.channel, channel);
+        assert(status.capabilities.includes("installed-status"));
+    }
+    assert.deepEqual(selections, ["auto", "auto", "auto"]);
+});
+
+test("HTTP status safely reports missing or ambiguous targets and recovers when a target becomes available", async t => {
+    const origin = "https://moggcord.example";
+    let failure = null;
+    const bridge = createBridge({ origin, channel: "auto" }, { findClient: async channel => {
+        assert.equal(channel, "auto");
+        if (failure) throw new Error(failure);
+        return { channel: "ptb" };
+    } });
+    await new Promise(resolvePromise => bridge.server.listen(0, "127.0.0.1", resolvePromise));
+    t.after(() => new Promise(resolvePromise => bridge.server.close(resolvePromise)));
+    const url = `http://127.0.0.1:${bridge.server.address().port}/v1/status`;
+    for (const message of ["No Moggcord installation was found.", "Moggcord was found in multiple Discord installations (stable, canary). Choose one with --channel."]) {
+        failure = message;
+        const response = await fetch(url, { headers: { Origin: origin } });
+        assert.equal(response.status, 409);
+        assert.equal(response.headers.get("access-control-allow-origin"), origin);
+        assert.equal(response.headers.get("access-control-allow-private-network"), "true");
+        assert.deepEqual(await response.json(), { name: "moggcord-community", protocol: 1, error: message, code: "target_unavailable" });
+        assert.equal((await fetch(url, { headers: { Origin: "https://another.example" } })).status, 403);
+        const preflight = await fetch(url, { method: "OPTIONS", headers: { Origin: origin, "Access-Control-Request-Method": "GET" } });
+        assert.equal(preflight.status, 204);
+        failure = null;
+        const recovered = await fetch(url, { headers: { Origin: origin } });
+        assert.equal(recovered.status, 200);
+        assert.equal((await recovered.json()).channel, "ptb");
+    }
 });
 
 test("folder manifests fingerprint every nested file, reject traversal and keep protocol one backwards compatible", () => {
@@ -283,6 +346,35 @@ test("one-time setup repairs the stale client without rewriting any account sett
     assert.equal(await readFile(join(f.client.installDir, "renderer.js"), "utf8"), "new renderer.js");
 });
 
+test("managed source is prepared before duplicate names can overwrite a retained community plugin", async t => {
+    const f = await fixture(t), data = entry();
+    f.dependencies.prepareSource = async root => {
+        assert.equal(root, f.config.sourceRoot);
+        const retained = join(root, "src", "userplugins", "community-retained");
+        await mkdir(retained, { recursive: true });
+        await writeFile(join(retained, "index.ts"), source);
+        f.events.push("prepare");
+    };
+    await assert.rejects(installEntry(data, f.config, f.dependencies), /Another installed plugin already uses this name/);
+    assert.deepEqual(f.events, ["prepare"]);
+    assert(!existsSync(join(f.config.sourceRoot, "src", "userplugins", `community-${data.id}`)));
+    assert.equal(await readFile(join(f.client.installDir, "renderer.js"), "utf8"), "old renderer");
+    assert.deepEqual(JSON.parse(await readFile(f.settings, "utf8")), f.original);
+});
+
+test("stylesheet installation, activation and repeated downloads do not prepare a code compiler", async t => {
+    const f = await fixture(t), data = entry("theme", "body{color:purple}", "example.css");
+    f.dependencies.prepareSource = async () => { throw new Error("Unexpected compiler preparation"); };
+    await installEntry(data, f.config, f.dependencies);
+    const repeated = await installEntry(data, f.config, f.dependencies);
+    assert.equal(repeated.alreadyInstalled, true);
+    const saved = JSON.parse(await readFile(f.settings, "utf8"));
+    saved.enabledThemes = [];
+    await writeFile(f.settings, JSON.stringify(saved));
+    await installEntry(data, f.config, f.dependencies);
+    assert.deepEqual(f.events, ["stop canary", "start canary", "stop canary", "start canary"]);
+});
+
 test("failed builds restore source and never stop the client or replace installed files", async t => {
     const f = await fixture(t), data = entry();
     f.dependencies.build = async () => { throw new Error("Build failed"); };
@@ -320,7 +412,91 @@ test("channel discovery selects only Moggcord in the chosen channel and uses num
         await writeFile(join(folder, "DiscordCanary.exe"), "fixture");
     }
     const client = await findClient("canary", f.directory, "win32"); assert(client.executable.includes("app-1.0.10"));
+    assert.equal(client.channel, "canary");
+    assert.deepEqual(await findClient("auto", f.directory, "win32"), client);
     await assert.rejects(findClient("stable", f.directory, "win32"), /No Moggcord/);
+});
+
+for (const channel of Object.keys(channelNames)) test(`automatic channel discovery finds Moggcord in ${channel} without selecting unmodified Discord or Vencord`, async t => {
+    const f = await fixture(t);
+    const otherChannels = Object.keys(channelNames).filter(value => value !== channel);
+    await windowsInstallation(f.directory, otherChannels[0], "app-2.0.0", "Discord");
+    await windowsInstallation(f.directory, otherChannels[1], "app-2.0.0", "Vencord");
+    await windowsInstallation(f.directory, channel, "app-1.0.9");
+    const latest = await windowsInstallation(f.directory, channel, "app-1.0.10");
+    for (const selection of ["auto", undefined, null, channel]) {
+        const client = await findClient(selection, f.directory, "win32");
+        assert.equal(client.channel, channel);
+        assert.equal(client.executable, join(latest.folder, `${channelNames[channel]}.exe`));
+    }
+});
+
+test("channel discovery does not fall back to an old patched version after the active Discord host lost its loader", async t => {
+    for (const channel of Object.keys(channelNames)) {
+        const f = await fixture(t);
+        await windowsInstallation(f.directory, channel, "app-1.0.0");
+        const current = await windowsInstallation(f.directory, channel, "app-1.0.1", "Vencord");
+        await assert.rejects(findClient(channel, f.directory, "win32"), /No Moggcord/);
+        await rm(join(current.folder, "resources", "app", "index.js"));
+        await assert.rejects(findClient("auto", f.directory, "win32"), /No Moggcord/);
+        const otherChannel = channel === "ptb" ? "stable" : "ptb";
+        await windowsInstallation(f.directory, otherChannel);
+        assert.equal((await findClient("auto", f.directory, "win32")).channel, otherChannel);
+    }
+});
+
+test("channel discovery skips newer staging versions that lack the channel executable", async t => {
+    const f = await fixture(t);
+    const active = await windowsInstallation(f.directory, "stable", "app-1.0.9");
+    const staging = await windowsInstallation(f.directory, "stable", "app-1.0.10", "Discord");
+    await rm(join(staging.folder, "Discord.exe"));
+    await writeFile(join(staging.folder, "DiscordCanary.exe"), "another channel executable");
+    const client = await findClient("auto", f.directory, "win32");
+    assert.equal(client.channel, "stable");
+    assert.equal(client.executable, join(active.folder, "Discord.exe"));
+});
+
+test("automatic channel discovery reports missing Moggcord instead of selecting another client mod", async t => {
+    const f = await fixture(t);
+    await assert.rejects(findClient("auto", f.directory, "win32"), /No Moggcord installation was found/);
+    await windowsInstallation(f.directory, "stable", "app-1.0.0", "Discord");
+    await windowsInstallation(f.directory, "canary", "app-1.0.0", "Vencord");
+    const invalid = await windowsInstallation(f.directory, "ptb");
+    await writeFile(invalid.patcher, "// Vencord test");
+    await assert.rejects(findClient("auto", f.directory, "win32"), /No Moggcord installation was found/);
+    for (const channel of ["stable", "canary", "ptb", "development"]) await assert.rejects(findClient(channel, f.directory, "win32"), /No Moggcord/);
+    await assert.rejects(findClient("unknown", f.directory, "win32"), /Choose auto, stable, canary, ptb, or development/);
+});
+
+test("automatic channel discovery requires a choice when multiple channels contain Moggcord", async t => {
+    const f = await fixture(t);
+    for (const channel of ["stable", "canary", "ptb"]) await windowsInstallation(f.directory, channel);
+    await assert.rejects(findClient("auto", f.directory, "win32"), error => {
+        assert.match(error.message, /multiple Discord installations/);
+        for (const channel of ["stable", "canary", "ptb"]) assert(error.message.includes(channel));
+        assert.match(error.message, /--channel/);
+        return true;
+    });
+    for (const channel of ["stable", "canary", "ptb"]) assert.equal((await findClient(channel, f.directory, "win32")).channel, channel);
+});
+
+test("automatic installation and already-installed results report the detected channel", async t => {
+    const f = await fixture(t), data = entry("theme", "body{}", "example.css");
+    const target = await windowsInstallation(f.directory, "ptb");
+    f.config.channel = "auto";
+    f.dependencies.findClient = async channel => { assert.equal(channel, "auto"); return findClient(channel, f.directory, "win32"); };
+    for (const action of ["stop", "start"]) f.dependencies[action] = async client => {
+        assert.equal(client.executable, join(target.folder, "DiscordPTB.exe"));
+        f.events.push(`${action} ${client.channel}`);
+    };
+    assert.equal((await installEntry(data, f.config, f.dependencies)).channel, "ptb");
+    const repeated = await installEntry(data, f.config, f.dependencies);
+    assert.equal(repeated.alreadyInstalled, true);
+    assert.equal(repeated.channel, "ptb");
+    assert.deepEqual(f.events, ["stop ptb", "start ptb"]);
+    await repairClient(f.config, f.dependencies);
+    assert.deepEqual(f.events, ["stop ptb", "start ptb", "build", "stop ptb", "start ptb"]);
+    assert.equal(await readFile(join(dirname(target.patcher), "renderer.js"), "utf8"), "new renderer.js");
 });
 
 test("real HTTP bridge rejects other websites, checks downloaded manifests and runs one job at a time", async t => {

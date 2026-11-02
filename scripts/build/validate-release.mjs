@@ -53,6 +53,12 @@ if (!fs.existsSync(installer)) {
     errors++;
 }
 
+const compiler = path.join(root, "release", "installer", "moggcord-community-compiler.tar.gz");
+if (!fs.existsSync(compiler) || !fs.statSync(compiler).isFile() || !fs.statSync(compiler).size) {
+    console.error("[release] Missing or empty community plugin compiler archive");
+    errors++;
+}
+
 if (errors) {
     process.exit(1);
 }

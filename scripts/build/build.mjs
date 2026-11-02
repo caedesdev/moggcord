@@ -124,6 +124,16 @@ const globNativesPlugin = {
 
 /** @type {import("esbuild").BuildOptions[]} */
 const buildConfigs = ([
+    {
+        entryPoints: [join(dirname(fileURLToPath(import.meta.url)), "../community/service.mjs")],
+        outfile: "dist/desktop/community-service.cjs",
+        bundle: true,
+        platform: "node",
+        format: "cjs",
+        target: "node24",
+        banner: { js: 'const __moggcord_service_url = require("node:url").pathToFileURL(__filename).href;' },
+        define: { "import.meta.url": "__moggcord_service_url", MOGGCORD_BUNDLED_SERVICE: "true", MOGGCORD_SERVICE_VERSION: JSON.stringify(VERSION) }
+    },
     // Discord Desktop main & renderer & preload
     {
         ...nodeCommonOpts,

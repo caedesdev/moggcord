@@ -15,7 +15,7 @@ export const installerNames = Object.freeze([
 ]);
 
 export const updateNames = Object.freeze([
-    "moggcord-update.zip", "moggcord-dist.zip", "version.json", "SHA256SUMS.txt",
+    "moggcord-update.zip", "moggcord-dist.zip", "moggcord-community-compiler.tar.gz", "version.json", "SHA256SUMS.txt",
     "desktop.asar", "moggcord.asar", "installer-verification.json",
     "installer-verification-macos.json", "installer-verification-linux.json"
 ]);

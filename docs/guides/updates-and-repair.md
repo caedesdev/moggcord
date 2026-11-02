@@ -31,12 +31,16 @@ Since 1.18.44, the main release contains only the four platform installer packag
 
 | Asset | Purpose |
 | --- | --- |
-| `moggcord-update.zip` | The four desktop code/style files and `build-info.json`; preferred by the new updater |
+| `moggcord-update.zip` | The verified desktop code, style and local-service files with `build-info.json`; preferred by the new updater |
 | `moggcord-dist.zip` | The full installation bundle, including additional Windows support files |
 
 The 1.18.43 small update archive is about 1.3 MB; the full bundle is about 75 MB. These are release-specific sizes, not permanent limits. Both ZIPs now belong in the technical release. The macOS and Linux installer packages are separate assets and are not bundled inside the Windows update archive.
 
 Older clients can use the full bundle from legacy release layouts. Once a main release contains only installers, use Repair to receive the new updater rather than expecting that older discovery path to migrate itself.
+
+The 1.18.46 update also carries `community-service.cjs` as a fifth verified desktop file. After the updated Moggcord restarts, it starts the local community service automatically. The browser can then ask for local-app access when a website connects. Normal use of moggcord.cc does not require a separate setup page or terminal commands.
+
+The technical release also contains `moggcord-community-compiler.tar.gz`. It is fetched separately only when installing a new or changed code plugin requires compilation. It is not part of the small update ZIP and is not needed just to enable an unchanged installed plugin or install a stylesheet.
 
 ## Recover an already-stuck older updater
 

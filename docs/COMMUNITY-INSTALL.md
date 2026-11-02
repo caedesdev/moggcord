@@ -1,10 +1,12 @@
 # Install community uploads in Moggcord
 
-The detailed guide is now split into user instructions, upload preparation and a protocol reference. Each visitor needs the connector on their own computer; a website server cannot install into visitors' Discord applications directly.
+The detailed guide is split into user instructions, upload preparation and a protocol reference. In 1.18.46, Moggcord starts its included local service automatically. A website server cannot install into visitors' Discord applications directly.
+
+For normal moggcord.cc downloads, start the updated Moggcord, choose **Download** and allow local-app access when the browser asks. The local service detects the Moggcord installation and installs there. No separate setup page or terminal commands are required.
 
 ## One-time setup
 
-[Connect your computer](community/setup.md) covers requirements, exact website origins, channel selection and per-platform startup registration.
+Only advanced manual connections to another website origin or a development site need [manual setup](community/setup.md). That guide covers requirements, exact website origins, automatic channel detection and per-platform registration.
 
 ## Download and share
 

@@ -23,6 +23,7 @@ import { dirname, join } from "path";
 import { registerMediaPermissionsForSession } from "../moggcord/main/mediaPermissions";
 
 import { crashLog, crashLogPath, installCrashLogHandlers } from "./crashLog";
+import { startCommunityDownloads } from "./community";
 import { installMoggcordHomeIcon } from "./homeButtonIcon";
 import { installMoggcordLoadingScreen } from "./loadingScreen";
 import { validateMoggcordDist, syncDistToLocal, getPatcherInstallDir } from "./moggcordLoader";
@@ -68,6 +69,7 @@ if (IS_VESKTOP || IS_EQUIBOP) require.main!.filename = join(dirname(injectorPath
 app.setAppPath(asarPath);
 
 if (!IS_VANILLA) {
+    startCommunityDownloads(PATCHER_DIR);
     console.log("[Moggcord] Post-install auto-relaunch disabled (no 60s kill timer).");
     schedulePostInstallRelaunchIfNeeded();
     clearPendingRelaunchMarker();

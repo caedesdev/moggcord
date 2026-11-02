@@ -4,6 +4,8 @@
 
 The website publishes a package; the visitor's local connector validates and installs it. There is no server-side operation that can directly write a plugin into every visitor's Discord directory.
 
+In 1.18.46, the normal Moggcord update includes the local service. Moggcord starts it automatically and registers its install-link handler. A separate worker process keeps the installation job alive while Discord is stopped and restarted. The browser's local-app permission lets the website contact that worker; target detection and file operations happen locally.
+
 ```mermaid
 sequenceDiagram
     participant B as Visitor browser
@@ -11,6 +13,7 @@ sequenceDiagram
     participant W as Connected website
     participant S as Source checkout
     participant D as Selected Discord
+    D->>C: Start independent local service
     B->>C: Install manifest URL and fingerprint
     C->>W: Fetch exact public manifest
     W-->>C: Package source and identity
@@ -27,7 +30,7 @@ Stylesheets skip the code-compilation step. They are saved as a local theme, ena
 
 ## Origin and package validation
 
-Setup records one exact website origin. The local HTTP service checks the request Origin, Host and loopback address. State-changing POST routes require JSON and `X-Moggcord-Install: 1`.
+The managed service uses `https://moggcord.cc`; advanced manual setup records the chosen website origin. The local HTTP service checks the request Origin, Host and loopback address. State-changing POST routes require JSON and `X-Moggcord-Install: 1`.
 
 The manifest URL must use the configured origin and the expected `/api/install/<uuid>` shape. Fetching disallows redirects. Source type, limits, entry point, paths and content fingerprint are checked before installation. The HTTP service does not accept arbitrary command names, process IDs or destination directories from the website.
 
@@ -35,7 +38,7 @@ This local validation is separate from website account authentication. A CAPTCHA
 
 ## Compile before stopping
 
-For code plugins, source files are staged in the retained checkout and compiled first. A syntax error, absent import or unsupported package should fail before the selected Discord is stopped. Compilation is not a sandbox/security audit; installed plugin code executes when it is loaded by the client.
+For new or changed code plugins, source files are staged and compiled first. The managed service prepares its version-matched compiler package only when that build is needed, preserving retained community plugin source. An unchanged installed plugin can be enabled without downloading the compiler or rebuilding. A syntax error, absent import or unsupported package should fail before the selected Discord is stopped. Compilation is not a sandbox/security audit; installed plugin code executes when it is loaded by the client.
 
 ## Deployment and rollback
 
@@ -51,4 +54,4 @@ See the [protocol reference](../reference/community-protocol.md) for endpoints, 
 
 ## Source of truth
 
-[Connector service](../../scripts/community/bridge.mjs) · [Validated install and rollback](../../scripts/community/core.mjs) · [Browser polling and state](../../web/community-install.js) · [Shared package rules](../../web/plugin-package.js)
+[Automatic startup](../../src/main/community.ts) · [Managed service](../../scripts/community/service.mjs) · [Compiler preparation](../../scripts/community/compiler.mjs) · [Validated install and rollback](../../scripts/community/core.mjs) · [Browser polling and state](../../web/community-install.js) · [Shared package rules](../../web/plugin-package.js)
