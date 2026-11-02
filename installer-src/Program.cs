@@ -54,7 +54,9 @@ namespace MoggcordInstaller
                 return;
             }
 
-            Application.Run(new LauncherForm());
+            var readyArgument = Array.IndexOf(args, "--installer-update-ready");
+            var readyEvent = readyArgument >= 0 && readyArgument + 1 < args.Length ? args[readyArgument + 1] : null;
+            Application.Run(new LauncherForm(!HasFlag(args, "--skip-installer-update"), readyEvent));
         }
 
         static string VerifyBundledBuild()
@@ -159,9 +161,13 @@ namespace MoggcordInstaller
     {
         private WebView2 _webView;
         private MoggcordBackend _backend;
+        private readonly bool _checkInstallerUpdates;
+        private readonly string _updateReadyEvent;
 
-        public LauncherForm()
+        public LauncherForm(bool checkInstallerUpdates = true, string updateReadyEvent = null)
         {
+            _checkInstallerUpdates = checkInstallerUpdates;
+            _updateReadyEvent = updateReadyEvent;
             this.Text = "Moggcord Installer";
             this.Size = new Size(960, 720); // Enlarged to prevent text clipping
             this.FormBorderStyle = FormBorderStyle.None;
@@ -187,6 +193,15 @@ namespace MoggcordInstaller
                             SendMessage(this.Handle, 0xA1, 0x2, 0);
                         }
                     };
+                    if (e.IsSuccess && _updateReadyEvent?.StartsWith("Local\\MoggcordInstallerUpdate-", StringComparison.Ordinal) == true)
+                    {
+                        try
+                        {
+                            using var ready = EventWaitHandle.OpenExisting(_updateReadyEvent);
+                            ready.Set();
+                        }
+                        catch (WaitHandleCannotBeOpenedException error) { Debug.WriteLine(error.Message); }
+                    }
                 });
             };
 
@@ -260,7 +275,7 @@ namespace MoggcordInstaller
 
         private async Task CompleteWebViewSetupAsync()
         {
-            _backend = new MoggcordBackend(this, _webView);
+            _backend = new MoggcordBackend(this, _webView, _checkInstallerUpdates);
             _webView.CoreWebView2.AddHostObjectToScript("backend", _backend);
 
             // Wrap COM proxy into exactly what index.html expects, and add drag support
@@ -276,6 +291,8 @@ namespace MoggcordInstaller
                     startOperation: (action, path, replaceOtherMod) => JSON.parse(chrome.webview.hostObjects.sync.backend.StartOperation(action, path, replaceOtherMod)),
                     getInjectStatus: () => JSON.parse(chrome.webview.hostObjects.sync.backend.GetInjectStatus()),
                     getInstallerVersion: () => chrome.webview.hostObjects.sync.backend.GetInstallerVersion(),
+                    startInstallerUpdate: () => chrome.webview.hostObjects.sync.backend.StartInstallerUpdate(),
+                    getInstallerUpdateStatus: () => JSON.parse(chrome.webview.hostObjects.sync.backend.GetInstallerUpdateStatus()),
                     uninject: async (path) => JSON.parse(await chrome.webview.hostObjects.backend.Uninject(path)),
                     minimizeApp: () => chrome.webview.hostObjects.backend.MinimizeApp(),
                     closeApp: () => chrome.webview.hostObjects.backend.CloseApp(),
@@ -348,14 +365,20 @@ namespace MoggcordInstaller
         private HttpClient _http;
         private string _distDir;
         private string _exeDir;
+        private readonly bool _checkInstallerUpdates;
+        private readonly CancellationTokenSource _installerUpdateCancellation = new CancellationTokenSource();
+        private volatile InstallerUpdateStatus _installerUpdateStatus = new InstallerUpdateStatus("checking", "Checking for a newer installer…");
+        private int _installerUpdateStarted;
 
-        const string GITHUB_REPO = "caedesdev/moggcord";
+        const string GITHUB_REPO = InstallerSelfUpdater.Repository;
         const string DIST_ZIP = "moggcord-dist.zip";
 
-        public MoggcordBackend(LauncherForm form, WebView2 webView)
+        public MoggcordBackend(LauncherForm form, WebView2 webView, bool checkInstallerUpdates = false)
         {
             _form = form;
             _webView = webView;
+            _checkInstallerUpdates = checkInstallerUpdates;
+            if (form != null) form.FormClosed += (_, _) => _installerUpdateCancellation.Cancel();
             _http = new HttpClient();
             _http.Timeout = TimeSpan.FromSeconds(30);
             _exeDir = Path.GetDirectoryName(Application.ExecutablePath);
@@ -365,6 +388,42 @@ namespace MoggcordInstaller
         public void StartDiscordPublic(string resPath) => StartDiscord(resPath);
 
         public string GetInstallerVersion() => Assembly.GetExecutingAssembly().GetName().Version.ToString(3);
+
+        public bool StartInstallerUpdate()
+        {
+            if (!_checkInstallerUpdates || Interlocked.CompareExchange(ref _installerUpdateStarted, 1, 0) != 0) return false;
+            _ = Task.Run(async () =>
+            {
+                using var http = new HttpClient();
+                var updater = new InstallerSelfUpdater(http, Version.Parse(GetInstallerVersion()),
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "MoggcordInstaller", "updates"),
+                    status => _installerUpdateStatus = status, StartUpdatedInstaller);
+                if (await updater.TryUpdateAsync(_installerUpdateCancellation.Token) && !_form.IsDisposed)
+                    _form.BeginInvoke(new Action(() => _form.Close()));
+            });
+            return true;
+        }
+
+        public string GetInstallerUpdateStatus() => JsonSerializer.Serialize(_installerUpdateStatus);
+
+        private bool StartUpdatedInstaller(string path)
+        {
+            var token = _installerUpdateCancellation.Token;
+            token.ThrowIfCancellationRequested();
+            var eventName = "Local\\MoggcordInstallerUpdate-" + Guid.NewGuid().ToString("N");
+            using var ready = new EventWaitHandle(false, EventResetMode.ManualReset, eventName);
+            var start = new ProcessStartInfo(path) { UseShellExecute = false, CreateNoWindow = true, WorkingDirectory = Path.GetDirectoryName(path) };
+            start.ArgumentList.Add("--skip-installer-update");
+            start.ArgumentList.Add("--installer-update-ready");
+            start.ArgumentList.Add(eventName);
+            start.Environment["DOTNET_DISABLE_GUI_ERRORS"] = "1";
+            using var process = Process.Start(start);
+            if (process == null) return false;
+            if (WaitHandle.WaitAny(new WaitHandle[] { ready, token.WaitHandle }, TimeSpan.FromSeconds(20)) == 0 && !process.HasExited)
+                return true;
+            if (!process.HasExited) process.Kill();
+            return false;
+        }
 
         public void MinimizeApp()
         {
@@ -595,6 +654,8 @@ namespace MoggcordInstaller
         {
             lock (_operationLock)
             {
+                if (_installerUpdateStarted != 0 && _installerUpdateStatus.state != "current" && _installerUpdateStatus.state != "unavailable")
+                    return JsonSerializer.Serialize(new { started = false, error = "Please wait for the installer update to finish." });
                 if (_injectJobState == "running")
                     return JsonSerializer.Serialize(new { started = false, error = "An operation is already running." });
 

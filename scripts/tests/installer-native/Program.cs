@@ -18,6 +18,15 @@ if (args.Contains("--fixture-process"))
     return;
 }
 
+if (args.Contains("--installer-update-ready"))
+{
+    var argument = Array.IndexOf(args, "--installer-update-ready");
+    using var ready = EventWaitHandle.OpenExisting(args[argument + 1]);
+    ready.Set();
+    await Task.Delay(Timeout.Infinite);
+    return;
+}
+
 var root = Path.Combine(Path.GetTempPath(), "moggcord-installer-test-" + Guid.NewGuid());
 var resources = Path.Combine(root, "resources");
 Directory.CreateDirectory(Path.Combine(resources, "app"));
@@ -185,6 +194,29 @@ try
         Environment.SetEnvironmentVariable("TEMP", originalTemp);
         Environment.SetEnvironmentVariable("TMP", originalTmp);
     }
+    await InstallerUpdateTests.Run(root, Check);
+    var updateStarted = typeof(MoggcordBackend).GetField("_installerUpdateStarted", BindingFlags.NonPublic | BindingFlags.Instance)!;
+    var updateState = typeof(MoggcordBackend).GetField("_installerUpdateStatus", BindingFlags.NonPublic | BindingFlags.Instance)!;
+    updateStarted.SetValue(backend, 1);
+    updateState.SetValue(backend, new InstallerUpdateStatus("downloading", "Fixture update"));
+    before = Snapshot();
+    using (var guarded = JsonDocument.Parse(backend.StartOperation("install", resources, false)))
+        Check(!guarded.RootElement.GetProperty("started").GetBoolean(), "Discord operations cannot start during an installer handoff");
+    Check(Snapshot() == before, "The self-update operation guard leaves Discord files unchanged");
+    updateStarted.SetValue(backend, 0);
+    var updateFixture = Path.Combine(root, "update-process");
+    Directory.CreateDirectory(updateFixture);
+    foreach (var file in Directory.GetFiles(AppContext.BaseDirectory))
+        File.Copy(file, Path.Combine(updateFixture, Path.GetFileName(file)));
+    var updateExe = Path.Combine(updateFixture, "UpdatedInstaller.exe");
+    File.Copy(Path.Combine(AppContext.BaseDirectory, "MoggcordInstaller.Tests.exe"), updateExe);
+    var startUpdate = typeof(MoggcordBackend).GetMethod("StartUpdatedInstaller", BindingFlags.NonPublic | BindingFlags.Instance)!;
+    var handedOff = (bool)startUpdate.Invoke(backend, new object[] { updateExe })!;
+    var updateProcess = Process.GetProcessesByName("UpdatedInstaller").Single(process =>
+        string.Equals((string)imagePath.Invoke(null, new object[] { process.Id })!, updateExe, StringComparison.OrdinalIgnoreCase));
+    fixtureProcesses.Add(updateProcess);
+    Check(handedOff && !updateProcess.HasExited, "The old installer hands off only after the new installer signals readiness");
+    Check(!backend.StartInstallerUpdate(), "Headless and automatic-install backends do not start interactive installer updates");
     Console.WriteLine(checks + " native installer checks passed. Only isolated fixture processes were closed.");
 }
 finally
