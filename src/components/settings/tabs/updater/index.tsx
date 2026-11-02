@@ -59,7 +59,7 @@ function UpdaterTab() {
             setOutdated(hasUpdate);
             setUpdateList(changes ?? []);
             setChecked(true);
-            setStatus(hasUpdate ? "A new update is available. Choose Update Now to download and install it." : "Moggcord is up to date. No action is needed.");
+            setStatus(hasUpdate ? "A new update is available. Choose Update Now to download and install it." : null);
 
             if (!hasUpdate) {
                 Toasts.show({
