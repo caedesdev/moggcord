@@ -103,6 +103,7 @@ test("deleted messages obey the render cache bound and stopping restores the nat
     plugin.stop();
     assert.equal(MessageStore.getMessage, original);
     assert.equal(clears, 2);
+    assert.equal(cachedMessages.size, 0);
 });
 
 async function headerBar(initialStealth = false) {
@@ -164,4 +165,110 @@ test("mounted toolbars update once per toggle and release their listeners on unm
     state.unmount();
     state.api.toggleStealthMode();
     assert.equal(state.renders(), 2);
+});
+
+test("message caches retain existing keys on updates and enforce a reduced limit", async () => {
+    const settings = { store: { cacheLimit: 3 } };
+    const { LimitedMap } = await load(await readFile(directory + "utils/LimitedMap.ts", "utf8"), { "../index": { settings } });
+    const cache = new LimitedMap(() => settings.store.cacheLimit);
+    cache.set("a", 1);
+    cache.set("b", 2);
+    cache.set("c", 3);
+    cache.set("b", 20);
+    assert.equal(cache.get("a"), 1);
+    assert.equal(cache.get("b"), 20);
+    cache.set("d", 4);
+    assert.equal(cache.get("a"), undefined);
+    assert.equal(cache.size, 3);
+    settings.store.cacheLimit = 0;
+    for (let i = 0; i < 2000; i++) cache.set(String(i), i);
+    assert.equal(cache.size, 2003);
+    settings.store.cacheLimit = 2;
+    cache.set("1999", 3000);
+    assert.equal(cache.size, 2);
+    assert.equal(cache.get("1999"), 3000);
+});
+
+test("stored log messages obey the memory limit while evicted records remain readable from the database", async () => {
+    const settings = { store: { cacheLimit: 3 } };
+    const { LimitedMap } = await load(await readFile(directory + "utils/LimitedMap.ts", "utf8"), { "../index": { settings } });
+    const records = new Map();
+    const store = { async add(record) { records.set(record.message_id, structuredClone(record)); } };
+    const database = {
+        async put(name, record) { records.set(record.message_id, structuredClone(record)); },
+        async get(name, id) { return structuredClone(records.get(id)); },
+        async getAll() { return [...records.values()].map(record => structuredClone(record)); },
+        async count(name, id) { return id === undefined ? records.size : Number(records.has(id)); },
+        transaction() { return { store, done: Promise.resolve() }; }
+    };
+    const api = await load(await readFile(directory + "db.ts", "utf8"), {
+        "@webpack/common": { ChannelStore: {}, Toasts: {} },
+        "idb": { openDB: async () => database },
+        "./settings": { settings },
+        "./utils": { getMessageStatus: () => "DELETED" },
+        "./utils/cleanUp": { stripTransientRenderState() {} },
+        "./utils/constants": { DB_NAME: "fixture", DB_VERSION: 1 },
+        "./utils/LimitedMap": { LimitedMap },
+        "./utils/saveImage": { getAttachmentBlobUrl: async () => null }
+    });
+    await api.initIDB();
+    const message = id => ({ id: String(id), channel_id: "channel", attachments: [], timestamp: "2026-11-04T00:00:00Z" });
+    for (let i = 0; i < 2000; i++) await api.addMessageIDB(message(i), "DELETED");
+    assert.equal(api.cachedMessages.size, 3);
+    assert.equal(api.cachedMessages.has("0"), false);
+    assert.equal(await api.countMessagesIDB(), 2000);
+    assert.equal(await api.hasMessageIDB("0"), true);
+    assert.equal((await api.getMessageIDB("0")).message.id, "0");
+    assert.equal(api.cachedMessages.size, 3);
+    await api.addMessagesBulkIDB(Array.from({ length: 100 }, (_, i) => message(i + 2000)), "DELETED");
+    assert.equal(api.cachedMessages.size, 3);
+    assert.equal((await api.getAllMessagesIDB()).length, 2100);
+    assert.equal(api.cachedMessages.size, 3);
+    assert.equal(await api.countMessagesIDB(), 2100);
+});
+
+async function eventLogs(saved = []) {
+    const source = await readFile("src/moggcordplugins/eventLogs/index.tsx", "utf8");
+    const file = ts.createSourceFile("eventLogs.tsx", source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);
+    const variables = new Set(["MAX_LOGS", "logs", "logCount", "NOTIF_TYPES", "unreadLogEntries"]);
+    const functions = new Set(["loadPersistLogs", "fmtNow", "pushLog"]);
+    const statements = file.statements.filter(node => ts.isVariableStatement(node)
+        ? node.declarationList.declarations.some(item => variables.has(item.name.getText(file)))
+        : ts.isFunctionDeclaration(node) && functions.has(node.name?.text));
+    let definition;
+    const visit = node => {
+        if (ts.isCallExpression(node) && node.expression.getText(file) === "definePlugin") definition = node.arguments[0];
+        ts.forEachChild(node, visit);
+    };
+    visit(file);
+    assert(definition && ts.isObjectLiteralExpression(definition));
+    const stop = definition.properties.find(node => ts.isMethodDeclaration(node) && node.name.getText(file) === "stop");
+    assert(stop);
+    return load(statements.map(node => node.getText(file)).join("\n")
+        + "\nexport { pushLog, loadPersistLogs, MAX_LOGS }; export const snapshot = () => ({ logs, unreadLogEntries }); export const plugin = {" + stop.getText(file) + "};", {}, {
+        scheduleFlush() {}, localStorage: { getItem: () => JSON.stringify(saved) },
+        removeHeaderBarButton() {}, unsubs: [], flushTimer: null,
+        msgCache: new Map(), prevVS: new Map(), updateListeners: new Set(),
+        isLoadingMessages: false, myVoiceChannelId: null
+    });
+}
+
+test("event-log unread entries expire with the visible log and stop releases them", async () => {
+    const api = await eventLogs();
+    for (let i = 0; i < api.MAX_LOGS + 5000; i++) api.pushLog({ type: "ping", content: "fixture " + i });
+    assert.equal(api.snapshot().logs.length, api.MAX_LOGS);
+    assert.equal(api.snapshot().unreadLogEntries.size, api.MAX_LOGS);
+    assert(api.snapshot().unreadLogEntries.has(api.snapshot().logs[0]));
+    api.plugin.stop();
+    assert.equal(api.snapshot().logs.length, 0);
+    assert.equal(api.snapshot().unreadLogEntries.size, 0);
+});
+
+test("loading saved event logs retains only the newest entries within the existing limit", async () => {
+    const saved = Array.from({ length: 12000 }, (_, i) => ({ id: String(i), type: "ping", content: "fixture", timestamp: i }));
+    const api = await eventLogs(saved);
+    api.loadPersistLogs();
+    assert.equal(api.snapshot().logs.length, api.MAX_LOGS);
+    assert.equal(api.snapshot().logs[0].timestamp, 11999);
+    assert.equal(api.snapshot().logs.at(-1).timestamp, 2000);
 });

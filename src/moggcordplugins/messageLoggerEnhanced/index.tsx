@@ -34,7 +34,7 @@ export { settings };
 
 export const Flogger = new Logger("MessageLoggerEnhanced", "#f26c6c");
 
-export const cacheSentMessages = new LimitedMap<string, LoggedMessageJSON>();
+export const cacheSentMessages = new LimitedMap<string, LoggedMessageJSON>(() => settings.store.cacheLimit);
 export const cl = classNameFactory("vc-msg-logger-enhanced-");
 
 let didClearLogsOnStartup = false;
@@ -472,6 +472,7 @@ export default definePlugin({
         removeContextMenuBindings();
         MessageStore.getMessage = this.oldGetMessage;
         cacheSentMessages.clear();
+        idb.cachedMessages.clear();
         messageJsonToMessageClass.clear();
     }
 });

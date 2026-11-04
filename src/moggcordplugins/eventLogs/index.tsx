@@ -84,7 +84,7 @@ function loadPersistLogs() {
         if (s) {
             const parsed = JSON.parse(s);
             if (Array.isArray(parsed)) {
-                logs = parsed.concat(logs).sort((a, b) => b.timestamp - a.timestamp);
+                logs = parsed.concat(logs).sort((a, b) => b.timestamp - a.timestamp).slice(0, MAX_LOGS);
                 logCount = logs.length;
             }
         }
@@ -131,7 +131,10 @@ function fmtNow(): string {
 
 function pushLog(entry: Omit<LogEntry, "id" | "timestamp" | "timeStr">) {
     const now = Date.now();
-    if (logs.length >= MAX_LOGS) logs.pop();
+    if (logs.length >= MAX_LOGS) {
+        const expired = logs.pop();
+        if (expired) unreadLogEntries.delete(expired);
+    }
     const newLog: LogEntry = { id: `${now}_${logCount++}`, timestamp: now, timeStr: fmtNow(), ...(entry as any) };
     logs.unshift(newLog);
     if (NOTIF_TYPES.has(newLog.type)) {
@@ -820,7 +823,7 @@ export default definePlugin({
         removeHeaderBarButton("moggcord-event-logs");
         unsubs.forEach(fn => fn()); unsubs = [];
         if (flushTimer !== null) { clearTimeout(flushTimer); flushTimer = null; }
-        logs = []; msgCache.clear(); prevVS.clear(); updateListeners.clear();
+        logs = []; msgCache.clear(); prevVS.clear(); updateListeners.clear(); unreadLogEntries.clear();
         isLoadingMessages = false;
         myVoiceChannelId = null;
     },
