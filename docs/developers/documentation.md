@@ -49,4 +49,4 @@ External websites are not fetched by this check. Verify newly added external res
 
 A guide update should not reset user settings, inject a build or republish installer binaries. If documentation uncovers a runtime bug, report it and keep the implementation change reviewable on its own.
 
-[Contributing](../../CONTRIBUTING.md) · [Project layout](project-layout.md)
+[Contributing](../../.github/CONTRIBUTING.md) · [Project layout](project-layout.md)

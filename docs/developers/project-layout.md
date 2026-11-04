@@ -37,9 +37,9 @@ The injected client and desktop shell are separate entry paths. A file named `up
 
 ## Generated output
 
-`dist/`, `build/` and `release/` contain build/package output. Badge merging writes its intermediate file to `build/merged_badges.json`; `badges.json` and `plugins.json` remain public catalogs. `.codex-temp/` can contain generated native packaging projects and local investigation files. These are not the source of truth for a change and should not be committed as documentation examples or personal backups.
+`dist/`, `build/` and `release/` contain build/package output. Badge merging writes its intermediate file to `build/merged_badges.json`. The badge and plugin catalogs live in `static/catalogs/`. `.codex-temp/` can contain generated native packaging projects and local investigation files. These are not the source of truth for a change and should not be committed as documentation examples or personal backups.
 
-`static/modules_override/` is the single repository copy of the packaged voice modules. `mac/` contains the cursor plugin's assets and is used during packaging. Keep those assets and public root URLs intact when reorganizing tooling.
+`static/modules_override/` is the single repository copy of the packaged voice modules. `mac/` contains the cursor plugin's assets and is used during packaging. The root icon and installer script retain their public URLs for existing clients and installation commands.
 
 Do not infer supported platforms from the presence of old scripts alone. The current [release workflow](../../.github/workflows/release.yml) is the authoritative path for the published installer set.
 

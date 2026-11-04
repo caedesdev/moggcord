@@ -20,7 +20,7 @@ macOS and Linux installers are previews. See the [installation guide](docs/getti
 
 ## Documentation
 
-[Getting started](docs/README.md) · [Troubleshooting](docs/troubleshooting/README.md) · [Contributing](CONTRIBUTING.md) · [Website](https://moggcord.cc)
+[Getting started](docs/README.md) · [Troubleshooting](docs/troubleshooting/README.md) · [Contributing](.github/CONTRIBUTING.md) · [Website](https://moggcord.cc)
 
 ## Support
 

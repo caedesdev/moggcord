@@ -6,5 +6,5 @@ Describe the problem and the behavior after this change. Link an issue if releva
 
 List the checks you ran and their results. For visible changes, add a screenshot. State any platform you could not verify.
 
-- [ ] I read [CONTRIBUTING.md](https://github.com/caedesdev/moggcord/blob/main/CONTRIBUTING.md) and `.rules`.
+- [ ] I read [CONTRIBUTING.md](https://github.com/caedesdev/moggcord/blob/main/.github/CONTRIBUTING.md) and [AGENTS.md](https://github.com/caedesdev/moggcord/blob/main/AGENTS.md).
 - [ ] The change preserves existing license notices and contains no private data.

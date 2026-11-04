@@ -51,4 +51,4 @@ Moggcord is independent of Discord and is not endorsed by it. A working installa
 
 ## Source of truth
 
-[Connector origin checks](../../scripts/community/bridge.mjs) · [Manifest validation](../../scripts/community/core.mjs) · [Export filtering](../../src/api/SettingsSync/offline.ts) · [Release checksums](../../.github/workflows/release.yml)
+[Original Equicord privacy policy](../reference/upstream-privacy-policy.md) · [Connector origin checks](../../scripts/community/bridge.mjs) · [Manifest validation](../../scripts/community/core.mjs) · [Export filtering](../../src/api/SettingsSync/offline.ts) · [Release checksums](../../.github/workflows/release.yml)
