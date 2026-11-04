@@ -28,7 +28,7 @@ Use Node 24, pnpm and the .NET 8 SDK on Windows:
 pnpm test:installer
 dotnet run --project scripts/tests/installer-native --configuration Release
 pnpm buildStandalone
-.\build-installer.ps1
+.\scripts\build\windows-installer.ps1
 ```
 
 The native tests use temporary resources fixtures and an isolated file cache. They check existing-install skips, third-party mod protection, path resolution and invalid targets. Shutdown checks start temporary test processes, close only the selected fixture and verify that an unrelated installation and helper remain running. They do not install into or stop a real Discord installation. The packaging script also checks the embedded desktop version and file fingerprints using the installer's read-only `--verify-bundle` command.

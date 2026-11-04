@@ -123,7 +123,7 @@ export const messageJsonToMessageClass = memoize((log: { message: LoggedMessageJ
 
     // console.timeEnd("message populate");
     return message;
-});
+}, 1000);
 
 export function parseJSON(json?: string | null) {
     try {

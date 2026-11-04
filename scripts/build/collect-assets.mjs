@@ -106,11 +106,9 @@ if (!foundNode) console.warn("[collect] ⚠️ node.exe NOT FOUND");
 // ── modules (discord_voice patché) ──
 const desktopModules = path.join(process.env.USERPROFILE || "", "Desktop", "modules");
 const repoModules = path.join(rootDir, "static", "modules_override");
-const backupModules = path.join(rootDir, "static", "modules_backup_working_stereo");
 
 let patchedSrc = fs.existsSync(desktopModules) && fs.readdirSync(desktopModules).length > 0 ? desktopModules
                : fs.existsSync(repoModules) && fs.readdirSync(repoModules).length > 0 ? repoModules
-               : fs.existsSync(backupModules) && fs.readdirSync(backupModules).length > 0 ? backupModules
                : null;
 
 if (patchedSrc) {

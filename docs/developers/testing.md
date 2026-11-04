@@ -10,6 +10,7 @@ Run checks that exercise the changed behavior. A fixture test can verify file ha
 | --- | --- | --- |
 | Documentation | `pnpm docs:check` | Local files, heading anchors, page titles and navigation |
 | Plugin catalog and client regressions | `pnpm test:plugins` | Defaults, both collections, imports, notifications, compatibility patches and related regressions |
+| Renderer cache and lifecycle | `pnpm test:performance` | Bounded message conversion/render caches, stealth toggles and listener cleanup |
 | Connector and updater | `pnpm test:community` | Package validation, local HTTP behavior, compile/install rollback, download limits, cancellation and release fingerprints |
 | Installer interface | `pnpm test:installer` | Action selection, custom paths, replacement guards, progress and notification behavior |
 | macOS/Linux backend | `pnpm test:platform-installer` | Platform paths, install/repair/restore, permission staging and archive extraction |

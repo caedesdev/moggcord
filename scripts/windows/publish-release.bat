@@ -5,6 +5,7 @@
 ::             pnpm, node, dotnet SDK (ou .NET Framework 4.x)
 
 setlocal EnableDelayedExpansion
+cd /d "%~dp0..\.."
 
 set "VERSION=%~1"
 set "NOTES=%~2"
@@ -90,7 +91,7 @@ echo  [5/8] Compilation de Moggcord-Installer.exe...
 
 if not exist "%OUT_DIR%" mkdir "%OUT_DIR%"
 
-powershell -NoProfile -ExecutionPolicy Bypass -File "build-installer.ps1"
+powershell -NoProfile -ExecutionPolicy Bypass -File "scripts\build\windows-installer.ps1"
 if errorlevel 1 (
     echo  [ERREUR] Compilation de l'installeur echouee.
     echo  [INFO]  Installez le .NET 8 SDK: winget install Microsoft.DotNet.SDK.8

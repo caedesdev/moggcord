@@ -54,9 +54,9 @@ When migrating from an installer-plus-update main release, retain verified backu
 
 ## Local packaging
 
-On Windows, after `pnpm buildStandalone`, the release workflow runs asset collection and verification before `build-installer.ps1`. That script embeds the freshest full bundle and verifies the installer with `--verify-bundle`. Publication bundles the .NET runtime into the single Windows executable, so users do not need a separate .NET Desktop Runtime installation. Use the current .NET 8 SDK when rebuilding to include its runtime patches.
+On Windows, after `pnpm buildStandalone`, the release workflow runs asset collection and verification before `scripts/build/windows-installer.ps1`. That script embeds the freshest full bundle and verifies the installer with `--verify-bundle`. Publication bundles the .NET runtime into the single Windows executable, so users do not need a separate .NET Desktop Runtime installation. Use the current .NET 8 SDK when rebuilding to include its runtime patches.
 
-For macOS/Linux, run `pnpm build:platform-installer` on the target platform. Package the generated project under `.codex-temp/platform-installer/<platform>` using `installer-desktop/electron-builder.cjs`, then run `node scripts/build/verify-platform-package.mjs`. Use the workflow as the exact command reference; do not substitute the legacy root electron-builder configuration.
+For macOS/Linux, run `pnpm build:platform-installer` on the target platform. Package the generated project under `.codex-temp/platform-installer/<platform>` using `installer-desktop/electron-builder.cjs`, then run `node scripts/build/verify-platform-package.mjs`. Use the workflow as the exact command reference; do not substitute the legacy configuration in `scripts/legacy/windows/`.
 
 The pinned helper's version and hash are in `installer-desktop/upstream.json`. Changing them requires reviewing the source release and updating the expected fingerprint deliberately. A fingerprint mismatch should stop packaging.
 
@@ -68,4 +68,4 @@ Do not treat artifact verification as an account-login or voice-session test. Ke
 
 ## Source of truth
 
-[Release workflow](../../.github/workflows/release.yml) · [Asset layout](../../scripts/build/release-layout.mjs) · [Windows packaging](../../build-installer.ps1) · [Native preparation](../../scripts/build/platform-installer.mjs) · [Pinned helper](../../installer-desktop/upstream.json) · [Small archive](../../scripts/build/update-archive.mjs) · [Version verification](../../scripts/build/verify-release.mjs)
+[Release workflow](../../.github/workflows/release.yml) · [Asset layout](../../scripts/build/release-layout.mjs) · [Windows packaging](../../scripts/build/windows-installer.ps1) · [Native preparation](../../scripts/build/platform-installer.mjs) · [Pinned helper](../../installer-desktop/upstream.json) · [Small archive](../../scripts/build/update-archive.mjs) · [Version verification](../../scripts/build/verify-release.mjs)

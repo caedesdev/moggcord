@@ -2,11 +2,12 @@ const { execSync } = require("child_process");
 const { readFileSync, writeFileSync, existsSync, readdirSync, statSync, mkdirSync, cpSync, renameSync, rmSync } = require("fs");
 const { createHash } = require("crypto");
 const { join } = require("path");
+const rootDir = join(__dirname, "..", "..", "..");
 
 // ─── Configuration de Build Moggcord ─────────────────────────────────────────
 
 function killMoggcord() {
-    const releaseDir = join(__dirname, "release", "moggcord-dist");
+    const releaseDir = join(rootDir, "release", "moggcord-dist");
     const releaseExe = join(releaseDir, "Discord.exe");
 
     try {
@@ -46,7 +47,7 @@ function buildEquicord() {
 
 function buildMoggcordFromDiscord(discordApp) {
     const discordRes = join(discordApp, "resources");
-    const outDir = join(__dirname, "release", "moggcord-dist");
+    const outDir = join(rootDir, "release", "moggcord-dist");
 
     if (existsSync(outDir)) {
         try { rmSync(outDir, { recursive: true, force: true }); } catch (e) { }
@@ -133,7 +134,7 @@ require(path.join(__dirname, "dist", "desktop", "patcher.js"));
 
     const outDist = join(outApp, "dist", "desktop");
     mkdirSync(outDist, { recursive: true });
-    const equicordDist = join(__dirname, "dist", "desktop");
+    const equicordDist = join(rootDir, "dist", "desktop");
 
     for (const f of ["patcher.js", "renderer.js", "renderer.css", "renderer.js.LEGAL.txt"]) {
         if (existsSync(join(equicordDist, f))) cpSync(join(equicordDist, f), join(outDist, f));
@@ -145,7 +146,7 @@ require(path.join(__dirname, "dist", "desktop", "patcher.js"));
     }
 
     // FFmpeg et YT-DLP (cherche dans le dossier local ou PATH)
-    const binDir = join(__dirname, "static", "bin");
+    const binDir = join(rootDir, "static", "bin");
     for (const bin of ["ffmpeg.exe", "yt-dlp.exe"]) {
         const localBin = join(binDir, bin);
         if (existsSync(localBin)) cpSync(localBin, join(outDir, bin));
@@ -155,12 +156,12 @@ require(path.join(__dirname, "dist", "desktop", "patcher.js"));
     const injectScript = join(__dirname, "inject-discord.ps1");
     if (existsSync(injectScript)) cpSync(injectScript, join(outDir, "inject-discord.ps1"));
 
-    const iconSrc = join(__dirname, "moggcord.ico");
+    const iconSrc = join(rootDir, "moggcord.ico");
     if (existsSync(iconSrc)) {
         cpSync(iconSrc, join(outDir, "app.ico"));
         // Rcedit pour le branding
         try {
-            const rcedit = join(__dirname, "node_modules", ".bin", "rcedit.cmd");
+            const rcedit = join(rootDir, "node_modules", ".bin", "rcedit.cmd");
             if (existsSync(rcedit)) {
                 execSync(`"${rcedit}" "${discordExe}" --set-icon "${iconSrc}" --set-version-string "ProductName" "Moggcord" --set-version-string "FileDescription" "Moggcord"`, { stdio: "ignore" });
             }
@@ -175,7 +176,7 @@ function obfuscateDesktop() {
     const obfArgs = ["--compact", "true", "--simplify", "true", "--string-array", "true"];
     const files = ["patcher.js", "preload.js", "renderer.js"];
     for (const f of files) {
-        const fp = join(__dirname, "dist", "desktop", f);
+        const fp = join(rootDir, "dist", "desktop", f);
         if (!existsSync(fp)) continue;
         try { execSync(`npx javascript-obfuscator "${fp}" --output "${fp}" ${obfArgs.join(" ")}`, { stdio: "ignore" }); } catch (e) { }
     }

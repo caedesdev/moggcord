@@ -52,9 +52,11 @@ node scripts/community/bridge.mjs --config /absolute/path/to/config.json
 
 ## Installer packaging
 
-Windows uses `build-installer.ps1` after the desktop build and asset verification. macOS/Linux use `pnpm build:platform-installer` and the dedicated `installer-desktop/electron-builder.cjs` configuration. Packaging produces artifacts; publication is a separate workflow option.
+Windows uses `scripts/build/windows-installer.ps1` after the desktop build and asset verification. macOS/Linux use `pnpm build:platform-installer` and the dedicated `installer-desktop/electron-builder.cjs` configuration. Packaging produces artifacts; publication is a separate workflow option.
 
-Follow [Releasing](../developers/releasing.md) for the exact platform sequence. The legacy root `pnpm package` path has different behavior and is not the current multi-platform installer workflow.
+On Windows, `scripts\windows\build-installer.bat` runs the same packaging script. Other Windows wrappers are in `scripts/windows/`; the public `install-moggcord.ps1` download entry point remains at the repository root. Run `pnpm test:performance` for the renderer cache and listener regression tests.
+
+Follow [Releasing](../developers/releasing.md) for the exact platform sequence. The legacy `pnpm package` path has different behavior and is not the current multi-platform installer workflow.
 
 ## Source of truth
 

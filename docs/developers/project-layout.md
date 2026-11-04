@@ -26,6 +26,8 @@ The injected client and desktop shell are separate entry paths. A file named `up
 | `installer-src/` | Windows .NET backend, shared installer interface and embedded assets |
 | `installer-desktop/` | macOS/Linux Electron host, backend, preload and packaging configuration |
 | `scripts/build/` | Bundle generation, packaging preparation and release verification |
+| `scripts/windows/` | Windows command wrappers, development injection and manual installation helpers |
+| `scripts/legacy/windows/` | Older desktop packaging and bootstrap sources, separate from the published installer workflow |
 | `scripts/lib/` | Build fingerprints, bundle policy, platform paths, desktop discovery and extraction |
 | `scripts/community/` | Connector setup, local HTTP service and validated installation |
 | `scripts/tests/` | Node tests and Windows native installer checks |
@@ -35,7 +37,9 @@ The injected client and desktop shell are separate entry paths. A file named `up
 
 ## Generated output
 
-`dist/` and `release/` contain build/package output. `.codex-temp/` can contain generated native packaging projects and local investigation files. These are not the source of truth for a change and should not be committed as documentation examples or personal backups.
+`dist/`, `build/` and `release/` contain build/package output. Badge merging writes its intermediate file to `build/merged_badges.json`; `badges.json` and `plugins.json` remain public catalogs. `.codex-temp/` can contain generated native packaging projects and local investigation files. These are not the source of truth for a change and should not be committed as documentation examples or personal backups.
+
+`static/modules_override/` is the single repository copy of the packaged voice modules. `mac/` contains the cursor plugin's assets and is used during packaging. Keep those assets and public root URLs intact when reorganizing tooling.
 
 Do not infer supported platforms from the presence of old scripts alone. The current [release workflow](../../.github/workflows/release.yml) is the authoritative path for the published installer set.
 

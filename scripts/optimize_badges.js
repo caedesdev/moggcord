@@ -1,7 +1,7 @@
 const fs = require('fs');
 const path = require('path');
 
-const inputPath = path.join(__dirname, '..', 'merged_badges.json');
+const inputPath = path.join(__dirname, '..', 'build', 'merged_badges.json');
 const outputPath = path.join(__dirname, '..', 'badges.json');
 
 const currentData = JSON.parse(fs.readFileSync(inputPath, 'utf8'));
