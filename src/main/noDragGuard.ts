@@ -11,24 +11,23 @@ export function injectNoDragGuard(webContents: WebContents) {
     if (guarded.has(webContents)) return;
     guarded.add(webContents);
 
+    let generation = 0;
+    let appliedGeneration = -1;
     const run = () => {
-        if (webContents.isDestroyed()) return;
-        webContents.insertCSS(NO_DRAG_GUARD_CSS).catch(() => { });
+        if (webContents.isDestroyed() || appliedGeneration === generation) return;
+        const currentGeneration = generation;
+        appliedGeneration = currentGeneration;
+        // Discord re-applies drag on <body> seconds after first paint.
+        webContents.insertCSS(NO_DRAG_GUARD_CSS, { cssOrigin: "user" }).catch(() => {
+            if (appliedGeneration === currentGeneration) appliedGeneration = -1;
+        });
     };
 
-    webContents.on("dom-ready", run);
-    webContents.on("did-finish-load", run);
-    webContents.on("did-navigate-in-page", run);
-
-    // Discord re-applies drag on <body> seconds after first paint.
-    let n = 0;
-    const poll = setInterval(() => {
-        if (webContents.isDestroyed() || ++n > 20) {
-            clearInterval(poll);
-            return;
-        }
+    webContents.on("dom-ready", () => {
+        generation++;
         run();
-    }, 1000);
+    });
+    webContents.on("did-finish-load", run);
 
     try {
         if (!webContents.isDestroyed() && !webContents.isLoadingMainFrame()) run();

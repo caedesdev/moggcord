@@ -10,6 +10,114 @@ import vm from "node:vm";
 import ts from "typescript";
 import { transform } from "esbuild";
 
+const webpackPatcherSource = await readFile("src/webpack/patchWebpack.ts", "utf8");
+const webpackPatcherFile = ts.createSourceFile("patchWebpack.ts", webpackPatcherSource, ts.ScriptTarget.Latest, true);
+let defineExportsExpression;
+const findDefineExports = node => {
+    if (ts.isBinaryExpression(node) && node.left.getText(webpackPatcherFile) === "this.d" && ts.isFunctionExpression(node.right))
+        defineExportsExpression = node.right;
+    ts.forEachChild(node, findDefineExports);
+};
+findDefineExports(webpackPatcherFile);
+assert(defineExportsExpression);
+const { defineExports } = await load("export const defineExports = " + defineExportsExpression.getText(webpackPatcherFile));
+
+const factoryWrapper = webpackPatcherFile.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "runFactoryWithWrap");
+assert(factoryWrapper);
+
+async function factoryRuntime() {
+    const originalSymbol = Symbol("original");
+    const listeners = new Set();
+    const { runFactoryWithWrap } = await load("export " + factoryWrapper.getText(webpackPatcherFile), {}, {
+        SYM_ORIGINAL_FACTORY: originalSymbol, wreq: {}, IS_DEV: false,
+        defineInWebpackInstances() {}, _blacklistBadModules: () => false,
+        logger: { error() {} }, moduleListeners: listeners, waitForSubscriptions: new Map()
+    });
+    return { runFactoryWithWrap, originalSymbol, listeners };
+}
+
+test("completed Rspack modules become searchable before module listeners run", async () => {
+    const runtime = await factoryRuntime();
+    const module = { id: "fixture", exports: {} };
+    runtime.listeners.add(exports => { assert.equal(module.loaded, true); assert.equal(exports.ready, true); });
+    const original = (entry, exports) => {
+        assert.equal(entry.loaded, undefined);
+        exports.ready = true;
+        return "completed";
+    };
+    original[runtime.originalSymbol] = original;
+    const result = runtime.runFactoryWithWrap(original, null, [module, module.exports, () => {}]);
+    assert.equal(module.loaded, true);
+    assert.equal(result, "completed");
+    const source = await readFile("src/webpack/webpack.ts", "utf8");
+    const file = ts.createSourceFile("webpack.ts", source, ts.ScriptTarget.Latest, true);
+    const findStatement = file.statements.find(node => ts.isVariableStatement(node)
+        && node.declarationList.declarations.some(item => item.name.getText(file) === "find"));
+    assert(findStatement);
+    const { find } = await load(findStatement.getText(file), {}, {
+        traceFunction: (name, callback) => callback, IS_ANTI_CRASH_TEST: false,
+        cache: { fixture: module }, handleModuleNotFound() { assert.fail("Completed module was hidden from search"); }
+    });
+    assert.equal(find(exports => exports.ready === true), module.exports);
+});
+
+test("an original-factory fallback still marks a completed module as loaded", async () => {
+    const runtime = await factoryRuntime();
+    const module = { id: "fallback", exports: {}, loaded: false };
+    const patched = () => { throw new Error("Patched fixture failed"); };
+    patched[runtime.originalSymbol] = (entry, exports) => { exports.ready = true; return "fallback"; };
+    assert.equal(runtime.runFactoryWithWrap(patched, null, [module, module.exports, () => {}]), "fallback");
+    assert.equal(module.loaded, true);
+    assert.equal(module.exports.ready, true);
+});
+
+test("a failed original factory remains unloaded", async () => {
+    const runtime = await factoryRuntime();
+    const module = { id: "failed", exports: {} };
+    const original = () => { throw new Error("Failed original"); };
+    original[runtime.originalSymbol] = original;
+    assert.throws(() => runtime.runFactoryWithWrap(original, null, [module, module.exports, () => {}]), /Failed original/);
+    assert.equal(module.loaded, undefined);
+});
+
+test("the Discord loader preserves direct constructor exports used during Canary startup", () => {
+    const loggerModule = {};
+    class Logger { constructor(name) { this.name = name; } }
+    defineExports(loggerModule, { Logger: () => Logger });
+    const aliasModule = {};
+    defineExports(aliasModule, {}, { A: loggerModule.Logger });
+    assert.equal(new aliasModule.A("startup").name, "startup");
+    const descriptor = Object.getOwnPropertyDescriptor(aliasModule, "A");
+    assert.equal(descriptor.enumerable, true);
+    assert.equal(descriptor.configurable, true);
+    assert.equal(descriptor.writable, false);
+});
+
+test("the Discord loader keeps lazy getter exports and existing keys", () => {
+    let current = 1;
+    let reads = 0;
+    const exports = { existing: "original" };
+    defineExports(exports, { current: () => { reads++; return current; }, existing: () => "changed" });
+    assert.equal(reads, 0);
+    assert.equal(exports.current, 1);
+    current = 2;
+    assert.equal(exports.current, 2);
+    defineExports(exports, {}, { existing: "changed", current: 100 });
+    assert.equal(exports.existing, "original");
+    assert.equal(exports.current, 2);
+});
+
+test("direct Discord exports retain falsy values and ignore inherited definitions", () => {
+    const values = Object.assign(Object.create({ inherited: "hidden" }), { zero: 0, no: false, empty: "", missing: undefined });
+    const exports = {};
+    defineExports(exports, {}, values);
+    assert.equal(exports.zero, 0);
+    assert.equal(exports.no, false);
+    assert.equal(exports.empty, "");
+    assert.equal(Object.hasOwn(exports, "missing"), true);
+    assert.equal(Object.hasOwn(exports, "inherited"), false);
+});
+
 async function load(source, imports = {}, globals = {}) {
     const { code } = await transform(source, { loader: "tsx", format: "cjs", jsx: "transform" });
     const module = { exports: {} };

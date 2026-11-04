@@ -51,7 +51,7 @@ export const PMLogger = logger;
 
 /** Whether we have subscribed to flux events of all the enabled plugins when FluxDispatcher was ready */
 let enabledPluginsSubscribedFlux = false;
-const subscribedFluxEventsPlugins = new Set<string>();
+const subscribedFluxEventsPlugins = new Map<string, NonNullable<Plugin["flux"]>>();
 
 export function isPluginEnabled(p: string) {
     const plugin = Plugins[p];
@@ -167,11 +167,12 @@ export function startDependenciesRecursive(p: Plugin) {
 
 export function subscribePluginFluxEvents(p: Plugin, fluxDispatcher: typeof FluxDispatcher) {
     if (p.flux && !subscribedFluxEventsPlugins.has(p.name) && (!IS_REPORTER || isReporterTestable(p, ReporterTestable.FluxEvents))) {
-        subscribedFluxEventsPlugins.add(p.name);
+        const handlers: NonNullable<Plugin["flux"]> = {};
+        subscribedFluxEventsPlugins.set(p.name, handlers);
 
         logger.debug("Subscribing to flux events of plugin", p.name);
         for (const [event, handler] of Object.entries(p.flux)) {
-            const wrappedHandler = p.flux[event] = function () {
+            const wrappedHandler = handlers[event] = function () {
                 if (p.name === "Encryptcord" && event === "MESSAGE_CREATE") return;
                 try {
                     const res = handler!.apply(p, arguments as any);
@@ -189,11 +190,12 @@ export function subscribePluginFluxEvents(p: Plugin, fluxDispatcher: typeof Flux
 }
 
 export function unsubscribePluginFluxEvents(p: Plugin, fluxDispatcher: typeof FluxDispatcher) {
-    if (p.flux) {
+    const handlers = subscribedFluxEventsPlugins.get(p.name);
+    if (handlers) {
         subscribedFluxEventsPlugins.delete(p.name);
 
         logger.debug("Unsubscribing from flux events of plugin", p.name);
-        for (const [event, handler] of Object.entries(p.flux)) {
+        for (const [event, handler] of Object.entries(handlers)) {
             fluxDispatcher.unsubscribe(event as FluxEvents, handler!);
         }
     }

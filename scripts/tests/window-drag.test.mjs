@@ -108,30 +108,54 @@ test("window drag protection never excludes the whole document or application fr
     for (const selector of ["button", "input", '[role="checkbox"]', '[role="dialog"]']) assert(shared.NO_DRAG_GUARD_CSS.includes(selector));
 });
 
-test("main-process protection injects scoped styles across navigations without root-wide inline scripts", async () => {
-    const listeners = new Map(), styles = [], timers = new Map();
+test("main-process protection inserts one scoped user stylesheet per document without polling or channel-change duplicates", async () => {
+    const listeners = new Map(), styles = [];
     let destroyed = false;
     const webContents = {
         isDestroyed: () => destroyed,
         isLoadingMainFrame: () => false,
-        insertCSS: async css => { styles.push(css); },
+        insertCSS: async (css, options) => { styles.push({ css, options }); },
         executeJavaScript() { assert.fail("Global inline drag overrides must not be injected"); },
         on: (event, handler) => { assert(!listeners.has(event)); listeners.set(event, handler); }
     };
     const { injectNoDragGuard } = await load("src/main/noDragGuard.ts", {
-        setInterval: callback => { timers.set(1, callback); return 1; },
-        clearInterval: id => timers.delete(id)
+        setInterval() { assert.fail("Drag protection must not poll after startup"); }
     }, { "@shared/noDragGuard": shared });
     injectNoDragGuard(webContents);
     injectNoDragGuard(webContents);
     assert.equal(styles.length, 1);
-    assert.equal(listeners.size, 3);
-    for (const handler of listeners.values()) handler();
-    assert.equal(styles.length, 4);
-    assert(styles.every(css => css === shared.NO_DRAG_GUARD_CSS));
+    listeners.get("did-finish-load")();
+    for (let i = 0; i < 1000; i++) listeners.get("did-navigate-in-page")?.();
+    assert.equal(styles.length, 1);
+    listeners.get("dom-ready")();
+    listeners.get("did-finish-load")();
+    assert.equal(styles.length, 2);
+    assert(styles.every(({ css, options }) => css === shared.NO_DRAG_GUARD_CSS && options.cssOrigin === "user"));
     destroyed = true;
     for (const handler of listeners.values()) handler();
-    timers.get(1)();
-    assert.equal(styles.length, 4);
-    assert.equal(timers.size, 0);
+    assert.equal(styles.length, 2);
+});
+
+test("drag protection waits for a loading document and retries a failed insertion at load completion", async () => {
+    const listeners = new Map();
+    let attempts = 0;
+    const webContents = {
+        isDestroyed: () => false,
+        isLoadingMainFrame: () => true,
+        insertCSS: async () => { if (++attempts === 1) throw new Error("Document replaced"); },
+        on: (event, handler) => listeners.set(event, handler)
+    };
+    const { injectNoDragGuard } = await load("src/main/noDragGuard.ts", {
+        setInterval() { assert.fail("Drag protection must not poll after startup"); }
+    }, { "@shared/noDragGuard": shared });
+    injectNoDragGuard(webContents);
+    assert.equal(attempts, 0);
+    listeners.get("dom-ready")();
+    await Promise.resolve();
+    await Promise.resolve();
+    listeners.get("did-finish-load")();
+    await Promise.resolve();
+    assert.equal(attempts, 2);
+    listeners.get("did-finish-load")();
+    assert.equal(attempts, 2);
 });

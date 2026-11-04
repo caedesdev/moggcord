@@ -3,7 +3,8 @@
  */
 
 import { cpSync, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, writeFileSync } from "original-fs";
-import { basename, dirname, join } from "path";
+import { basename, dirname, join, resolve } from "path";
+
 import { buildFiles } from "../../scripts/lib/build-info.mjs";
 import { desktopPaths } from "../../scripts/lib/desktop-paths.mjs";
 
@@ -69,6 +70,7 @@ require(resolved);
 
 export function syncDistToLocal(installDir = getPatcherInstallDir()): string {
     const dest = getMoggcordLocalDistDir();
+    if (resolve(installDir) === resolve(dest)) return join(dest, "patcher.js");
     if (!existsSync(installDir)) return join(dest, "patcher.js");
 
     mkdirSync(dest, { recursive: true });

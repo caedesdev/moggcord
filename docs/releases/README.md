@@ -4,7 +4,8 @@
 
 | Version | Main changes | Notes |
 | --- | --- | --- |
-| [1.18.51](1.18.51.md) | Bounded message caches, event-log cleanup and less background work in stealth mode | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.51) |
+| [1.18.52](1.18.52.md) | Restore Canary startup and reduce repeated background work | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.52) |
+| [1.18.51](1.18.51.md) | Bounded message caches, event-log cleanup and less background work in stealth mode | Withdrawn; Canary compatibility fixed in 1.18.52 |
 | [1.18.50](1.18.50.md) | Windows installer includes the .NET runtime in its executable | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.50) |
 | [1.18.49](1.18.49.md) | Automatic Windows installer updates, verified download caching and a compact welcome card | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.49) |
 | [1.18.48](1.18.48.md) | Draggable privacy dialogs, website local-app permissions and animated website login artwork | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.48) |
