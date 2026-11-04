@@ -207,7 +207,7 @@ export const settings = definePluginSettings({
     cacheLimit: {
         default: 1000,
         type: OptionType.NUMBER,
-        description: "Maximum number of messages to store in the cache. Older messages are deleted when the limit is reached. This helps reduce memory usage and improve performance. 0 means there is no limit",
+        description: "Maximum entries in the recent-message and stored-log memory caches. Saved logs stay in the database. Use 0 for no limit.",
     },
 
     timeBasedCleanupMinutes: {

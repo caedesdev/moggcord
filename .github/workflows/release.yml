@@ -51,6 +51,8 @@ jobs:
         run: |
           pnpm test:plugins
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          pnpm test:performance
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           pnpm test:community
 
       - name: Package Moggcord dist

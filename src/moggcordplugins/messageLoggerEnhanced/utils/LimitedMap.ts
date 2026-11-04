@@ -16,25 +16,18 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
-import { settings } from "../index";
+export class LimitedMap<K, V> extends Map<K, V> {
+    constructor(private readonly getLimit: () => number) {
+        super();
+    }
 
-export class LimitedMap<K, V> {
-    public map: Map<K, V> = new Map();
-    constructor() { }
-
-    set(key: K, value: V) {
-        if (settings.store.cacheLimit > 0 && this.map.size >= settings.store.cacheLimit) {
+    override set(key: K, value: V) {
+        super.set(key, value);
+        const limit = this.getLimit();
+        while (limit > 0 && this.size > limit) {
             // delete the first entry
-            this.map.delete(this.map.keys().next().value!);
+            this.delete(this.keys().next().value!);
         }
-        this.map.set(key, value);
-    }
-
-    get(key: K) {
-        return this.map.get(key);
-    }
-
-    clear() {
-        this.map.clear();
+        return this;
     }
 }

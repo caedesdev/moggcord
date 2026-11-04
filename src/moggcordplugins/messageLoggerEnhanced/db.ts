@@ -7,10 +7,12 @@
 import { ChannelStore, Toasts } from "@webpack/common";
 import { DBSchema, IDBPDatabase, openDB } from "idb";
 
+import { settings } from "./settings";
 import { LoggedMessageJSON } from "./types";
 import { getMessageStatus } from "./utils";
 import { stripTransientRenderState } from "./utils/cleanUp";
 import { DB_NAME, DB_VERSION } from "./utils/constants";
+import { LimitedMap } from "./utils/LimitedMap";
 import { getAttachmentBlobUrl } from "./utils/saveImage";
 
 export enum DBMessageStatus {
@@ -41,7 +43,7 @@ export interface MLIDB extends DBSchema {
 }
 
 export let db: IDBPDatabase<MLIDB>;
-export const cachedMessages = new Map<string, LoggedMessageJSON>();
+export const cachedMessages = new LimitedMap<string, LoggedMessageJSON>(() => settings.store.cacheLimit);
 
 // this is probably not the best way to do this
 async function cacheRecords(records: DBMessageRecord[]) {
