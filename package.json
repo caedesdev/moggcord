@@ -22,12 +22,13 @@
         "community:start": "node scripts/community/bridge.mjs",
         "test:community": "node --test scripts/tests/community.test.mjs scripts/tests/community-browser.test.mjs scripts/tests/community-runtime.test.mjs scripts/tests/community-service.test.mjs scripts/tests/community-compiler.test.mjs scripts/tests/release.test.mjs scripts/tests/updater.test.mjs scripts/tests/update-download.test.mjs scripts/tests/developer-team.test.mjs",
         "test:installer": "node --test scripts/tests/installer-ui.test.mjs",
+        "test:performance": "node --test scripts/tests/performance.test.mjs",
         "test:plugins": "node --test scripts/tests/plugin-bundle.test.mjs scripts/tests/profile-sections.test.mjs scripts/tests/plugin-import.test.mjs scripts/tests/feedback.test.mjs scripts/tests/user-area.test.mjs scripts/tests/fake-voice.test.mjs scripts/tests/commands.test.mjs scripts/tests/window-drag.test.mjs scripts/tests/settings-compat.test.mjs scripts/tests/settings-sidebar.test.mjs",
         "build": "pnpm depCheck && node --require=./scripts/suppressExperimentalWarnings.js scripts/build/build.mjs",
         "buildStandalone": "pnpm build --standalone",
         "buildDesktop": "tsx scripts/build/buildDesktop.mts",
-        "package": "pnpm run buildDesktop && pnpm run buildStandalone && electron-builder --config electron-builder.config.cjs",
-        "package:dir": "pnpm run buildDesktop && pnpm run buildStandalone && electron-builder --config electron-builder.config.cjs --dir",
+        "package": "pnpm run buildDesktop && pnpm run buildStandalone && electron-builder --config scripts/legacy/windows/electron-builder.config.cjs",
+        "package:dir": "pnpm run buildDesktop && pnpm run buildStandalone && electron-builder --config scripts/legacy/windows/electron-builder.config.cjs --dir",
         "buildWeb": "node --require=./scripts/suppressExperimentalWarnings.js scripts/build/buildWeb.mjs",
         "buildWebStandalone": "pnpm buildWeb --standalone",
         "buildReporter": "pnpm buildWebStandalone --reporter --skip-extension",
@@ -161,6 +162,6 @@
     },
     "build": {
         "extends": null,
-        "configFile": "electron-builder.config.cjs"
+        "configFile": "scripts/legacy/windows/electron-builder.config.cjs"
     }
 }

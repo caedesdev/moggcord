@@ -1,11 +1,12 @@
 $ErrorActionPreference = "Stop"
 $DISCORD = "C:\Users\zzafi\AppData\Local\Discord\app-1.0.9228"
-$OUT = "C:\Users\zzafi\Desktop\equicord\release\win-unpacked"
+$RepoRoot = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\..\.."))
+$OUT = Join-Path $RepoRoot "release\win-unpacked"
 $RES = "$OUT\resources"
 
 Write-Host "=== ETAPE 1 : Build ===" -ForegroundColor Cyan
-Set-Location "C:\Users\zzafi\Desktop\equicord"
-npx electron-builder --config electron-builder.config.cjs --win dir --x64
+Set-Location $RepoRoot
+npx electron-builder --config scripts/legacy/windows/electron-builder.config.cjs --win dir --x64
 
 Write-Host "=== ETAPE 2 : Copie _app.asar ===" -ForegroundColor Cyan
 Copy-Item "$DISCORD\resources\_app.asar" "$RES\_app.asar" -Force
@@ -39,7 +40,7 @@ Copy-Item "$DISCORD\resources\_app.asar" "$APP_DIST\_app.asar" -Force
 Write-Host "app/dist/_app.asar OK"
 
 Write-Host "=== ETAPE 6 : Creation portable exe ===" -ForegroundColor Cyan
-npx electron-builder --config electron-builder.config.cjs --win portable --x64 --prepackaged release\win-unpacked
+npx electron-builder --config scripts/legacy/windows/electron-builder.config.cjs --win portable --x64 --prepackaged release\win-unpacked
 
 Write-Host "=== DONE ===" -ForegroundColor Green
 Write-Host "Fichier : release\Moggcord-1.14.5-portable.exe" -ForegroundColor Green

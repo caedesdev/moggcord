@@ -44,6 +44,7 @@ const cacheThing = findByPropsLazy("commit", "getOrCreate");
 export async function clearLogs(showToast = true) {
     await idb.clearMessagesIDB(showToast);
     cacheSentMessages.clear();
+    messageJsonToMessageClass.clear();
 }
 
 let oldGetMessage: typeof MessageStore.getMessage;
@@ -416,7 +417,7 @@ export default definePlugin({
         this.oldGetMessage = oldGetMessage = MessageStore.getMessage;
 
         // Cache pour éviter de recréer les classes de messages à chaque appel (très fréquent au scroll)
-        const combinedMessageCache = new Map<string, any>();
+        const combinedMessageCache = new Map<string, ReturnType<typeof messageJsonToMessageClass>>();
 
         MessageStore.getMessage = (channelId: string, messageId: string) => {
             const MLMessage = idb.cachedMessages.get(messageId);
@@ -428,14 +429,8 @@ export default definePlugin({
                 return combinedMessageCache.get(messageId);
             }
 
-            if (MLMessage.deleted) {
-                const combined = messageJsonToMessageClass({ message: MLMessage });
-                combinedMessageCache.set(messageId, combined);
-                return combined;
-            }
-
             // update the edited message with the latest data
-            const latestMessage = this.oldGetMessage(channelId, messageId);
+            const latestMessage = MLMessage.deleted ? undefined : this.oldGetMessage(channelId, messageId);
             const combined = messageJsonToMessageClass({
                 message: {
                     ...MLMessage,
@@ -449,7 +444,7 @@ export default definePlugin({
             // Nettoyage périodique du cache pour éviter les fuites mémoire
             if (combinedMessageCache.size > 1000) {
                 const firstKey = combinedMessageCache.keys().next().value;
-                combinedMessageCache.delete(firstKey);
+                combinedMessageCache.delete(firstKey!);
             }
 
             return combined;
@@ -476,5 +471,7 @@ export default definePlugin({
     stop() {
         removeContextMenuBindings();
         MessageStore.getMessage = this.oldGetMessage;
+        cacheSentMessages.clear();
+        messageJsonToMessageClass.clear();
     }
 });

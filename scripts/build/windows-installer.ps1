@@ -1,8 +1,8 @@
-# build-installer.ps1 - Compile Moggcord-Installer.exe
-# Usage: .\build-installer.ps1
+# windows-installer.ps1 - Compile Moggcord-Installer.exe
+# Usage: .\scripts\build\windows-installer.ps1
 
 $ErrorActionPreference = "Stop"
-$Root   = $PSScriptRoot
+$Root   = [IO.Path]::GetFullPath((Join-Path $PSScriptRoot "..\.."))
 $SrcDir = Join-Path $Root "installer-src"
 $OutDir = Join-Path $Root "release\installer"
 $OutExe = Join-Path $OutDir "Moggcord-Installer.exe"
@@ -26,7 +26,7 @@ if (-not $sdkLine) {
     Write-Host "    winget install Microsoft.DotNet.SDK.8" -ForegroundColor White
     Write-Host ""
     Write-Host "  Or download: https://dotnet.microsoft.com/download/dotnet/8.0" -ForegroundColor Yellow
-    Write-Host "  Then open a NEW terminal and run publish-release.bat again." -ForegroundColor Yellow
+    Write-Host "  Then open a NEW terminal and run scripts\windows\publish-release.bat again." -ForegroundColor Yellow
     exit 1
 }
 

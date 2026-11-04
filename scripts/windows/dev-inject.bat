@@ -1,6 +1,6 @@
 @echo off
 title Moggcord — Dev Rebuild + Inject
-cd /d "%~dp0"
+cd /d "%~dp0..\.."
 
 echo.
 echo  [1/4] Fermeture de Discord...

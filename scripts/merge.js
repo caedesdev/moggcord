@@ -820,5 +820,6 @@ for (const key in old) {
   }
 }
 
-fs.writeFileSync('merged_badges.json', JSON.stringify(result, null, 2));
+fs.mkdirSync('build', { recursive: true });
+fs.writeFileSync('build/merged_badges.json', JSON.stringify(result, null, 2));
 console.log("MERGE SUCCESS");

@@ -7,8 +7,8 @@
 import ErrorBoundary from "@components/ErrorBoundary";
 import { Logger } from "@utils/Logger";
 import { classes } from "@utils/misc";
-import { find, filters, findComponentByCodeLazy, onceReady } from "@webpack";
-import { Clickable, Tooltip, useEffect, useState, ReactDOM } from "@webpack/common";
+import { filters, find, findComponentByCodeLazy, onceReady } from "@webpack";
+import { Clickable, Tooltip, useEffect, useState } from "@webpack/common";
 import type { ComponentType, JSX, MouseEventHandler, ReactNode } from "react";
 
 const logger = new Logger("HeaderBarAPI");
@@ -245,58 +245,22 @@ function persistStealth(v: boolean) {
     try { v ? localStorage.setItem("Moggcord_stealthMode", "1") : localStorage.removeItem("Moggcord_stealthMode"); } catch { }
 }
 
-// Éléments NON-React uniquement (titlebar, MoggcordAI nav)
-// NE PAS cacher les entrées settings sidebar — l'utilisateur doit pouvoir accéder aux paramètres
-const NON_REACT_SELECTORS = [
-    "#moggcord-titlebar-btn",
-    "#moggcord-titlebar-link-style",
-    ".nai-nav-item",
-    ".mhub-nav-item",
-];
-
-function hideNonReactElements(hide: boolean) {
-    let count = 0;
-    for (const sel of NON_REACT_SELECTORS) {
-        try {
-            document.querySelectorAll(sel).forEach(el => {
-                (el as HTMLElement).style.display = hide ? "none" : "";
-                count++;
-            });
-        } catch { }
-    }
-    console.log("[StealthMode] hideNonReact hide=" + hide + " count=" + count);
-}
-
-function hideNonReactElementsQuiet(hide: boolean) {
-    for (const sel of NON_REACT_SELECTORS) {
-        try {
-            document.querySelectorAll(sel).forEach(el => {
-                (el as HTMLElement).style.display = hide ? "none" : "";
-            });
-        } catch { }
-    }
-}
-
 export function syncStealthBodyClass() {
     try { if (_stealthActive) document.body?.classList.add("moggcord-stealth"); else document.body?.classList.remove("moggcord-stealth"); } catch { }
-    hideNonReactElements(_stealthActive);
 }
 
 export function toggleStealthMode() {
     _stealthActive = !_stealthActive;
     persistStealth(_stealthActive);
-    hideNonReactElements(_stealthActive);
+    syncStealthBodyClass();
     // Notify React to re-render components (returns null when stealth is on)
     _notifyStealthChange();
-    try { if (_stealthActive) document.body?.classList.add("moggcord-stealth"); else document.body?.classList.remove("moggcord-stealth"); } catch { }
-    console.log("[StealthMode] toggled →", _stealthActive);
     return _stealthActive;
 }
 
 // ── Auto-init at module load ──
 if (_stealthActive) {
-    try { hideNonReactElements(true); } catch { }
-    try { document.body?.classList.add("moggcord-stealth"); } catch { }
+    syncStealthBodyClass();
 }
 
 // Register Ctrl+Shift+H globally at module load
@@ -310,36 +274,9 @@ try {
     }, true);
 } catch { }
 
-// MutationObserver: re-hide non-React elements when Discord re-renders the DOM
-try {
-    let stealthObserver: MutationObserver | null = null;
-    const startObserver = () => {
-        if (stealthObserver) return;
-        stealthObserver = new MutationObserver(() => {
-            if (_stealthActive) hideNonReactElementsQuiet(true);
-        });
-        const target = document.body || document.documentElement;
-        if (target) {
-            stealthObserver.observe(target, { childList: true, subtree: true });
-        }
-    };
-    const stopObserver = () => {
-        if (stealthObserver) { stealthObserver.disconnect(); stealthObserver = null; }
-    };
-    if (_stealthActive) {
-        if (document.body) startObserver();
-        else document.addEventListener("DOMContentLoaded", startObserver);
-    }
-    window.addEventListener("moggcord-stealth-change", () => {
-        if (_stealthActive) startObserver();
-        else stopObserver();
-    });
-} catch { }
-
 // ── Listeners for React re-render ──
 const stealthListeners = new Set<() => void>();
 export function _notifyStealthChange() {
-    // NO hideNonReactElements here — already handled in toggleStealthMode
     stealthListeners.forEach(fn => fn());
     window.dispatchEvent(new Event("moggcord-stealth-change"));
 }
@@ -353,11 +290,9 @@ function HeaderBarButtons() {
         const listener = () => forceUpdate(n => n + 1);
         headerBarListeners.add(listener);
         stealthListeners.add(listener);
-        window.addEventListener("moggcord-stealth-change", listener);
         return () => {
             headerBarListeners.delete(listener);
             stealthListeners.delete(listener);
-            window.removeEventListener("moggcord-stealth-change", listener);
         };
     }, []);
 
@@ -383,11 +318,9 @@ function ChannelToolbarButtons() {
         const listener = () => forceUpdate(n => n + 1);
         channelToolbarListeners.add(listener);
         stealthListeners.add(listener);
-        window.addEventListener("moggcord-stealth-change", listener);
         return () => {
             channelToolbarListeners.delete(listener);
             stealthListeners.delete(listener);
-            window.removeEventListener("moggcord-stealth-change", listener);
         };
     }, []);
 

@@ -7,6 +7,10 @@ node_modules/
 dist/
 build/
 !scripts/build/
+/bundle.js
+/plugins.json.new
+/merged_badges.json
+/static/modules_backup_working_stereo/
 release/
 *.tsbuildinfo
 

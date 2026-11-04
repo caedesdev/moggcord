@@ -21,7 +21,7 @@ type MemoizedFunction<T extends (...args: any[]) => any> = {
     clear(): void;
 };
 
-export function memoize<T extends (...args: any[]) => any>(func: T): MemoizedFunction<T> {
+export function memoize<T extends (...args: any[]) => any>(func: T, maxEntries = Infinity): MemoizedFunction<T> {
     const cache = new Map<string, ReturnType<T>>();
 
     const memoizedFunc = (...args: Parameters<T>): ReturnType<T> => {
@@ -32,6 +32,8 @@ export function memoize<T extends (...args: any[]) => any>(func: T): MemoizedFun
 
         const result = func(...args);
         cache.set(key, result);
+        if (cache.size > maxEntries)
+            cache.delete(cache.keys().next().value!);
         return result;
     };
 
