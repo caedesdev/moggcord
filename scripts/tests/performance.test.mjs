@@ -6,6 +6,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
+import { join, resolve } from "node:path";
 import vm from "node:vm";
 import ts from "typescript";
 import { transform } from "esbuild";
@@ -271,4 +272,98 @@ test("loading saved event logs retains only the newest entries within the existi
     assert.equal(api.snapshot().logs.length, api.MAX_LOGS);
     assert.equal(api.snapshot().logs[0].timestamp, 11999);
     assert.equal(api.snapshot().logs.at(-1).timestamp, 2000);
+});
+
+async function pluginEvents() {
+    const source = await readFile("src/api/PluginManager.ts", "utf8");
+    const file = ts.createSourceFile("PluginManager.ts", source, ts.ScriptTarget.Latest, true);
+    const functions = new Set(["subscribePluginFluxEvents", "unsubscribePluginFluxEvents"]);
+    const statements = file.statements.filter(node => ts.isVariableStatement(node)
+        ? node.declarationList.declarations.some(item => item.name.getText(file) === "subscribedFluxEventsPlugins")
+        : ts.isFunctionDeclaration(node) && functions.has(node.name?.text));
+    const errors = [], listeners = new Map();
+    const api = await load(statements.map(node => node.getText(file)).join("\n"), {}, {
+        IS_REPORTER: false, Promise,
+        logger: { debug() {}, error: (...args) => errors.push(args) }
+    });
+    const dispatcher = {
+        subscribe(event, handler) {
+            if (!listeners.has(event)) listeners.set(event, new Set());
+            listeners.get(event).add(handler);
+        },
+        unsubscribe(event, handler) { listeners.get(event)?.delete(handler); }
+    };
+    return { api, dispatcher, listeners, errors };
+}
+
+test("restarting a plugin does not wrap its handlers again or retain event subscriptions", async () => {
+    const { api, dispatcher, listeners } = await pluginEvents();
+    let received = 0;
+    const handler = function (event) { assert.equal(this, plugin); received += event.amount; };
+    const plugin = { name: "PerformanceFixture", flux: { MESSAGE_CREATE: handler } };
+    for (let i = 0; i < 200; i++) {
+        api.subscribePluginFluxEvents(plugin, dispatcher);
+        api.subscribePluginFluxEvents(plugin, dispatcher);
+        assert.equal(plugin.flux.MESSAGE_CREATE, handler);
+        assert.equal(listeners.get("MESSAGE_CREATE").size, 1);
+        [...listeners.get("MESSAGE_CREATE")][0]({ amount: 1 });
+        api.unsubscribePluginFluxEvents(plugin, dispatcher);
+        assert.equal(listeners.get("MESSAGE_CREATE").size, 0);
+    }
+    assert.equal(received, 200);
+});
+
+test("stopping a plugin releases the registered handlers even if its event definitions changed", async () => {
+    const { api, dispatcher, listeners } = await pluginEvents();
+    const plugin = { name: "PerformanceFixture", flux: { MESSAGE_CREATE() {} } };
+    api.subscribePluginFluxEvents(plugin, dispatcher);
+    plugin.flux = undefined;
+    api.unsubscribePluginFluxEvents(plugin, dispatcher);
+    assert.equal(listeners.get("MESSAGE_CREATE").size, 0);
+});
+
+test("plugin event errors remain isolated and asynchronous failures are caught", async () => {
+    const { api, dispatcher, listeners, errors } = await pluginEvents();
+    const plugin = { name: "PerformanceFixture", flux: {
+        SYNC() { throw new Error("Sync fixture"); },
+        ASYNC() { return Promise.reject(new Error("Async fixture")); }
+    } };
+    api.subscribePluginFluxEvents(plugin, dispatcher);
+    assert.doesNotThrow(() => [...listeners.get("SYNC")][0]({}));
+    await [...listeners.get("ASYNC")][0]({});
+    assert.equal(errors.length, 2);
+    api.unsubscribePluginFluxEvents(plugin, dispatcher);
+    assert([...listeners.values()].every(handlers => handlers.size === 0));
+});
+
+async function loaderSync(installDir, destination) {
+    const source = await readFile("src/main/moggcordLoader.ts", "utf8");
+    const file = ts.createSourceFile("moggcordLoader.ts", source, ts.ScriptTarget.Latest, true);
+    const sync = file.statements.find(node => ts.isFunctionDeclaration(node) && node.name?.text === "syncDistToLocal");
+    const copies = [], reads = [], directories = [];
+    const { syncDistToLocal } = await load(sync.getText(file), {}, {
+        join, resolve, getPatcherInstallDir: () => installDir, getMoggcordLocalDistDir: () => destination,
+        existsSync: () => true,
+        mkdirSync: path => directories.push(path),
+        readdirSync: path => { reads.push(path); return ["patcher.js", "renderer.js", "renderer.js.map", "renderer.js.LEGAL.txt", "node.exe", "assets"]; },
+        statSync: path => ({ isFile: () => !path.endsWith("assets") }),
+        cpSync: (from, to) => copies.push([from, to])
+    });
+    return { result: syncDistToLocal(), copies, reads, directories };
+}
+
+test("an installed build starts without scanning or copying its own distribution directory", async () => {
+    const destination = resolve(".codex-temp", "installed-dist");
+    const result = await loaderSync(join(destination, "child", ".."), destination);
+    assert.equal(result.result, join(destination, "patcher.js"));
+    assert.equal(result.reads.length, 0);
+    assert.equal(result.directories.length, 0);
+    assert.equal(result.copies.length, 0);
+});
+
+test("a build in a different location still synchronizes runtime files without source maps or directories", async () => {
+    const source = resolve(".codex-temp", "source-dist"), destination = resolve(".codex-temp", "installed-dist");
+    const result = await loaderSync(source, destination);
+    assert.equal(result.result, join(destination, "patcher.js"));
+    assert.deepEqual(result.copies, ["patcher.js", "renderer.js", "node.exe"].map(name => [join(source, name), join(destination, name)]));
 });
