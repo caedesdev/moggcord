@@ -91,4 +91,4 @@ Use the **Source of truth** links in each guide to inspect the implementation. F
 
 Older entry points remain available: [Installer](INSTALLER.md), [Desktop installers](DESKTOP-INSTALLERS.md), [Community installation](COMMUNITY-INSTALL.md) and [Included plugins](PLUGINS.md).
 
-[Repository](../README.md) · [Latest release](https://github.com/caedesdev/moggcord/releases/latest) · [Contributing](../CONTRIBUTING.md) · [Support Moggcord](donations.md)
+[Repository](../README.md) · [Latest release](https://github.com/caedesdev/moggcord/releases/latest) · [Contributing](../.github/CONTRIBUTING.md) · [Support Moggcord](donations.md)

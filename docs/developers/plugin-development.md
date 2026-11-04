@@ -77,7 +77,7 @@ Choose the complete plugin folder so every relative import is included. Keep doc
 
 Do not mark an optional community plugin as required to force activation. The [bundle policy](../../scripts/lib/plugin-bundle.mjs) controls defaults for the standard distribution; the connector enables a deliberately installed community plugin by its declared name.
 
-Before contributing built-in code, read [CONTRIBUTING](../../CONTRIBUTING.md) and the [repository rules](../../.rules).
+Before contributing built-in code, read [CONTRIBUTING](../../.github/CONTRIBUTING.md) and the [repository rules](../../AGENTS.md).
 
 ## Source of truth
 

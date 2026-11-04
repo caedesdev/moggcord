@@ -48,4 +48,4 @@ The legacy root `pnpm package` configuration can copy files from a locally insta
 
 ## Source of truth
 
-[Project scripts](../../package.json) · [Build entry points](../../scripts/build/build.mjs) · [Source installer runner](../../scripts/runInstaller.mjs) · [Release workflow](../../.github/workflows/release.yml) · [Repository rules](../../.rules)
+[Project scripts](../../package.json) · [Build entry points](../../scripts/build/build.mjs) · [Source installer runner](../../scripts/runInstaller.mjs) · [Release workflow](../../.github/workflows/release.yml) · [Repository rules](../../AGENTS.md)

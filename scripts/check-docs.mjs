@@ -44,7 +44,7 @@ function headingAnchors(text) {
     return anchors;
 }
 
-const files = [join(root, "README.md"), join(root, "CONTRIBUTING.md"), ...await markdownFiles(join(root, "docs"))];
+const files = [join(root, "README.md"), join(root, ".github", "CONTRIBUTING.md"), ...await markdownFiles(join(root, "docs"))];
 const version = JSON.parse(await readFile(join(root, "package.json"), "utf8")).version;
 if (!/^\d+\.\d+\.\d+$/.test(version) || !files.includes(join(root, "docs", "releases", `${version}.md`)))
     problems.push(`package.json: documentation needs release notes at docs/releases/${version}.md`);
