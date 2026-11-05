@@ -4,6 +4,7 @@
 
 | Version | Main changes | Notes |
 | --- | --- | --- |
+| [1.18.54](1.18.54.md) | Organize Custom Profile into tabs with a fixed header and footer | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.54) |
 | [1.18.53](1.18.53.md) | Match extra profile badge sizes to Discord's native badges | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.53) |
 | [1.18.52](1.18.52.md) | Restore Canary startup and reduce repeated background work | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.52) |
 | [1.18.51](1.18.51.md) | Bounded message caches, event-log cleanup and less background work in stealth mode | Withdrawn; Canary compatibility fixed in 1.18.52 |
