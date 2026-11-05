@@ -28,7 +28,7 @@ Support Moggcord through [GitHub Sponsors](https://github.com/sponsors/caedesdev
 
 ## License and privacy
 
-[License](LICENSE) · [Privacy Policy (English draft)](docs/legal/privacy-policy.md) · [Datenschutzerklärung (deutscher Entwurf)](docs/legal/datenschutzerklaerung.md)
+[License](LICENSE) · [Privacy Policy)](docs/legal/privacy-policy.md) 
 
 Moggcord builds on [Equicord](https://github.com/Equicord/Equicord) and [Vencord](https://github.com/Vendicated/Vencord) under GPL-3.0-or-later. Original contributions remain copyrighted by their respective authors. Upstream copyright notices and third-party licenses remain in place; the project does not claim exclusive ownership of their work.
 
