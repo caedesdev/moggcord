@@ -187,7 +187,7 @@ function GuildSummary({ guildId, target = false }: { guildId: string; target?: b
 function CleanupConfirmation({ rootProps, plan, cloning, confirm }: { rootProps: ModalProps; plan: CleanupPlan; cloning: boolean; confirm: () => void; }) {
     const [name, setName] = useState("");
     return <ModalRoot {...rootProps} size={ModalSize.MEDIUM} aria-label="Confirm target cleanup">
-        <ModalHeader separator={false}><Heading tag="h4">Clean up target server</Heading><ModalCloseButton onClick={rootProps.onClose} /></ModalHeader>
+        <ModalHeader separator={false} className={cl("header")}><Heading tag="h4">Clean up target server</Heading><ModalCloseButton onClick={rootProps.onClose} /></ModalHeader>
         <ModalContent className={cl("confirmation")}>
             <GuildSummary guildId={plan.targetId} target />
             <p>This permanently deletes {plan.channels.length} channels, including their messages, and {plan.roles.length} roles from the target server.</p>
@@ -735,11 +735,11 @@ function ServerClonerUI({ initialSourceId = "" }: { initialSourceId?: string; })
         </section>
         <Divider />
         <div className={cl("actions")}>
-            <Button variant="primary" disabled={!sourceId || !validTarget || busy || !hasCloneWork} onClick={() => runOperation(false)} className={cl("start")}>
+            <Button variant="primary" size="small" disabled={!sourceId || !validTarget || busy || !hasCloneWork} onClick={() => runOperation(false)} className={cl("start")}>
                 {_running ? (_operation === "cleanup" ? "Cleaning target..." : "Cloning in progress...") : preparing ? "Preparing..." : "Start cloning"}
             </Button>
-            {!_running && <Button variant="dangerSecondary" disabled={!validTarget || mode === "none" || busy} onClick={() => runOperation(true)}>Clean up only</Button>}
-            {_running && <Button variant="dangerPrimary" onClick={stopClone}>Stop</Button>}
+            {!_running && <Button variant="dangerSecondary" size="small" disabled={!validTarget || mode === "none" || busy} onClick={() => runOperation(true)}>Clean up only</Button>}
+            {_running && <Button variant="dangerPrimary" size="small" onClick={stopClone}>Stop</Button>}
         </div>
         {_running && <div className={cl("progress-bar")}><div className={cl("progress-fill")} style={{ width: `${_progress}%` }} /></div>}
         {_logs.length > 0 && <div className={cl("log-area")} ref={logRef}>
@@ -753,7 +753,7 @@ function ServerClonerUI({ initialSourceId = "" }: { initialSourceId?: string; })
 function ServerClonerModal({ rootProps, guildId }: { rootProps: any; guildId: string }) {
     return (
         <ModalRoot {...rootProps} size={ModalSize.LARGE} className={cl("modal")}>
-            <ModalHeader separator={false}>
+            <ModalHeader separator={false} className={cl("header")}>
                 <Heading tag="h4" style={{ margin: 0 }}>Server Cloner</Heading>
                 <ModalCloseButton onClick={rootProps.onClose} />
             </ModalHeader>
