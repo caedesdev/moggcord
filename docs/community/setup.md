@@ -21,7 +21,7 @@ The remaining sections describe advanced manual setup for another website origin
 - Keep a separate source checkout for the connector. It supplies the compiler and stores community source.
 - Know the exact website origin you intend to trust.
 
-The target must have the Moggcord loader. A channel using Vencord or unmodified Discord is rejected. On macOS/Linux, use the matching [desktop installer](../getting-started/installation.md) first.
+The target must have the Moggcord loader. A channel using another client mod or unmodified Discord is rejected. On macOS/Linux, use the matching [desktop installer](../getting-started/installation.md) first.
 
 ## Run setup
 

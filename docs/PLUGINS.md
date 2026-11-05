@@ -1,6 +1,6 @@
 # Included plugins
 
-The current guide is [Plugins and defaults](guides/plugins.md). It explains the included Moggcord/Vencord collections, four default-enabled plugins, platform restrictions, internal dependencies and community builds.
+The current guide is [Plugins and defaults](guides/plugins.md). It explains the bundled collections, four default-enabled plugins, platform restrictions, internal dependencies and community builds.
 
 ## Fake Deafen and Fake Mute
 

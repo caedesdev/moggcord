@@ -12,7 +12,7 @@
 | `src/components/` | Shared UI and Moggcord settings pages |
 | `src/webpack/` | Resolve Discord modules and apply renderer patches |
 | `src/shared/` | Shared types, IPC event names and cross-process utilities |
-| `src/plugins/` | Included Vencord plugin collection and internal API/core entries |
+| `src/plugins/` | Included upstream plugin collection and internal API/core entries |
 | `src/moggcordplugins/` | Moggcord plugin collection and additional internal entries |
 | `src/userplugins/` | Local/community plugin source for that checkout |
 | `src/moggcord/`, `src/renderer/`, `src/preload/` | Additional desktop-shell, renderer and preload code paths; check imports before editing similarly named files |

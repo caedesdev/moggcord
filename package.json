@@ -13,7 +13,7 @@
         "url": "git+https://github.com/caedesdev/moggcord.git"
     },
     "license": "GPL-3.0-or-later",
-    "author": "Equicord",
+    "author": "Moggcord contributors",
     "scripts": {
         "docs:check": "node scripts/check-docs.mjs",
         "test:platform-installer": "node --test scripts/tests/platform-installer.test.mjs scripts/tests/unix-updater.test.mjs",
