@@ -6,19 +6,45 @@
 
 import "./styles.css";
 
-import { definePluginSettings } from "@api/Settings";
 import { addContextMenuPatch, NavContextMenuPatchCallback, removeContextMenuPatch } from "@api/ContextMenu";
-import { ModalCloseButton, ModalContent, ModalHeader, ModalRoot, openModal } from "@utils/modal";
+import { definePluginSettings } from "@api/Settings";
+import { Button } from "@components/Button";
+import { Divider } from "@components/Divider";
 import { FormSwitch } from "@components/FormSwitch";
+import { Heading } from "@components/Heading";
+import { classNameFactory } from "@utils/css";
+import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalProps, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import definePlugin, { OptionType } from "@utils/types";
-import { React, useState, useRef, useMemo, GuildStore, RestAPI, UserStore, Toasts, Select, Button, Menu } from "@webpack/common";
+import { Channel, Guild, Role } from "@vencord/discord-types";
 import { findStoreLazy } from "@webpack";
-import { Forms } from "@webpack/common";
-const F = Forms as any;
+import { GuildMemberStore, GuildStore, IconUtils, Menu, React, RestAPI, SearchableSelect, Toasts, useMemo, useRef, UserStore, useState, useStateFromStores } from "@webpack/common";
 
 const PermissionStore = findStoreLazy("PermissionStore");
+const cl = classNameFactory("sc-");
 
 const ADMIN_BIT = 0x8n;
+const DELETE_DELAY_MS = 300;
+
+const CLEANUP_MODES = [
+    { id: "none", label: "Keep existing" },
+    { id: "channels", label: "Delete channels" },
+    { id: "roles", label: "Delete roles" },
+    { id: "both", label: "Delete both" }
+] as const;
+
+type CleanupMode = (typeof CLEANUP_MODES)[number]["id"];
+type CleanupRole = Pick<Role, "id" | "name" | "position" | "managed">;
+type CleanupChannel = Pick<Channel, "id" | "name" | "type" | "guild_id">;
+
+interface CleanupPlan {
+    sourceId: string;
+    targetId: string;
+    targetName: string;
+    mode: CleanupMode;
+    roles: CleanupRole[];
+    channels: CleanupChannel[];
+    protectedRoles: number;
+}
 
 function getToken(): string {
     try {
@@ -32,8 +58,9 @@ function hasAdmin(guildId: string): boolean {
         const guild = GuildStore.getGuild(guildId);
         if (!guild) return false;
         const me = UserStore.getCurrentUser();
+        if (!me) return false;
         if (guild.ownerId === me.id) return true;
-        const perms = PermissionStore.getGuildPermissions({ id: guildId });
+        const perms = PermissionStore.getGuildPermissions(guild);
         if (typeof perms === "bigint") return (perms & ADMIN_BIT) === ADMIN_BIT;
         return false;
     } catch {
@@ -68,8 +95,121 @@ interface CloneOptions {
 
 interface LogEntry { text: string; type: "ok" | "err" | "warn" | "info"; }
 
+function cleanupMode(options: CloneOptions): CleanupMode {
+    if (options.clearRoles) return options.noDeleteChannels ? "roles" : "both";
+    return options.noDeleteChannels ? "none" : "channels";
+}
+
+function validateTarget(sourceId: string, targetId: string) {
+    const guild = GuildStore.getGuild(targetId);
+    if (!guild) throw new Error("Choose an available target server.");
+    if (sourceId && sourceId === targetId) throw new Error("Source and target must be different servers.");
+    if (!hasAdmin(targetId)) throw new Error("Administrator permission is required on the target server.");
+    return guild;
+}
+
+async function prepareCleanup(sourceId: string, targetId: string, mode: CleanupMode): Promise<CleanupPlan> {
+    const guild = validateTarget(sourceId, targetId);
+    const plan: CleanupPlan = { sourceId, targetId, targetName: guild.name, mode, roles: [], channels: [], protectedRoles: 0 };
+    if (mode === "channels" || mode === "both") {
+        const channels: CleanupChannel[] = await apiCall("get", `/guilds/${targetId}/channels`);
+        if (!Array.isArray(channels)) throw new Error("Could not load the target channels.");
+        plan.channels = channels.filter(channel => !channel.guild_id || channel.guild_id === targetId);
+    }
+    if (mode === "roles" || mode === "both") {
+        const roles: CleanupRole[] = await apiCall("get", `/guilds/${targetId}/roles`);
+        if (!Array.isArray(roles)) throw new Error("Could not load the target roles.");
+        const me = UserStore.getCurrentUser();
+        const owner = me?.id === guild.ownerId;
+        const member = me && GuildMemberStore.getMember(targetId, me.id);
+        if (!owner && !member) throw new Error("Your target-server role information is not available. Reopen the server and try again.");
+        const highestPosition = Math.max(0, ...roles.filter(role => member?.roles.includes(role.id)).map(role => role.position));
+        plan.roles = roles.filter(role => role.id !== targetId && role.name !== "@everyone" && !role.managed && (owner || role.position < highestPosition));
+        plan.protectedRoles = roles.length - plan.roles.length;
+    }
+    return plan;
+}
+
+async function executeCleanup(plan: CleanupPlan, log: (entry: LogEntry) => void, progress: (value: number) => void) {
+    validateTarget(plan.sourceId, plan.targetId);
+    const total = plan.channels.length + plan.roles.length;
+    let completed = 0, channels = 0, roles = 0, failed = 0;
+    for (const channel of plan.channels) {
+        if (_cancelled) break;
+        validateTarget(plan.sourceId, plan.targetId);
+        try {
+            await apiCall("del", `/channels/${channel.id}`);
+            channels++;
+            log({ text: `Deleted channel: ${channel.name}`, type: "ok" });
+        } catch (error) {
+            failed++;
+            log({ text: `Could not delete channel ${channel.name}: ${error instanceof Error ? error.message : String(error)}`, type: "err" });
+        }
+        progress(Math.round(++completed / total * 100));
+        await wait(DELETE_DELAY_MS);
+    }
+    for (const role of plan.roles) {
+        if (_cancelled) break;
+        validateTarget(plan.sourceId, plan.targetId);
+        try {
+            await apiCall("del", `/guilds/${plan.targetId}/roles/${role.id}`);
+            roles++;
+            log({ text: `Deleted role: ${role.name}`, type: "ok" });
+        } catch (error) {
+            failed++;
+            log({ text: `Could not delete role ${role.name}: ${error instanceof Error ? error.message : String(error)}`, type: "err" });
+        }
+        progress(Math.round(++completed / total * 100));
+        await wait(DELETE_DELAY_MS);
+    }
+    if (total === 0) progress(100);
+    log({ text: `Target cleanup: ${channels} channels and ${roles} roles deleted; ${failed} failed; ${plan.protectedRoles} protected roles kept.`, type: failed || _cancelled ? "warn" : "info" });
+    return { channels, roles, failed, cancelled: _cancelled };
+}
+
+function GuildIcon({ guild }: { guild: Guild; }) {
+    const url = IconUtils.getGuildIconURL({ id: guild.id, icon: guild.icon, size: 64, canAnimate: false });
+    return url
+        ? <img className={cl("server-icon")} src={url} alt="" loading="lazy" />
+        : <span className={cl("server-icon", "server-initials")} aria-hidden="true">{Array.from(guild.name).slice(0, 2).join("").toUpperCase()}</span>;
+}
+
+function GuildSummary({ guildId, target = false }: { guildId: string; target?: boolean; }) {
+    const guild = GuildStore.getGuild(guildId);
+    if (!guild) return null;
+    return <div className={cl("server-summary")}>
+        <GuildIcon guild={guild} />
+        <div className={cl("server-details")}><strong>{guild.name}</strong><span>{guild.id}</span></div>
+        {target && <span className={cl("admin-tag")}>Admin</span>}
+    </div>;
+}
+
+function CleanupConfirmation({ rootProps, plan, cloning, confirm }: { rootProps: ModalProps; plan: CleanupPlan; cloning: boolean; confirm: () => void; }) {
+    const [name, setName] = useState("");
+    return <ModalRoot {...rootProps} size={ModalSize.MEDIUM} aria-label="Confirm target cleanup">
+        <ModalHeader separator={false} className={cl("header")}><Heading tag="h4">Clean up target server</Heading><ModalCloseButton onClick={rootProps.onClose} /></ModalHeader>
+        <ModalContent className={cl("confirmation")}>
+            <GuildSummary guildId={plan.targetId} target />
+            <p>This permanently deletes {plan.channels.length} channels, including their messages, and {plan.roles.length} roles from the target server.</p>
+            <p>{plan.protectedRoles} protected roles are kept. The source server is unchanged.</p>
+            <label className={cl("confirmation-label")}>Type the target server name to confirm
+                <input className={cl("confirmation-input")} value={name} onChange={event => setName(event.target.value)} placeholder={plan.targetName} autoComplete="off" autoFocus />
+            </label>
+        </ModalContent>
+        <ModalFooter className={cl("confirmation-footer")}>
+            <Button variant="dangerPrimary" disabled={name.trim() !== plan.targetName.trim()} onClick={confirm}>{cloning ? "Delete and start cloning" : "Delete selected content"}</Button>
+            <Button variant="secondary" onClick={rootProps.onClose}>Cancel</Button>
+        </ModalFooter>
+    </ModalRoot>;
+}
+
+function confirmCleanup(plan: CleanupPlan, cloning: boolean): Promise<boolean> {
+    return new Promise(resolve => openModal(props => <CleanupConfirmation rootProps={props} plan={plan} cloning={cloning} confirm={() => { resolve(true); props.onClose(); }} />, { onCloseCallback: () => resolve(false) }));
+}
+
 // ── Persistent state (survives component unmount/remount) ────────────────
 let _running = false;
+let _operation: "clone" | "cleanup" = "clone";
 let _cancelled = false;
 let _progress = 0;
 let _logs: LogEntry[] = [];
@@ -101,12 +241,19 @@ async function cloneServer(
     options: CloneOptions,
     log: (entry: LogEntry) => void,
     setProgress: (p: number) => void,
+    preparedCleanup?: CleanupPlan,
 ) {
     _cancelled = false;
     const token = getToken();
     if (!token) { log({ text: "Token not found!", type: "err" }); return; }
 
+    const mode = cleanupMode(options);
+    validateTarget(sourceId, targetId);
+    if (mode !== "none" && (!preparedCleanup || preparedCleanup.sourceId !== sourceId || preparedCleanup.targetId !== targetId || preparedCleanup.mode !== mode)) {
+        throw new Error("Confirm the selected target cleanup before cloning.");
+    }
     const steps: string[] = [];
+    if (mode !== "none") steps.push("cleanup");
     if (options.guildSettings) steps.push("settings");
     if (options.icon) steps.push("icon");
     if (options.roles) steps.push("roles");
@@ -132,6 +279,15 @@ async function cloneServer(
 
     const sourceGuild = GuildStore.getGuild(sourceId);
     if (!sourceGuild) { log({ text: "Source server not found", type: "err" }); return; }
+
+    if (mode !== "none" && preparedCleanup) {
+        const result = await executeCleanup(preparedCleanup, log, value => setProgress(Math.round(value / totalSteps)));
+        if (result.cancelled || result.failed) {
+            log({ text: "Cloning stopped because target cleanup did not finish successfully.", type: "warn" });
+            return;
+        }
+        advance("Target cleanup");
+    }
 
     log({ text: `Cloning of "${sourceGuild.name}" → target server...`, type: "info" });
 
@@ -187,20 +343,6 @@ async function cloneServer(
         try {
             log({ text: "Copying roles...", type: "info" });
             const sourceRoles: any[] = await apiCall("get", `/guilds/${sourceId}/roles`);
-            const targetRoles: any[] = await apiCall("get", `/guilds/${targetId}/roles`);
-
-            // Optional: Clear existing roles in target server
-            if (options.clearRoles) {
-                log({ text: "Cleaning up existing roles in target server...", type: "warn" });
-                for (const role of targetRoles) {
-                    if (role.name === "@everyone" || role.managed) continue;
-                    try {
-                        await apiCall("del", `/guilds/${targetId}/roles/${role.id}`);
-                        await wait(300);
-                    } catch { /* ignore roles we can't delete */ }
-                }
-                log({ text: "Existing roles cleaned up", type: "ok" });
-            }
 
             const sorted = sourceRoles.filter(r => r.name !== "@everyone").sort((a, b) => b.position - a.position);
 
@@ -259,16 +401,6 @@ async function cloneServer(
             const sourceChannels: any[] = await apiCall("get", `/guilds/${sourceId}/channels`);
             const categories = sourceChannels.filter(c => c.type === 4).sort((a, b) => a.position - b.position);
             const nonCategories = sourceChannels.filter(c => c.type !== 4).sort((a, b) => a.position - b.position);
-
-            if (!options.noDeleteChannels) {
-                try {
-                    const targetChannels: any[] = await apiCall("get", `/guilds/${targetId}/channels`);
-                    for (const ch of targetChannels) {
-                        try { await apiCall("del", `/channels/${ch.id}`); await wait(300); } catch { /* ignore */ }
-                    }
-                    log({ text: "Existing channels deleted", type: "warn" });
-                } catch { /* ignore */ }
-            }
 
             for (const cat of categories) {
                 if (_cancelled) break;
@@ -467,13 +599,16 @@ function mapPermOverwrites(overwrites: any[], roleMapping: Map<string, string>):
 
 // ── Settings Component (inline, no modal) ───────────────────────────────
 
-function ServerClonerUI({ initialSourceId = "" }: { initialSourceId?: string }) {
-    const [sourceId, setSourceId] = useState<string>(initialSourceId);
-    const [targetId, setTargetId] = useState<string>("");
+function ServerClonerUI({ initialSourceId = "" }: { initialSourceId?: string; }) {
+    const [sourceId, setSourceId] = useState(initialSourceId);
+    const [targetId, setTargetId] = useState("");
     const [opts, setOpts] = useState<CloneOptions>({
-        roles: true, clearRoles: true, channels: true, noDeleteChannels: false, permissions: true,
+        roles: true, clearRoles: false, channels: true, noDeleteChannels: true, permissions: true,
         icon: true, emojis: true, embeds: true, guildSettings: true,
     });
+    const [preparing, setPreparing] = useState(false);
+    const cleanupGroupId = React.useId();
+    const preparingRef = useRef(false);
     const [, forceUpdate] = useState(0);
     const logRef = useRef<HTMLDivElement>(null);
 
@@ -489,29 +624,46 @@ function ServerClonerUI({ initialSourceId = "" }: { initialSourceId?: string }) 
         if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
     }, [_logs.length]);
 
-    const allGuilds = useMemo(() =>
-        Object.values(GuildStore.getGuilds() as Record<string, any>)
-            .sort((a, b) => a.name.localeCompare(b.name))
-            .map(g => ({ label: g.name, value: g.id })),
-        []);
+    const guilds = useStateFromStores([GuildStore, PermissionStore, UserStore], () =>
+        Object.values(GuildStore.getGuilds()).sort((a, b) => a.name.localeCompare(b.name)));
+    const allGuilds = useMemo(() => guilds.map(guild => ({ label: guild.name, value: guild.id })), [guilds]);
+    const adminGuilds = allGuilds.filter(guild => guild.value !== sourceId && hasAdmin(guild.value));
+    const busy = preparing || _running;
+    const mode = cleanupMode(opts);
+    const validTarget = Boolean(targetId && targetId !== sourceId && hasAdmin(targetId));
+    const hasCloneWork = opts.guildSettings || opts.icon || opts.roles || opts.channels || opts.emojis;
 
-    const adminGuilds = useMemo(() =>
-        allGuilds.filter(g => hasAdmin(g.value)),
-        [allGuilds]);
-
-    async function startClone() {
-        if (!sourceId || !targetId || _running) return;
-        if (sourceId === targetId) { persistLog({ text: "Source and destination cannot be identical!", type: "err" }); return; }
-        persistRunning(true);
-        _progress = 0;
-        _logs = [];
-        notifyListeners();
+    async function runOperation(onlyCleanup: boolean) {
+        if (_running || preparingRef.current || (!onlyCleanup && !sourceId) || (onlyCleanup && mode === "none")) return;
+        preparingRef.current = true;
+        setPreparing(true);
+        let started = false;
         try {
-            await cloneServer(sourceId, targetId, opts, persistLog, persistProgress);
-        } catch (e: any) {
-            persistLog({ text: `Fatal error: ${e?.message || e}`, type: "err" });
+            validateTarget(sourceId, targetId);
+            const plan = mode === "none" ? undefined : await prepareCleanup(sourceId, targetId, mode);
+            if (plan && plan.channels.length + plan.roles.length > 0 && !await confirmCleanup(plan, !onlyCleanup)) return;
+            if (_running) throw new Error("Another server operation is already running.");
+            validateTarget(sourceId, targetId);
+            _cancelled = false;
+            _progress = 0;
+            _logs = [];
+            _operation = onlyCleanup ? "cleanup" : "clone";
+            started = true;
+            persistRunning(true);
+            if (onlyCleanup && plan) {
+                const result = await executeCleanup(plan, persistLog, persistProgress);
+                const success = !result.cancelled && result.failed === 0;
+                persistLog({ text: result.cancelled ? "Target cleanup cancelled." : success ? "Target cleanup finished." : "Target cleanup finished with errors.", type: success ? "ok" : "warn" });
+            } else {
+                await cloneServer(sourceId, targetId, opts, persistLog, persistProgress, plan);
+            }
+        } catch (error) {
+            persistLog({ text: error instanceof Error ? error.message : String(error), type: "err" });
+        } finally {
+            if (started) persistRunning(false);
+            preparingRef.current = false;
+            setPreparing(false);
         }
-        persistRunning(false);
     }
 
     function stopClone() {
@@ -519,124 +671,93 @@ function ServerClonerUI({ initialSourceId = "" }: { initialSourceId?: string }) 
         persistLog({ text: "Cancellation requested...", type: "warn" });
     }
 
-    const SWITCH_OPTS: Array<{ key: keyof CloneOptions; label: string; }> = [
+    const switchOptions: Array<{ key: keyof CloneOptions; label: string; }> = [
         { key: "guildSettings", label: "Server settings" },
         { key: "icon", label: "Icon" },
         { key: "roles", label: "Roles" },
-        { key: "clearRoles", label: "Delete existing roles" },
         { key: "channels", label: "Channels" },
-        { key: "noDeleteChannels", label: "Do not delete existing channels" },
         { key: "permissions", label: "Permissions" },
         { key: "emojis", label: "Emojis" },
         { key: "embeds", label: "Bot embeds" },
     ];
 
-    return (
-        <div style={{ display: "flex", flexDirection: "column", gap: 16 }}>
-
-            {/* Source */}
-            <F.FormSection>
-                <F.FormTitle>Source server</F.FormTitle>
-                <Select
-                    options={allGuilds}
-                    placeholder="Choose a server..."
-                    isSelected={v => v === sourceId}
-                    select={v => setSourceId(v)}
-                    serialize={v => v}
+    return <div className={cl("editor")}>
+        <div className={cl("server-grid")}>
+            <section className={cl("server-card")}>
+                <Heading className={cl("section-title")}>Source server</Heading>
+                <SearchableSelect options={allGuilds} value={sourceId || undefined} placeholder="Search server name or ID..."
+                    maxVisibleItems={6} closeOnSelect clearable isDisabled={busy}
+                    onChange={value => {
+                        const id = typeof value === "string" ? value : "";
+                        setSourceId(id);
+                        if (id === targetId) setTargetId("");
+                    }}
+                    filter={(options, query) => options.filter(option => String(option.label).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()) || String(option.value).includes(query.trim()))}
+                    renderOptionPrefix={option => {
+                        const guild = GuildStore.getGuild(String(option.value));
+                        return guild ? <GuildIcon guild={guild} /> : null;
+                    }}
                 />
-            </F.FormSection>
-
-            {/* Target */}
-            <F.FormSection>
-                <F.FormTitle>Target server (ADMIN required)</F.FormTitle>
-                {adminGuilds.length === 0 ? (
-                    <F.FormText style={{ color: "var(--text-danger)" }}>
-                        No server with ADMIN permission found.
-                    </F.FormText>
-                ) : (
-                    <Select
-                        options={adminGuilds}
-                        placeholder="Choose a server..."
-                        isSelected={v => v === targetId}
-                        select={v => setTargetId(v)}
-                        serialize={v => v}
-                    />
-                )}
-            </F.FormSection>
-
-            <F.FormDivider />
-
-            {/* Options */}
-            <F.FormSection>
-                <F.FormTitle>Cloning options</F.FormTitle>
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "0 24px" }}>
-                    {SWITCH_OPTS.map(o => (
-                        <FormSwitch
-                            key={o.key}
-                            title={o.label}
-                            value={opts[o.key]}
-                            onChange={v => setOpts(prev => ({ ...prev, [o.key]: v }))}
-                            disabled={_running}
-                            hideBorder
-                        />
-                    ))}
-                </div>
-            </F.FormSection>
-
-            <F.FormDivider />
-
-            {/* Start / Stop buttons */}
-            <div style={{ display: "flex", gap: 8 }}>
-                <Button
-                    size={Button.Sizes.MEDIUM}
-                    color={_running ? Button.Colors.PRIMARY : Button.Colors.BRAND}
-                    disabled={!sourceId || !targetId || _running}
-                    onClick={startClone}
-                    style={{ flex: 1 }}
-                >
-                    {_running ? "Cloning in progress..." : "Start cloning"}
-                </Button>
-                {_running && (
-                    <Button
-                        size={Button.Sizes.MEDIUM}
-                        color={Button.Colors.RED}
-                        onClick={stopClone}
-                        style={{ minWidth: 120 }}
-                    >
-                        Stop
-                    </Button>
-                )}
-            </div>
-
-            {/* Progress */}
-            {_running && (
-                <div className="sc-progress-bar">
-                    <div className="sc-progress-fill" style={{ width: `${_progress}%` }} />
-                </div>
-            )}
-
-            {/* Logs */}
-            {_logs.length > 0 && (
-                <div className="sc-log-area" ref={logRef}>
-                    {_logs.map((l, i) => (
-                        <div key={i} className={`sc-log-${l.type}`}>{l.text}</div>
-                    ))}
-                </div>
-            )}
+                <GuildSummary guildId={sourceId} />
+            </section>
+            <section className={cl("server-card")}>
+                <Heading className={cl("section-title")}>Target server <span className={cl("admin-tag")}>Admin required</span></Heading>
+                <SearchableSelect options={adminGuilds} value={validTarget ? targetId : undefined} placeholder="Search your admin servers..."
+                    maxVisibleItems={6} closeOnSelect clearable isDisabled={busy || adminGuilds.length === 0}
+                    onChange={value => setTargetId(typeof value === "string" ? value : "")}
+                    filter={(options, query) => options.filter(option => String(option.label).toLocaleLowerCase().includes(query.trim().toLocaleLowerCase()) || String(option.value).includes(query.trim()))}
+                    renderOptionPrefix={option => {
+                        const guild = GuildStore.getGuild(String(option.value));
+                        return guild ? <GuildIcon guild={guild} /> : null;
+                    }}
+                />
+                {validTarget ? <GuildSummary guildId={targetId} target /> : <p className={cl("hint")}>{adminGuilds.length ? "Choose a different server where you have Administrator permission." : "No other server with Administrator permission found."}</p>}
+            </section>
         </div>
-    );
+        <Divider />
+        <section>
+            <Heading className={cl("section-title")}>Target cleanup</Heading>
+            <div className={cl("cleanup-modes")}>
+                {CLEANUP_MODES.map(item => <label key={item.id} className={cl("cleanup-mode")}>
+                    <input type="radio" name={cleanupGroupId} value={item.id} checked={mode === item.id} disabled={busy}
+                        onChange={() => setOpts(previous => ({ ...previous, clearRoles: item.id === "roles" || item.id === "both", noDeleteChannels: item.id === "none" || item.id === "roles" }))} />
+                    <span>{item.label}</span>
+                </label>)}
+            </div>
+            <p className={cl("hint")}>{mode === "none" ? "Existing channels and roles are kept." : "Runs before cloning. Use Clean up only to prepare the target without copying. Protected roles are kept."}</p>
+        </section>
+        <section>
+            <Heading className={cl("section-title")}>Cloning options</Heading>
+            <div className={cl("options")}>
+                {switchOptions.map(option => <FormSwitch key={option.key} title={option.label} value={opts[option.key]}
+                    onChange={value => setOpts(previous => ({ ...previous, [option.key]: value }))} disabled={busy} hideBorder />)}
+            </div>
+        </section>
+        <Divider />
+        <div className={cl("actions")}>
+            <Button variant="primary" size="small" disabled={!sourceId || !validTarget || busy || !hasCloneWork} onClick={() => runOperation(false)} className={cl("start")}>
+                {_running ? (_operation === "cleanup" ? "Cleaning target..." : "Cloning in progress...") : preparing ? "Preparing..." : "Start cloning"}
+            </Button>
+            {!_running && <Button variant="dangerSecondary" size="small" disabled={!validTarget || mode === "none" || busy} onClick={() => runOperation(true)}>Clean up only</Button>}
+            {_running && <Button variant="dangerPrimary" size="small" onClick={stopClone}>Stop</Button>}
+        </div>
+        {_running && <div className={cl("progress-bar")}><div className={cl("progress-fill")} style={{ width: `${_progress}%` }} /></div>}
+        {_logs.length > 0 && <div className={cl("log-area")} ref={logRef}>
+            {_logs.map((entry, index) => <div key={index} className={cl(`log-${entry.type}`)}>{entry.text}</div>)}
+        </div>}
+    </div>;
 }
 
 // ── Modal & Context Menu ────────────────────────────────────────────────
 
 function ServerClonerModal({ rootProps, guildId }: { rootProps: any; guildId: string }) {
     return (
-        <ModalRoot {...rootProps} size="large">
-            <ModalHeader separator={false}>
-                <F.FormTitle tag="h4" style={{ margin: 0 }}>Server Cloner</F.FormTitle>
+        <ModalRoot {...rootProps} size={ModalSize.LARGE} className={cl("modal")}>
+            <ModalHeader separator={false} className={cl("header")}>
+                <Heading tag="h4" style={{ margin: 0 }}>Server Cloner</Heading>
                 <ModalCloseButton onClick={rootProps.onClose} />
             </ModalHeader>
-            <ModalContent style={{ paddingBottom: 24 }}>
+            <ModalContent className={cl("content")}>
                 <ServerClonerUI initialSourceId={guildId} />
             </ModalContent>
         </ModalRoot>
