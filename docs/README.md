@@ -94,8 +94,8 @@ Older entry points remain available: [Installer](INSTALLER.md), [Desktop install
 
 ## License and privacy
 
-[License](../LICENSE) · [Privacy Policy (English draft)](legal/privacy-policy.md) · [Datenschutzerklärung (deutscher Entwurf)](legal/datenschutzerklaerung.md)
+[License](../LICENSE) · [Privacy Policy (English draft)](legal/privacy-policy.md)
 
-The two privacy documents describe the same software in English and German. They remain drafts because controller identification and the live website's complete processing details have not been supplied.
+The privacy document describes the software. It remains a draft because controller identification and the live website's complete processing details have not been supplied.
 
 [Repository](../README.md) · [Latest release](https://github.com/caedesdev/moggcord/releases/latest) · [Contributing](../.github/CONTRIBUTING.md) · [Support Moggcord](donations.md)

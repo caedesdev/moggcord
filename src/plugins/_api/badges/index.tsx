@@ -20,7 +20,6 @@ import "./fixDiscordBadgePadding.css";
 
 import { _getBadges, BadgePosition, BadgeUserArgs, ProfileBadge } from "@api/Badges";
 import ErrorBoundary from "@components/ErrorBoundary";
-
 import { Devs } from "@utils/constants";
 import { copyWithToast } from "@utils/discord";
 import { Logger } from "@utils/Logger";
@@ -56,8 +55,7 @@ const EquicordContributorBadge: ProfileBadge = {
     onClick: (_, { userId }) => import("@components/settings/tabs/plugins/ContributorModal").then(m => m.openContributorModal(UserStore.getUser(userId))),
     props: {
         style: {
-            borderRadius: "0%",
-            transform: "scale(1.4)"
+            borderRadius: "0%"
         }
     },
 };
@@ -77,8 +75,7 @@ const UserPluginContributorBadge: ProfileBadge = {
     onClick: (_, { userId }) => import("@components/settings/tabs/plugins/ContributorModal").then(m => m.openContributorModal(UserStore.getUser(userId))),
     props: {
         style: {
-            borderRadius: "0%",
-            transform: "scale(1.4)"
+            borderRadius: "0%"
         }
     },
 };
@@ -232,8 +229,7 @@ export default definePlugin({
             position: BadgePosition.START,
             props: {
                 style: {
-                    borderRadius: "0%",
-                    transform: "scale(1.4)" // The image is a bit too big compared to default badges
+                    borderRadius: "0%"
                 }
             },
             onContextMenu(event, badge) {
@@ -252,8 +248,7 @@ export default definePlugin({
             position: BadgePosition.START,
             props: {
                 style: {
-                    borderRadius: "0%",
-                    transform: "scale(1.4)" // The image is a bit too big compared to default badges
+                    borderRadius: "0%"
                 }
             },
             onContextMenu(event, badge) {
@@ -278,9 +273,7 @@ export default definePlugin({
                 position: BadgePosition.START,
                 props: {
                     style: {
-                        borderRadius: "0%",
-                        maxHeight: "22px",
-                        maxWidth: "22px"
+                        borderRadius: "0%"
                     },
                     loading: "lazy" as const,
                     "aria-label": b.tooltip
