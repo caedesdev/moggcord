@@ -4,7 +4,7 @@
 
 Moggcord runs code inside a Discord desktop application. Community plugins run in that client when enabled. File-type checks, compilation and checksums do not prove that plugin code is harmless.
 
-Read the project's draft [Privacy Policy](../legal/privacy-policy.md) or [Datenschutzerklärung](../legal/datenschutzerklaerung.md) for data handling and the public contact address. These drafts do not replace the live website operator's complete privacy notice.
+Read the project's draft [Privacy Policy](../legal/privacy-policy.md) for data handling and the public contact address. This draft does not replace the live website operator's complete privacy notice.
 
 ## Know which component you are trusting
 

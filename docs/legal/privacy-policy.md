@@ -1,6 +1,6 @@
 # Privacy Policy
 
-[Documentation](../README.md) / Privacy · [Deutsch](datenschutzerklaerung.md)
+[Documentation](../README.md) / Privacy
 
 Updated: 5 November 2026.
 
