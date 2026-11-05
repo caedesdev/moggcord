@@ -28,4 +28,4 @@ Do not include account tokens, private settings exports, local account databases
 
 Follow [Testing](../docs/developers/testing.md) for focused commands. For docs-only changes, `pnpm docs:check` is sufficient unless a source/configuration change needs another check. Review the diff for unrelated changes before pushing.
 
-This project includes upstream code from Equicord and Vencord. When adapting an upstream fix, retain applicable license notices and identify the upstream source in the contribution description.
+The upstream projects are credited in the [README](../README.md#license-and-privacy). When adapting an upstream fix, retain applicable license notices and identify the upstream source in the contribution description. Contributions remain under the project's existing license; contributing does not transfer copyright to the maintainer.

@@ -8,7 +8,7 @@ Open Discord's user settings and find **Moggcord Settings**. The section include
 
 ## Choose your plugins
 
-Open **Plugins**. Both the Moggcord and Vencord collections are included. Use search and collection filters to find an available plugin; **Show All** displays both collections.
+Open **Plugins**. Both bundled collections are included. Use search and collection filters to find an available plugin; **Show All** displays both collections.
 
 Fresh installations enable four plugins by default: FakeVoice, ExportDM, CustomProfile and TokenImporter. Other available plugins can be enabled individually. Existing settings can produce a different enabled count. Internal dependencies are not ordinary selectable plugins.
 

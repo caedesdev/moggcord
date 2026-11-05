@@ -13,6 +13,7 @@ docs/
 ├── architecture/      Understand components and data flow
 ├── troubleshooting/   Diagnose a concrete symptom
 ├── reference/         Look up paths, commands and protocol fields
+├── legal/             Read the license and draft privacy information
 └── releases/          Read version-specific changes
 ```
 
@@ -90,5 +91,11 @@ docs/
 Use the **Source of truth** links in each guide to inspect the implementation. For a specific release, open its Git tag: the `main` branch may contain changes that have not been released yet.
 
 Older entry points remain available: [Installer](INSTALLER.md), [Desktop installers](DESKTOP-INSTALLERS.md), [Community installation](COMMUNITY-INSTALL.md) and [Included plugins](PLUGINS.md).
+
+## License and privacy
+
+[License](../LICENSE) · [Privacy Policy (English draft)](legal/privacy-policy.md) · [Datenschutzerklärung (deutscher Entwurf)](legal/datenschutzerklaerung.md)
+
+The two privacy documents describe the same software in English and German. They remain drafts because controller identification and the live website's complete processing details have not been supplied.
 
 [Repository](../README.md) · [Latest release](https://github.com/caedesdev/moggcord/releases/latest) · [Contributing](../.github/CONTRIBUTING.md) · [Support Moggcord](donations.md)

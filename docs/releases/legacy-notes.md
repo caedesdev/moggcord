@@ -39,7 +39,7 @@ Version 1.18.33 restores dragging from Discord's title bar while keeping buttons
 
 Version 1.18.34 adds local FakeVoice mute/deafen indicators in your own voice participant row and a highlighted account-panel switch. Mode changes show an animated dark notification at the top right for three seconds. The real audio controls and other participants' indicators are unchanged. Fully restart Discord after updating to load the new display patch.
 
-Version 1.18.35 restores the Vencord plugins alongside the Moggcord collection, including their native helpers and required profile-section API. The plugin page initially shows both collections and offers a Vencord filter. The four default plugins remain enabled; other plugins are available to enable individually. Fully restart Discord after updating or repairing to load the expanded catalog.
+Version 1.18.35 restores the upstream plugins alongside the Moggcord collection, including their native helpers and required profile-section API. The plugin page initially shows both collections and offers collection filters. The four default plugins remain enabled; other plugins are available to enable individually. Fully restart Discord after updating or repairing to load the expanded catalog.
 
 Version 1.18.37 removes the automatic microphone mute introduced in 1.18.36. Fake Deafen again leaves both real audio controls unchanged and only changes the advertised voice flags and local fake-status display. Existing microphone mute is not cleared automatically. Fully restart Discord after updating or repairing.
 

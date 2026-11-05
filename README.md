@@ -6,7 +6,7 @@ A desktop Discord mod with plugins, themes and community uploads.
 
 ## Features
 
-- Built-in Moggcord and Vencord plugins.
+- Built-in plugins and optional community plugins.
 - Custom themes and QuickCSS.
 - Community uploads through the local connector.
 - Support for Discord Stable, Canary and PTB.
@@ -26,8 +26,10 @@ macOS and Linux installers are previews. See the [installation guide](docs/getti
 
 Support Moggcord through [GitHub Sponsors](https://github.com/sponsors/caedesdev).
 
-## Credits and license
+## License and privacy
 
-Moggcord is a fork of [Equicord](https://github.com/Equicord/Equicord), built on [Vencord](https://github.com/Vendicated/Vencord), and licensed under [GPL-3.0](LICENSE). Their source, APIs and contributors are a substantial part of this project. Existing copyright and license notices remain in the source.
+[License](LICENSE) · [Privacy Policy (English draft)](docs/legal/privacy-policy.md) · [Datenschutzerklärung (deutscher Entwurf)](docs/legal/datenschutzerklaerung.md)
+
+Moggcord builds on [Equicord](https://github.com/Equicord/Equicord) and [Vencord](https://github.com/Vendicated/Vencord) under GPL-3.0-or-later. Original contributions remain copyrighted by their respective authors. Upstream copyright notices and third-party licenses remain in place; the project does not claim exclusive ownership of their work.
 
 Moggcord is not affiliated with Discord. Read [Trust and privacy](docs/guides/trust-and-privacy.md) before installing.

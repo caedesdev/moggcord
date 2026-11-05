@@ -2,7 +2,7 @@
 
 [Documentation](../README.md) / Guides / Backup and restore
 
-Open **Moggcord Settings → Backup & Restore** to export JSON or import a compatible Moggcord/Vencord backup.
+Open **Moggcord Settings → Backup & Restore** to export JSON or import a compatible client backup.
 
 ## Choose what to export
 
