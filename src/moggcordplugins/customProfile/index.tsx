@@ -4,16 +4,28 @@
  * SPDX-License-Identifier: GPL-3.0-or-later
  */
 
+import "./styles.css";
+
 import { ProfileBadge } from "@api/Badges";
 import { addContextMenuPatch, NavContextMenuPatchCallback, removeContextMenuPatch } from "@api/ContextMenu";
 import { addHeaderBarButton, HeaderBarButton, removeHeaderBarButton } from "@api/HeaderBar";
 import { DataStore } from "@api/index";
-import { t } from "../autoTranslateMoggcord";
-import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalRoot, openModal } from "@utils/modal";
+import { classNameFactory } from "@utils/css";
+import { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalRoot, ModalSize, openModal } from "@utils/modal";
 import definePlugin from "@utils/types";
-import { Button, Menu, React, Select, UserStore, IconUtils, FluxDispatcher, AuthenticationStore, SnowflakeUtils, ScrollerThin } from "@webpack/common";
+import { AuthenticationStore, Button, FluxDispatcher, IconUtils, Menu, React, Select, SnowflakeUtils, TabBar, UserStore } from "@webpack/common";
 import virtualMerge from "virtual-merge";
-import "./styles.css";
+
+import { t } from "../autoTranslateMoggcord";
+
+const cl = classNameFactory("cp-");
+
+const PROFILE_TABS = [
+    { id: "info", label: "User Info" },
+    { id: "badges", label: "Badges" },
+    { id: "appearance", label: "Appearance" },
+    { id: "decorations", label: "Decoration" }
+] as const;
 
 const DS_KEY = "customProfile_data";
 const DS_ENABLED = "customProfile_enabled";
@@ -844,6 +856,8 @@ function CustomProfileModal({ rootProps }: { rootProps: any; }) {
     const [selectedAccountId, setSelectedAccountId] = React.useState(myId);
     const [data, setData] = React.useState<CustomProfileData>(() => ({ ...(allAccountsData[myId] || storedData || {}) }));
     const [saving, setSaving] = React.useState(false);
+    const [activeTab, setActiveTab] = React.useState<(typeof PROFILE_TABS)[number]["id"]>("info");
+    const panelId = React.useId();
     const nitroLevel = data.nitroLevel ?? -1;
     const boostLevel = data.boostMonths ?? -1;
     const customIds = data.customBadgeIds ?? [];
@@ -943,7 +957,7 @@ function CustomProfileModal({ rootProps }: { rootProps: any; }) {
     const accentHex = data.accentColor != null ? "#" + data.accentColor.toString(16).padStart(6, "0") : "";
 
     return (
-        <ModalRoot {...rootProps} size="medium">
+        <ModalRoot {...rootProps} size={ModalSize.MEDIUM} className={cl("modal")}>
             <ModalHeader separator={false}>
                 <div className="cp-header">
                     <EditIcon size={16} />
@@ -984,69 +998,83 @@ function CustomProfileModal({ rootProps }: { rootProps: any; }) {
                 </div>
                 <ModalCloseButton onClick={rootProps.onClose} />
             </ModalHeader>
-            <ModalContent className="cp-content">
+            <TabBar type="top" look="brand" className={cl("tabs")} selectedItem={activeTab} onItemSelect={setActiveTab}>
+                {PROFILE_TABS.map(tab => (
+                    <TabBar.Item key={tab.id} id={tab.id} className={cl("tab")} aria-controls={panelId}>
+                        {t(tab.label)}
+                    </TabBar.Item>
+                ))}
+            </TabBar>
+            <ModalContent key={activeTab} className="cp-content">
                 {/* Account selector bar removed since it's now a Select in the header */}
-                <Field label={t("Username")} value={data.username ?? ""} placeholder="my_username_00" onChange={v => set("username", v)} />
-                <Field label={t("Display name")} value={data.globalName ?? ""} placeholder="My Name" onChange={v => set("globalName", v)} />
-                <ImageUpload label={t("Profile picture")} value={data.avatar ?? ""} onChange={v => set("avatar", v)} />
-                <Toggle label={t("Simulate Nitro")} sublabel={t("Enables banner and profile color")} checked={data.nitro ?? false} onChange={v => set("nitro", v)} />
-                {data.nitro && <ImageUpload label={t("Banner")} value={data.banner ?? ""} onChange={v => set("banner", v)} />}
-                <div className="cp-divider" />
-                <Field label={t("Bio")} value={data.bio ?? ""} placeholder={t("My description...")} onChange={v => set("bio", v)} />
-                <Field label={t("Pronouns")} value={data.pronouns ?? ""} placeholder={t("he/him")} onChange={v => set("pronouns", v)} />
-                <div className="cp-field">
-                    <SectionLabel>{t("Profile color (Nitro — gradient possible)")}</SectionLabel>
-                    <div className="cp-color-row" style={{ marginBottom: 6 }}>
-                        <span style={{ fontSize: 11, color: "var(--text-muted)", marginRight: 6 }}>{t("Color 1")}</span>
-                        <input type="color" value={accentHex || "#5865f2"} onChange={e => { const n = parseInt(e.target.value.replace("#", ""), 16); if (!isNaN(n)) set("accentColor", n); }} className="cp-color-swatch" />
-                        <input value={accentHex} placeholder="#5865f2" onChange={e => { const h = e.target.value.replace("#", ""); const n = parseInt(h, 16); if (!isNaN(n) && h.length === 6) set("accentColor", n); else if (!e.target.value || e.target.value === "#") set("accentColor", undefined); }} className="cp-input cp-color-input" />
-                        {data.accentColor != null && <button className="cp-clear-btn" onClick={() => set("accentColor", undefined)}><CloseIcon /></button>}
-                    </div>
-                    <div className="cp-color-row">
-                        <span style={{ fontSize: 11, color: "var(--text-muted)", marginRight: 6 }}>{t("Color 2")}</span>
-                        {(() => {
-                            const hex2 = data.accentColor2 != null ? "#" + data.accentColor2.toString(16).padStart(6, "0") : ""; return (<>
-                                <input type="color" value={hex2 || "#eb459e"} onChange={e => { const n = parseInt(e.target.value.replace("#", ""), 16); if (!isNaN(n)) set("accentColor2", n); }} className="cp-color-swatch" />
-                                <input value={hex2} placeholder="#eb459e (optional)" onChange={e => { const h = e.target.value.replace("#", ""); const n = parseInt(h, 16); if (!isNaN(n) && h.length === 6) set("accentColor2", n); else if (!e.target.value || e.target.value === "#") set("accentColor2", undefined); }} className="cp-input cp-color-input" />
-                                {data.accentColor2 != null && <button className="cp-clear-btn" onClick={() => set("accentColor2", undefined)}><CloseIcon /></button>}
-                            </>);
-                        })()}
-                    </div>
-                </div>
-                <Field label={t("Account creation date")} value={data.createdAt ?? ""} placeholder="2010-06-29" type="date" onChange={v => set("createdAt", v)} />
-                <Field label={t("Email address (local display)")} value={data.email ?? ""} placeholder="exemple@mail.com" onChange={v => set("email", v)} />
-                <Field label={t("Phone (local display)")} value={data.phone ?? ""} placeholder="+33 6 00 00 00 00" onChange={v => set("phone", v)} />
-                <div className="cp-divider" />
-                <BadgePicker
-                    selected={data.badgeFlags ?? 0} onChange={v => set("badgeFlags", v)}
-                    nitroType={nitroLevel} onNitroType={v => {
-                        set("nitroLevel", v as any);
-                        // Levels 1+ (Bronze to Opal) automatically enable Simulate Nitro
-                        // Level 0 (Nitro without months) and None (-1) do not enable it
-                        if (v >= 1) set("nitro", true);
-                    }}
-                    boostLevel={boostLevel} onBoostLevel={v => set("boostMonths", v)}
-                    customIds={customIds} onCustomIds={v => set("customBadgeIds", v)}
-                    oldName={oldName} onOldName={v => set("oldName", v)}
-                />
-                <div className="cp-divider" />
-                <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <SectionLabel>{t("Avatar decoration")}</SectionLabel>
-                </div>
-                <div className="cp-badges" style={{ flexWrap: "wrap", gap: 6 }}>
-                    <button onClick={() => set("decorationAsset", undefined)}
-                        className={`cp-badge ${!data.decorationAsset ? "cp-badge--on" : ""}`} style={{ minWidth: 60 }}>
-                        {t("None")}
-                    </button>
-                    {AVATAR_DECORATIONS.map(dec => (
-                        <button key={dec.id}
-                            onClick={() => set("decorationAsset", data.decorationAsset === dec.id ? undefined : dec.id)}
-                            className={`cp-badge ${data.decorationAsset === dec.id ? "cp-badge--on" : ""}`}
-                            title={dec.label} style={{ padding: 3, lineHeight: 0, width: 52, height: 52, borderRadius: 6 }}>
-                            <img src={getDecorationUrl(dec.id)} alt={dec.label}
-                                style={{ width: 46, height: 46, objectFit: "contain", display: "block" }} />
-                        </button>
-                    ))}
+                <div id={panelId} role="tabpanel" aria-label={t(PROFILE_TABS.find(tab => tab.id === activeTab)!.label)}>
+                    {activeTab === "info" && <>
+                        <Field label={t("Username")} value={data.username ?? ""} placeholder="my_username_00" onChange={v => set("username", v)} />
+                        <Field label={t("Display name")} value={data.globalName ?? ""} placeholder="My Name" onChange={v => set("globalName", v)} />
+                        <ImageUpload label={t("Profile picture")} value={data.avatar ?? ""} onChange={v => set("avatar", v)} />
+                        <Field label={t("Bio")} value={data.bio ?? ""} placeholder={t("My description...")} onChange={v => set("bio", v)} />
+                        <Field label={t("Pronouns")} value={data.pronouns ?? ""} placeholder={t("he/him")} onChange={v => set("pronouns", v)} />
+                        <Field label={t("Account creation date")} value={data.createdAt ?? ""} placeholder="2010-06-29" type="date" onChange={v => set("createdAt", v)} />
+                        <Field label={t("Email address (local display)")} value={data.email ?? ""} placeholder="exemple@mail.com" onChange={v => set("email", v)} />
+                        <Field label={t("Phone (local display)")} value={data.phone ?? ""} placeholder="+33 6 00 00 00 00" onChange={v => set("phone", v)} />
+                    </>}
+                    {activeTab === "badges" && <>
+                        <BadgePicker
+                            selected={data.badgeFlags ?? 0} onChange={v => set("badgeFlags", v)}
+                            nitroType={nitroLevel} onNitroType={v => {
+                                set("nitroLevel", v as any);
+                                // Levels 1+ (Bronze to Opal) automatically enable Simulate Nitro
+                                // Level 0 (Nitro without months) and None (-1) do not enable it
+                                if (v >= 1) set("nitro", true);
+                            }}
+                            boostLevel={boostLevel} onBoostLevel={v => set("boostMonths", v)}
+                            customIds={customIds} onCustomIds={v => set("customBadgeIds", v)}
+                            oldName={oldName} onOldName={v => set("oldName", v)}
+                        />
+                    </>}
+                    {activeTab === "appearance" && <>
+                        <Toggle label={t("Simulate Nitro")} sublabel={t("Enables banner and profile color")} checked={data.nitro ?? false} onChange={v => set("nitro", v)} />
+                        {data.nitro && <ImageUpload label={t("Banner")} value={data.banner ?? ""} onChange={v => set("banner", v)} />}
+                        <div className="cp-field">
+                            <SectionLabel>{t("Profile color (Nitro — gradient possible)")}</SectionLabel>
+                            <div className="cp-color-row" style={{ marginBottom: 6 }}>
+                                <span style={{ fontSize: 11, color: "var(--text-muted)", marginRight: 6 }}>{t("Color 1")}</span>
+                                <input type="color" value={accentHex || "#5865f2"} onChange={e => { const n = parseInt(e.target.value.replace("#", ""), 16); if (!isNaN(n)) set("accentColor", n); }} className="cp-color-swatch" />
+                                <input value={accentHex} placeholder="#5865f2" onChange={e => { const h = e.target.value.replace("#", ""); const n = parseInt(h, 16); if (!isNaN(n) && h.length === 6) set("accentColor", n); else if (!e.target.value || e.target.value === "#") set("accentColor", undefined); }} className="cp-input cp-color-input" />
+                                {data.accentColor != null && <button className="cp-clear-btn" onClick={() => set("accentColor", undefined)}><CloseIcon /></button>}
+                            </div>
+                            <div className="cp-color-row">
+                                <span style={{ fontSize: 11, color: "var(--text-muted)", marginRight: 6 }}>{t("Color 2")}</span>
+                                {(() => {
+                                    const hex2 = data.accentColor2 != null ? "#" + data.accentColor2.toString(16).padStart(6, "0") : ""; return (<>
+                                        <input type="color" value={hex2 || "#eb459e"} onChange={e => { const n = parseInt(e.target.value.replace("#", ""), 16); if (!isNaN(n)) set("accentColor2", n); }} className="cp-color-swatch" />
+                                        <input value={hex2} placeholder="#eb459e (optional)" onChange={e => { const h = e.target.value.replace("#", ""); const n = parseInt(h, 16); if (!isNaN(n) && h.length === 6) set("accentColor2", n); else if (!e.target.value || e.target.value === "#") set("accentColor2", undefined); }} className="cp-input cp-color-input" />
+                                        {data.accentColor2 != null && <button className="cp-clear-btn" onClick={() => set("accentColor2", undefined)}><CloseIcon /></button>}
+                                    </>);
+                                })()}
+                            </div>
+                        </div>
+                    </>}
+                    {activeTab === "decorations" && <>
+                        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <SectionLabel>{t("Avatar decoration")}</SectionLabel>
+                        </div>
+                        <div className="cp-badges" style={{ flexWrap: "wrap", gap: 6 }}>
+                            <button onClick={() => set("decorationAsset", undefined)}
+                                className={`cp-badge ${!data.decorationAsset ? "cp-badge--on" : ""}`} style={{ minWidth: 60 }}>
+                                {t("None")}
+                            </button>
+                            {AVATAR_DECORATIONS.map(dec => (
+                                <button key={dec.id}
+                                    onClick={() => set("decorationAsset", data.decorationAsset === dec.id ? undefined : dec.id)}
+                                    className={`cp-badge ${data.decorationAsset === dec.id ? "cp-badge--on" : ""}`}
+                                    title={dec.label} style={{ padding: 3, lineHeight: 0, width: 52, height: 52, borderRadius: 6 }}>
+                                    <img src={getDecorationUrl(dec.id)} alt={dec.label}
+                                        style={{ width: 46, height: 46, objectFit: "contain", display: "block" }} />
+                                </button>
+                            ))}
+                        </div>
+                    </>}
                 </div>
                 <div className="cp-hint">{t("Visual and local modifications only — persistent between restarts.")}</div>
             </ModalContent>

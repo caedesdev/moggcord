@@ -145,11 +145,55 @@
 }
 
 /* Content */
+.cp-modal {
+    height: min(720px, calc(100dvh - 40px));
+    max-height: calc(100dvh - 40px);
+    display: flex;
+    flex-direction: column;
+}
+
+.cp-tabs {
+    display: flex;
+    flex-shrink: 0;
+    gap: 12px;
+    margin: 0 20px;
+    border-bottom: 1px solid rgb(255 255 255 / 6%);
+}
+
+.cp-tab {
+    flex: 1;
+    min-width: 0;
+    margin: 0;
+    padding: 12px 6px;
+    font-size: 13px;
+    font-weight: 600;
+    text-align: center;
+    white-space: nowrap;
+}
+
+.cp-tab[aria-selected="true"] {
+    border-bottom-color: #5865f2;
+    color: #fff;
+}
+
+.cp-tab:focus-visible {
+    outline: 2px solid #5865f2;
+    outline-offset: -2px;
+    border-radius: 4px;
+}
+
 .cp-content {
     padding: 16px 20px 8px !important;
     display: flex;
     flex-direction: column;
     gap: 0;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: var(--scrollbar-thin-thumb, rgb(255 255 255 / 15%)) transparent;
 }
 
 /* ── Divider ── */
@@ -389,6 +433,7 @@
     gap: 8px !important;
     justify-content: flex-end !important;
     padding: 14px 20px !important;
+    flex-shrink: 0;
 }
 
 .cp-btn {
