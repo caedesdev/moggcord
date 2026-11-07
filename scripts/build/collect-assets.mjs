@@ -14,6 +14,16 @@ if (!fs.existsSync(distDir)) {
     fs.mkdirSync(distDir, { recursive: true });
 }
 
+for (const name of ["modules", "ffmpeg.dll"]) {
+    const stale = path.resolve(distDir, name);
+    if (!fs.existsSync(stale)) continue;
+    const resolved = fs.realpathSync(stale);
+    const relative = path.relative(fs.realpathSync(rootDir), resolved);
+    if (path.dirname(resolved) !== fs.realpathSync(distDir) || relative === ".." || relative.startsWith(".." + path.sep) || path.isAbsolute(relative))
+        throw new Error("Unexpected native asset path");
+    fs.rmSync(stale, { recursive: true, force: true });
+}
+
 // Helper
 function copyIfExists(src, dst) {
     if (fs.existsSync(src)) {
@@ -61,16 +71,6 @@ if (!foundFfmpeg) {
 }
 if (!foundFfmpeg) console.warn("[collect] ⚠️ ffmpeg.exe NOT FOUND — ghost account will not be able to stream audio");
 
-// ── ffmpeg.dll ──
-for (const c of ffmpegCandidates) {
-    const dll = path.join(path.dirname(c), "ffmpeg.dll");
-    if (copyIfExists(dll, path.join(distDir, "ffmpeg.dll"))) {
-        console.log(`[collect] ffmpeg.dll copied from ${dll}`);
-        break;
-    }
-}
-
-
 // ── yt-dlp ──
 const ytdlpCandidates = [
     path.join(rootDir, "yt-dlp.exe"),
@@ -102,32 +102,6 @@ for (const c of nodeCandidates) {
     }
 }
 if (!foundNode) console.warn("[collect] ⚠️ node.exe NOT FOUND");
-
-// ── modules (discord_voice patché) ──
-const desktopModules = path.join(process.env.USERPROFILE || "", "Desktop", "modules");
-const repoModules = path.join(rootDir, "static", "modules_override");
-
-let patchedSrc = fs.existsSync(desktopModules) && fs.readdirSync(desktopModules).length > 0 ? desktopModules
-               : fs.existsSync(repoModules) && fs.readdirSync(repoModules).length > 0 ? repoModules
-               : null;
-
-if (patchedSrc) {
-    console.log(`[collect] Copying patched modules from ${patchedSrc}...`);
-    for (const voiceDir of ["discord_voice", "discord_voice-1", "discord_voice1"]) {
-        const voiceDst = path.join(distDir, "modules", voiceDir, "discord_voice");
-        fs.mkdirSync(voiceDst, { recursive: true });
-        for (const f of fs.readdirSync(patchedSrc)) {
-            if (f === "CHECKSUMS.sha256") continue;
-            const src = path.join(patchedSrc, f);
-            if (fs.statSync(src).isFile()) {
-                fs.copyFileSync(src, path.join(voiceDst, f));
-            }
-        }
-    }
-    console.log("[collect] Modules copied");
-} else {
-    console.warn("[collect] ⚠️ Patched modules NOT FOUND");
-}
 
 // ── multi-instance-icons ──
 const lolllSrc = path.join(process.env.USERPROFILE || "", "Desktop", "lolll");

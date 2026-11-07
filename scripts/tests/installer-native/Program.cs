@@ -157,6 +157,31 @@ try
     Check(!helperProcess.HasExited, "System helpers are not shutdown targets");
     close.Invoke(backend, new object[] { selectedResources });
     Check(!unrelatedProcess.HasExited && !helperProcess.HasExited, "Repeated shutdown tolerates an already-closed target");
+    var assetSource = Path.Combine(root, "cache");
+    var bundledVoice = Path.Combine(assetSource, "modules", "discord_voice-1", "discord_voice");
+    var installedVoice = Path.Combine(root, "modules", "discord_voice-1", "discord_voice");
+    Directory.CreateDirectory(bundledVoice);
+    Directory.CreateDirectory(installedVoice);
+    var voicePath = Path.Combine(installedVoice, "discord_voice.node");
+    File.WriteAllText(Path.Combine(bundledVoice, "discord_voice.node"), "legacy bundled voice module");
+    File.WriteAllText(voicePath, "Discord owns this voice module");
+    File.WriteAllText(Path.Combine(assetSource, "node.exe"), "Moggcord helper fixture");
+    var buildInfoPath = Path.Combine(resources, "build_info.json");
+    const string nativeBuildInfo = "{\"releaseChannel\":\"canary\",\"newUpdater\":true}";
+    File.WriteAllText(buildInfoPath, nativeBuildInfo);
+    var copyAssets = typeof(MoggcordBackend).GetMethod("CopyAssetsToDiscord", BindingFlags.NonPublic | BindingFlags.Instance)!;
+    using (var lockedVoice = new FileStream(voicePath, FileMode.Open, FileAccess.Read, FileShare.Read))
+        copyAssets.Invoke(backend, new object[] { resources });
+    Check(File.ReadAllText(voicePath) == "Discord owns this voice module", "A locked Discord voice module must not be overwritten or fail Moggcord asset installation");
+    Check(File.ReadAllText(Path.Combine(root, "node.exe")) == "Moggcord helper fixture", "Moggcord-owned helpers still install alongside locked Discord modules");
+    Check(File.ReadAllText(buildInfoPath) == nativeBuildInfo, "Installing helpers must preserve Discord's native module configuration");
+    var nativeDll = Path.Combine(root, "ffmpeg.dll");
+    File.WriteAllText(nativeDll, "Discord owns this codec");
+    File.WriteAllText(Path.Combine(assetSource, "ffmpeg.dll"), "unrelated bundled codec");
+    using (var lockedDll = new FileStream(nativeDll, FileMode.Open, FileAccess.Read, FileShare.Read))
+        copyAssets.Invoke(backend, new object[] { resources });
+    Check(File.ReadAllText(nativeDll) == "Discord owns this codec", "A locked Discord codec must remain unchanged");
+
     var requests = new List<string>();
     using var zip = new MemoryStream();
     using (var archive = new ZipArchive(zip, ZipArchiveMode.Create, true))

@@ -1270,33 +1270,20 @@ namespace MoggcordInstaller
             SetProgress(95, "Copying binaries...");
             var appBase = Path.GetDirectoryName(resPath);
 
-            string[] filesToCopy = { "ffmpeg.exe", "ffmpeg.dll", "node.exe", "yt-dlp.exe" };
+            string[] filesToCopy = { "ffmpeg.exe", "node.exe", "yt-dlp.exe" };
             foreach (var f in filesToCopy) {
                 var src = Path.Combine(_distDir, f);
                 if (File.Exists(src)) File.Copy(src, Path.Combine(appBase, f), true);
             }
 
             SetProgress(96, "Copying directories...");
-            string[] dirsToCopy = { "mac", "multi-instance-icons", "modules", "ghost-server" };
+            string[] dirsToCopy = { "mac", "multi-instance-icons", "ghost-server" };
             foreach (var dir in dirsToCopy) {
                 var src = Path.Combine(_distDir, dir);
                 if (Directory.Exists(src)) CopyDirectory(src, Path.Combine(appBase, dir));
             }
 
-            SetProgress(98, "Patching build info...");
-            var buildInfoPath = Path.Combine(resPath, "build_info.json");
-            if (File.Exists(buildInfoPath)) {
-                try {
-                    var json = File.ReadAllText(buildInfoPath);
-                    if (!json.Contains("\"localModulesRoot\"")) {
-                        var idx = json.LastIndexOf('}');
-                        if (idx != -1) {
-                            json = json.Insert(idx, ",\n  \"localModulesRoot\": \"modules\"\n");
-                            File.WriteAllText(buildInfoPath, json);
-                        }
-                    }
-                } catch { }
-            }
+            SetProgress(98, "Finishing setup...");
         }
 
         private void CopyDirectory(string sourceDir, string destinationDir)

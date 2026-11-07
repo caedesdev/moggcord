@@ -34,6 +34,8 @@ Check whether the selected installation is in a protected directory or files are
 
 Do not solve an unknown path/write error by recursively changing permissions on the whole application or user-data tree. Capture the exact error and chosen installation first.
 
+An older Windows installer may report that `discord_voice.node` is in use after the Moggcord loader has already been installed. This comes from copying bundled native Discord modules over the selected client's files. Installer builds from the current source preserve Discord's voice modules, codec DLL and native module configuration. The native checks cover this case with a locked voice module and codec file.
+
 ## The installer opens but Moggcord is absent afterward
 
 Confirm that you opened the same Discord channel you installed into. Fully close and reopen it so the main process loads the changed loader. If a Discord host update replaced the injection, use the latest package's **Repair** action.
