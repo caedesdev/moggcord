@@ -20,6 +20,8 @@ import { app } from "electron";
 import { copyFileSync, existsSync, readFileSync, writeFileSync } from "fs";
 import { join } from "path";
 
+import { clientSettingsDirectory, initializeClientSettings } from "../../../scripts/lib/client-settings.mjs";
+
 const suffix = IS_DEV ? "dev" : "";
 
 export const DATA_DIR = process.env.MOGGCORD_USER_DATA_DIR ?? (
@@ -28,7 +30,12 @@ export const DATA_DIR = process.env.MOGGCORD_USER_DATA_DIR ?? (
         : join(app.getPath("userData"), "..", "Moggcord", suffix)
 );
 
-export const SETTINGS_DIR = join(DATA_DIR, "settings");
+export const CLIENT_IDENTITY = {
+    executable: process.execPath,
+    userDataDir: process.env.DISCORD_USER_DATA_DIR || app.commandLine.getSwitchValue("user-data-dir")
+};
+
+export const SETTINGS_DIR = clientSettingsDirectory(DATA_DIR, CLIENT_IDENTITY);
 export const THEMES_DIR = join(DATA_DIR, "themes");
 export const QUICK_CSS_PATH = join(SETTINGS_DIR, "quickCss.css");
 export const SETTINGS_FILE = join(SETTINGS_DIR, "settings.json");
@@ -48,8 +55,9 @@ export const IS_VANILLA = /* @__PURE__ */ process.argv.includes("--vanilla");
 
 if (IS_DEV) {
     const prodDir = join(DATA_DIR, "..");
-    const settings = join(prodDir, "settings", "settings.json");
-    const quickCss = join(prodDir, "settings", "quickCss.css");
+    const prodSettings = initializeClientSettings(prodDir, CLIENT_IDENTITY);
+    const settings = join(prodSettings, "settings.json");
+    const quickCss = join(prodSettings, "quickCss.css");
 
     let migrated = false;
     if (existsSync(DEV_MIGRATED)) {

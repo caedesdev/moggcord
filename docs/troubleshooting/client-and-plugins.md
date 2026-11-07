@@ -30,11 +30,13 @@ Check that the plugin is available in your build, enabled and actually loaded af
 
 If it is still absent on the current build, include a redacted screenshot and the trigger in a report. A missing icon can be a compatibility patch problem rather than a missing image file.
 
-Fake Deafen explicitly mutes your microphone when enabled and leaves it muted when disabled. If you were already deafened, use Discord's normal deafen control to listen again. See the [current behavior](../guides/plugins.md#fake-deafen-and-fake-mute) before treating a difference between local audio and advertised status as a loading failure.
+FakeDeafen changes the advertised mute/deafen status. Enabling it while already really deafened first mutes your microphone, then turns your headphones on so you can listen while still appearing fully muted. Disabling fake mode leaves the microphone muted. Otherwise your real audio controls stay unchanged. See the [current behavior](../guides/plugins.md#fake-deafen-and-fake-mute) before treating a difference between local audio and advertised status as a loading failure.
 
 ## The interface looks broken after a theme change
 
 Disable the new theme, then other themes and QuickCSS if needed. Re-enable them individually. Repair preserves saved styling choices, so it may not remove the source of a CSS conflict.
+
+User profile badge requests are cached and have a timeout. Empty responses do not force a refresh of all user views. If opening several profiles still crashes Discord, record which client, which profile, and the time it occurred so the error can be matched to the client logs.
 
 If it occurs without custom styling, report the affected page and enabled plugins. See [Themes and QuickCSS](../guides/themes.md).
 

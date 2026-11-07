@@ -4,7 +4,7 @@
  */
 
 export const bundledPlugins = Object.freeze({
-    FakeVoice: "FakeVoice",
+    FakeVoice: "FakeDeafen",
     exportDM: "ExportDM",
     customProfile: "CustomProfile",
     tokenImporter: "TokenImporter"

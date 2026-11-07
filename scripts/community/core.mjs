@@ -12,6 +12,7 @@ import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
 import ts from "typescript";
 import { buildFiles, verifyBuild } from "../lib/build-info.mjs";
+import { initializeClientSettings } from "../lib/client-settings.mjs";
 import pluginPackage from "../../web/plugin-package.js";
 import { pluginBundleKind } from "../lib/plugin-bundle.mjs";
 import { discoverDesktops, startDesktop, stopDesktop } from "../lib/discord-desktop.mjs";
@@ -293,7 +294,7 @@ export async function installedEntries(entries, config, dependencies = {}) {
         || (entry.plugin_name != null && !pluginPackage.validPluginName(entry.plugin_name))))
         throw new Error("Choose up to 24 valid community entries to check.");
     const client = await (dependencies.findClient ?? findClient)(config.channel);
-    const settingsFile = join(config.dataDir, "settings", "settings.json");
+    const settingsFile = join(initializeClientSettings(config.dataDir, client), "settings.json");
     const settings = existsSync(settingsFile) ? JSON.parse(await readFile(settingsFile, "utf8")) : {};
     const renderer = entries.some(entry => entry.kind === "plugin" && !/\.css$/i.test(entry.file_name))
         ? await readFile(join(client.installDir, "renderer.js"), "utf8") : "";
@@ -371,7 +372,7 @@ export async function installEntry(entry, config, dependencies = {}, progress = 
         progress("installing", unchanged ? "Enabling in Moggcord…" : "Installing in Moggcord…");
         stopped = true;
         await stop(client);
-        const settingsFile = join(config.dataDir, "settings", "settings.json");
+        const settingsFile = join(initializeClientSettings(config.dataDir, client), "settings.json");
         await snapshot(settingsFile, backups);
         const settings = existsSync(settingsFile) ? JSON.parse(await readFile(settingsFile, "utf8")) : {};
         if (stylesheet) {

@@ -68,7 +68,7 @@
         "ExportDM": {
             "enabled": true
         },
-        "FakeVoice": {
+        "FakeDeafen": {
             "enabled": true
         },
         "UserAreaAPI": {

@@ -246,10 +246,10 @@ export const ChannelActions = findByPropsLazy("selectChannel", "preload");
 // ─── Re-exports for compatibility with Equicord/Vencord plugins ────────────────
 
 // Legacy modal building blocks (@utils/modal). Use ./modals for Discord's Modal API.
-export { ModalRoot, ModalHeader, ModalContent, ModalFooter, ModalCloseButton } from "@utils/modal";
+export { ModalCloseButton, ModalContent, ModalFooter, ModalHeader, ModalRoot } from "@utils/modal";
 
 // Actions
-export const VoiceActions = findByPropsLazy("toggleSelfMute", "setChannel");
+export const VoiceActions = findByPropsLazy("toggleSelfMute", "setSelfMute", "toggleSelfDeaf");
 export const GuildActions = findByPropsLazy("requestMembersById", "leaveGuild");
 export const PinActions = findByPropsLazy("pinMessage", "unpinMessage");
 

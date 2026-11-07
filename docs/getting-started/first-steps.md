@@ -10,7 +10,7 @@ Open Discord's user settings and find **Moggcord Settings**. The section include
 
 Open **Plugins**. Both bundled collections are included. Use search and collection filters to find an available plugin; **Show All** displays both collections.
 
-Fresh installations enable four plugins by default: FakeVoice, ExportDM, CustomProfile and TokenImporter. Other available plugins can be enabled individually. Existing settings can produce a different enabled count. Internal dependencies are not ordinary selectable plugins.
+Fresh installations enable four plugins by default: FakeDeafen, ExportDM, CustomProfile and TokenImporter. Other available plugins can be enabled individually. Existing settings can produce a different enabled count. Internal dependencies are not ordinary selectable plugins.
 
 Enable a few plugins at a time and follow any restart prompt. See [Plugins and defaults](../guides/plugins.md) for how availability differs from activation.
 

@@ -20,13 +20,15 @@ The Linux notation describes a default/fallback; it is not a command to paste li
 
 | Path relative to the active data directory | Contents |
 | --- | --- |
-| `settings/settings.json` | Renderer settings, plugin choices and theme configuration |
-| `settings/native-settings.json` | Native settings and custom CSP rules |
-| `settings/quickCss.css` | Personal QuickCSS |
+| `clients/<client>/settings/settings.json` | Renderer settings, plugin choices and theme configuration for that client |
+| `clients/<client>/settings/native-settings.json` | Native settings and custom CSP rules for that client |
+| `clients/<client>/settings/quickCss.css` | Personal QuickCSS for that client |
 | `themes/` | Local stylesheets |
 | `community/` | Automatically managed community service, its private runtime and version-matched compiler source |
 
 Plugin DataStore is separate from these plain settings files. Use **Backup & Restore** to export it rather than assuming a copy of `settings.json` contains all plugin data.
+
+Discord Stable uses `clients/stable`, Canary uses `clients/canary`, and PTB uses `clients/ptb`. Other clients and custom Discord user-data profiles receive their own directories. On first start, normal Discord copies the former shared settings into its own directory. Other clients start with their own defaults. Existing client settings are never replaced. The old shared files are retained as a backup. Installed plugin code and theme files remain shared; which plugins and themes are enabled is independent for each client.
 
 ## Build and source files
 

@@ -17,7 +17,7 @@ import { bundledPlugins, internalPlugins, pluginBundleKind } from "../lib/plugin
 import { catalogCounts, generateCatalogStats } from "../lib/plugin-catalog.mjs";
 
 const root = process.cwd();
-const wanted = ["CustomProfile", "ExportDM", "FakeVoice", "TokenImporter"];
+const wanted = ["CustomProfile", "ExportDM", "FakeDeafen", "TokenImporter"];
 
 test("public catalog statistics follow the desktop registry without personal plugins", async () => {
     const source = await loadGenerated(globPlugins("discordDesktop", { includeUserPlugins: false }));

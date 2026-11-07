@@ -9,11 +9,12 @@ import { IpcEvents } from "@shared/IpcEvents";
 import { SettingsStore } from "@shared/SettingsStore";
 import { mergeDefaults } from "@utils/mergeDefaults";
 import { ipcMain } from "electron";
-import { mkdirSync, readFileSync, writeFileSync } from "fs";
+import { readFileSync, writeFileSync } from "fs";
 
-import { NATIVE_SETTINGS_FILE, SETTINGS_DIR, SETTINGS_FILE } from "./utils/constants";
+import { initializeClientSettings } from "../../scripts/lib/client-settings.mjs";
+import { CLIENT_IDENTITY, DATA_DIR, NATIVE_SETTINGS_FILE, SETTINGS_DIR, SETTINGS_FILE } from "./utils/constants";
 
-mkdirSync(SETTINGS_DIR, { recursive: true });
+initializeClientSettings(DATA_DIR, CLIENT_IDENTITY);
 
 function readSettings<T = object>(name: string, file: string): Partial<T> {
     try {

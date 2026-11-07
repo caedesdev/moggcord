@@ -15,6 +15,7 @@ import { existsSync } from "original-fs";
 import { basename, dirname, join, resolve } from "path";
 import { promisify } from "util";
 
+import { fileHash } from "../../scripts/lib/build-info.mjs";
 import { DATA_DIR } from "./utils/constants";
 import { checkedFetch } from "./utils/http";
 
@@ -199,7 +200,10 @@ async function ensureService(patcherDirectory: string): Promise<ServiceConfig> {
     if (previous?.controlToken) {
         try {
             const status = await nativeControl<{ version: string; busy: boolean; }>(previous.controlToken, "status");
-            if (/^\d+\.\d+\.\d+$/.test(status.version) && status.version.localeCompare(VERSION, "en", { numeric: true }) >= 0) {
+            const changedBuild = status.version === VERSION && existsSync(previous.serviceFile)
+                && existsSync(join(patcherDirectory, "community-service.cjs"))
+                && fileHash(previous.serviceFile) !== fileHash(join(patcherDirectory, "community-service.cjs"));
+            if (/^\d+\.\d+\.\d+$/.test(status.version) && status.version.localeCompare(VERSION, "en", { numeric: true }) >= 0 && !changedBuild) {
                 await registerWorkerProtocol(previous, configFile);
                 return previous;
             }

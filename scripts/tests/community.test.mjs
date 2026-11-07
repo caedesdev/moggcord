@@ -14,6 +14,7 @@ import http from "node:http";
 import { createBridge } from "../community/bridge.mjs";
 import { channelNames, fetchManifest, findClient, installedEntries, installEntry, parseLink, repairClient, sourceLimit, trustedOrigin, validateManifest } from "../community/core.mjs";
 import { buildFiles, writeBuildInfo } from "../lib/build-info.mjs";
+import { initializeClientSettings } from "../lib/client-settings.mjs";
 import pluginPackage from "../../web/plugin-package.js";
 import { resolvePluginName } from "../build/common.mjs";
 
@@ -42,11 +43,11 @@ async function fixture(t) {
     const config = { sourceRoot: join(directory, "source"), dataDir: join(directory, "data"), mirrorDir: join(directory, "mirror"), channel: "canary" };
     const client = { base: join(directory, "DiscordCanary"), executable: join(directory, "DiscordCanary", "DiscordCanary.exe"), installDir: join(directory, "installed") };
     await mkdir(config.sourceRoot, { recursive: true });
-    await mkdir(join(config.dataDir, "settings"), { recursive: true });
+    const settingsDirectory = initializeClientSettings(config.dataDir, client);
     await mkdir(client.installDir, { recursive: true });
     await writeFile(join(config.sourceRoot, "package.json"), JSON.stringify({ version: "1.18.24" }));
     const original = { plugins: { Existing: { enabled: true, custom: 42 } }, enabledThemes: ["existing.css"], themeNames: { "existing.css": "Existing" }, unrelated: { preference: "keep" } };
-    const settings = join(config.dataDir, "settings", "settings.json");
+    const settings = join(settingsDirectory, "settings.json");
     await writeFile(settings, JSON.stringify(original));
     await writeFile(join(client.installDir, "renderer.js"), "old renderer");
     const events = [];

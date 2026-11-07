@@ -26,7 +26,7 @@ The release's `version.json.pluginCatalog` contains generated desktop catalog co
 
 | Plugin | General purpose |
 | --- | --- |
-| FakeVoice | Local controls for advertised mute/deafen status |
+| FakeDeafen | Configurable fake mute/deafen status |
 | ExportDM | Export direct-message conversations and attachments |
 | CustomProfile | Local profile customization |
 | TokenImporter | Imported-account management |
@@ -43,11 +43,13 @@ An official update replaces the compiled desktop code. Community source remains 
 
 ## Fake Deafen and Fake Mute
 
-The FakeVoice control sits beside Discord's microphone and headphones controls. Its default mode is Fake Deafen. Enabling Fake Deafen explicitly mutes your real microphone while advertising a deafened status. Disabling the fake mode leaves your microphone muted; unmute it yourself when you want to speak.
+The FakeDeafen control sits beside Discord's microphone and headphones controls. By default, clicking it advertises both muted and deafened status. If you are already really deafened when you enable Fake Deafen, it explicitly mutes your microphone first, then turns your headphones back on. You can hear the call while others still see full mute. Turning fake mode off leaves your real microphone muted and your headphones on.
 
-If you enable it while already deafened, your headphones stay deafened. Turn off Discord's normal deafen control to listen while still appearing deafened. Your microphone stays muted. Fake Mute by itself changes the advertised mute flag without changing your real audio controls.
+If you are not really deafened when activating it, your real audio controls stay unchanged. Fake Mute alone does not change your real audio. You can still use Discord's normal mute and deafen controls yourself.
 
-Your participant row in the call shows the advertised muted/deafened state. The microphone/headphones controls at the bottom keep showing the real audio state: the microphone is muted and the headphones stay on unless you deafen them yourself. The FakeVoice icon uses only a strike-through when active.
+The plugin settings let you choose the fake mute and fake deafen flags, show or hide the button, and enable or disable the Ctrl+Shift+Q shortcut. A normal click, the shortcut and `/fakedeafen` toggle the configured mode. Holding the shortcut does not toggle it repeatedly. The selected mode stays active across calls until you turn it off.
+
+Your participant row in the call shows the advertised muted/deafened state. The microphone/headphones controls at the bottom keep showing your real audio state. The FakeDeafen button uses a hat and glasses icon, with red crossed eyes when active. Existing FakeVoice enabled/disabled preferences migrate to the new name.
 
 Mode changes play Discord's deafen/undeafen sound and show a theme-aware notification at the top right for three seconds. Server mute, server deafen and channel permissions still apply. If the control is missing, use [Client and plugin troubleshooting](../troubleshooting/client-and-plugins.md#an-expected-control-is-missing).
 

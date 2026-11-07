@@ -29,6 +29,7 @@ async function fixture(t, { http, childProcess } = {}) {
     const module = { exports: {} };
     const app = new EventEmitter();
     app.getPath = () => join(directory, "Discord");
+    app.commandLine = { getSwitchValue: () => "" };
     app.whenReady = () => Promise.resolve();
     const fixtureProcess = Object.create(process);
     fixtureProcess.env = { ...process.env, APPDATA: join(directory, "legacy") };

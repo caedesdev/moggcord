@@ -10,6 +10,8 @@ const logger = new Logger("MoggcordBadges", "#a855f7");
 const API_BASE = "https://api.ninifxe.de";
 
 const USER_CACHE_TTL_MS = 10 * 60 * 1000;
+const MAX_CACHED_USERS = 1000;
+const REQUEST_TIMEOUT_MS = 10_000;
 
 export interface MoggcordApiBadge {
     id: string;
@@ -41,34 +43,36 @@ const userCache = new Map<string, { badges: MoggcordApiBadge[]; fetchedAt: numbe
 const inFlight = new Map<string, Promise<void>>();
 
 let bulkData: BulkData | null = null;
+let refreshQueued = false;
 
 function extractBadgeIds(entries: UserBadgeEntry[] | undefined): string[] {
-    if (!entries?.length) return [];
+    if (!Array.isArray(entries)) return [];
 
     return entries.flatMap(entry => {
         if (typeof entry === "string") return entry ? [entry] : [];
+        if (!entry || typeof entry !== "object") return [];
         const id = entry.badgeId ?? entry.id;
-        return id ? [id] : [];
+        return typeof id === "string" && id ? [id] : [];
     });
 }
 
 /** /api/users/:id returns { id, badge, tooltip } objects — use directly. */
 function parseDirectBadges(entries: UserBadgeEntry[] | undefined): MoggcordApiBadge[] {
-    if (!entries?.length) return [];
+    if (!Array.isArray(entries)) return [];
 
     return entries.flatMap(entry => {
         if (typeof entry !== "object" || entry == null || typeof entry.badge !== "string") return [];
 
         const id = entry.id ?? entry.badgeId;
-        if (!id) return [];
+        if (typeof id !== "string" || !id) return [];
 
-        return [{ id, badge: entry.badge, tooltip: entry.tooltip ?? id }];
+        return [{ id, badge: entry.badge, tooltip: typeof entry.tooltip === "string" ? entry.tooltip : id }];
     });
 }
 
 async function fetchJson<T>(path: string, noCache = false): Promise<T | null> {
     try {
-        const res = await fetch(`${API_BASE}${path}`, noCache ? { cache: "no-cache" } : {});
+        const res = await fetch(`${API_BASE}${path}`, { signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS), ...(noCache ? { cache: "no-cache" } : {}) });
         if (!res.ok) {
             logger.warn(`GET ${path} → ${res.status}`);
             return null;
@@ -85,8 +89,8 @@ function resolveBadges(badgeIds: string[]): MoggcordApiBadge[] {
 
     return badgeIds.flatMap(id => {
         const def = bulkData!.badges[id];
-        if (!def?.badge) return [];
-        return [{ id, badge: def.badge, tooltip: def.tooltip ?? id }];
+        if (typeof def?.badge !== "string") return [];
+        return [{ id, badge: def.badge, tooltip: typeof def.tooltip === "string" ? def.tooltip : id }];
     });
 }
 
@@ -97,15 +101,24 @@ function badgesFromEntries(entries: UserBadgeEntry[] | undefined): MoggcordApiBa
 }
 
 function notifyChange() {
-    UserProfileStore.emitChange();
-    try {
-        UserStore.emitChange();
-    } catch { /* noop */ }
+    if (refreshQueued) return;
+    refreshQueued = true;
+    queueMicrotask(() => {
+        refreshQueued = false;
+        try {
+            UserProfileStore.emitChange();
+            UserStore.emitChange();
+        } catch (error) { logger.warn("Could not refresh profile badges", error); }
+    });
 }
 
-function cacheUserBadges(userId: string, badges: MoggcordApiBadge[]) {
+function cacheUserBadges(userId: string, badges: MoggcordApiBadge[], announce = true) {
+    const previous = userCache.get(userId)?.badges ?? [];
+    userCache.delete(userId);
     userCache.set(userId, { badges, fetchedAt: Date.now() });
-    notifyChange();
+    while (userCache.size > MAX_CACHED_USERS) userCache.delete(userCache.keys().next().value!);
+    if (announce && (previous.length !== badges.length || previous.some((badge, index) =>
+        badge.id !== badges[index].id || badge.badge !== badges[index].badge || badge.tooltip !== badges[index].tooltip))) notifyChange();
 }
 
 export async function loadMoggcordBadgeData(noCache = false) {
@@ -167,12 +180,14 @@ export function userHasMoggcordCreatorBadge(userId: string | undefined | null): 
 export function getMoggcordApiBadges(userId: string): MoggcordApiBadge[] {
     const cached = userCache.get(userId);
     if (cached && Date.now() - cached.fetchedAt < USER_CACHE_TTL_MS) {
+        userCache.delete(userId);
+        userCache.set(userId, cached);
         return cached.badges;
     }
 
     if (bulkData?.users?.[userId]) {
         const badges = badgesFromEntries(bulkData.users[userId]);
-        userCache.set(userId, { badges, fetchedAt: Date.now() });
+        cacheUserBadges(userId, badges, false);
         return badges;
     }
 

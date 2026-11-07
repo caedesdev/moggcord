@@ -129,6 +129,19 @@ async function load(source, imports = {}, globals = {}) {
 }
 
 const componentsSource = await readFile("src/webpack/common/components.ts", "utf8");
+const utilitiesSource = await readFile("src/webpack/common/utils.ts", "utf8");
+const utilitiesFile = ts.createSourceFile("utils.ts", utilitiesSource, ts.ScriptTarget.Latest, true);
+const voiceActionsDeclaration = utilitiesFile.statements.find(node => ts.isVariableStatement(node)
+    && node.declarationList.declarations.some(declaration => declaration.name.getText(utilitiesFile) === "VoiceActions"));
+
+test("voice actions resolve the current Discord module without the removed setChannel export", async () => {
+    const nativeActions = { toggleSelfMute() {}, setSelfMute() {}, toggleSelfDeaf() {} };
+    const { VoiceActions } = await load(voiceActionsDeclaration.getText(utilitiesFile), {}, {
+        findByPropsLazy: (...props) => props.every(prop => Object.hasOwn(nativeActions, prop)) ? nativeActions : undefined
+    });
+    assert.equal(VoiceActions, nativeActions);
+});
+
 const componentsFile = ts.createSourceFile("components.ts", componentsSource, ts.ScriptTarget.Latest, true);
 const focusDeclaration = componentsFile.statements.filter(ts.isVariableStatement)
     .find(statement => statement.declarationList.declarations.some(declaration => declaration.name.getText(componentsFile) === "FocusLock"));
