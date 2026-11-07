@@ -9,9 +9,11 @@ import "./styles.css";
 import { ApplicationCommandInputType, sendBotMessage } from "@api/Commands";
 import { UserAreaButton, UserAreaRenderProps } from "@api/UserArea";
 import { classNameFactory } from "@utils/css";
+import { Logger } from "@utils/Logger";
 import definePlugin from "@utils/types";
 import type { User } from "@vencord/discord-types";
-import { ContextMenuApi, Menu, React, ReactDOM, UserStore } from "@webpack/common";
+import { findByCodeLazy } from "@webpack";
+import { ContextMenuApi, MediaEngineStore, Menu, NotificationSettingsStore, React, ReactDOM, UserStore, VoiceActions } from "@webpack/common";
 
 interface VoiceStateUpdate {
     channelId?: string | null;
@@ -32,11 +34,15 @@ interface VoiceStatusProps {
 }
 
 const cl = classNameFactory("mc-fake-voice-");
+const logger = new Logger("FakeVoice");
+const playSound = findByCodeLazy("Unable to find sound for pack name:");
 const NOTICE_DURATION_MS = 3000;
+const VOICE_SOUND_VOLUME = 0.4;
 let notice: { id: number; active: boolean; title: string; body: string; } | undefined;
 let noticeId = 0;
 let noticeTimer: ReturnType<typeof setTimeout> | undefined;
 let isGhostActive = false;
+let lastSyncedActive = false;
 let configFakeMute = false;
 let configFakeDeafen = true;
 let voiceSocket: VoiceSocket | undefined;
@@ -60,21 +66,51 @@ function modeName() {
 
 function showStatus() {
     clearTimeout(noticeTimer);
+    let body = "You appear muted. Your audio controls stay unchanged.";
+    if (!isGhostActive) {
+        body = MediaEngineStore.isSelfMute()
+            ? "Your real voice status is restored. Your microphone stays muted."
+            : "Your real voice status is restored.";
+    } else if (configFakeDeafen) {
+        if (!MediaEngineStore.isSelfMute()) {
+            body = "Fake Deafen is active, but Discord could not mute your microphone. Mute it before speaking.";
+        } else if (!voiceState?.channelId) {
+            body = "Ready for your next call. Your microphone is muted.";
+        } else if (MediaEngineStore.isSelfDeaf()) {
+            body = "Full mute stays on. Turn off Discord's deafen to listen; your microphone stays muted.";
+        } else {
+            body = "Your microphone is muted. Other people see you as deafened.";
+        }
+    }
     notice = {
         id: ++noticeId,
         active: isGhostActive,
         title: isGhostActive ? `${modeName()} enabled` : "Fake Voice disabled",
-        body: !isGhostActive ? "Your real voice status is restored."
-            : !voiceState?.channelId ? "Ready for your next call. Your audio controls stay unchanged."
-                : `You appear ${configFakeMute && configFakeDeafen ? "muted and deafened" : configFakeMute ? "muted" : "deafened"}. Your audio controls stay unchanged.`
+        body
     };
     noticeTimer = setTimeout(dismissNotice, NOTICE_DURATION_MS);
 }
 
 function syncState(announce = true) {
-    if (voiceState?.channelId) voiceSocket?.voiceStateUpdate(voiceState);
+    const changed = lastSyncedActive !== isGhostActive;
+    lastSyncedActive = isGhostActive;
+    if (isGhostActive && configFakeDeafen) VoiceActions.setSelfMute(undefined, true, false);
+    if (voiceState?.channelId) voiceSocket?.voiceStateUpdate({
+        ...voiceState,
+        selfMute: MediaEngineStore.isSelfMute(),
+        selfDeaf: MediaEngineStore.isSelfDeaf()
+    });
     if (announce) showStatus();
     notify();
+    if (announce && changed) {
+        const sound = isGhostActive ? "deafen" : "undeafen";
+        if (NotificationSettingsStore.isSoundDisabled(sound)) return;
+        try {
+            playSound(sound, VOICE_SOUND_VOLUME);
+        } catch (error) {
+            logger.warn("Could not play the voice status sound", error);
+        }
+    }
 }
 
 function useVoiceState() {
@@ -95,11 +131,11 @@ function toggleMode(mute: boolean, deafen: boolean) {
 function FakeDeafenIcon({ className }: { className?: string }) {
     return (
         <svg className={className} width="22" height="22" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-            <path d="M12 2C7.58 2 4 5.58 4 10V19C4 20.66 5.34 22 7 22C8.66 22 10 20.66 10 19C10 20.66 11.34 22 13 22C14.66 22 16 20.66 16 19C16 20.66 17.34 22 19 22C20.66 22 22 20.66 22 19V10C22 5.58 18.42 2 14 2H10H12Z" fill="currentColor" />
-            <circle cx="8.5" cy="10" r="1.5" fill={isGhostActive ? "#121212" : "black"} fillOpacity="0.6" />
-            <circle cx="15.5" cy="10" r="1.5" fill={isGhostActive ? "#121212" : "black"} fillOpacity="0.6" />
+            <path d="M12 3a8 8 0 0 0-8 8v9l4-2 4 2 4-2 4 2v-9a8 8 0 0 0-8-8Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+            <circle cx="9" cy="10" r="1.5" fill="currentColor" />
+            <circle cx="15" cy="10" r="1.5" fill="currentColor" />
             {isGhostActive && (
-                <path d="M2 2L22 22" stroke="#ed4245" strokeWidth="2.5" strokeLinecap="round" />
+                <path className={cl("icon-slash")} d="M3 3L21 21" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             )}
         </svg>
     );
@@ -179,7 +215,7 @@ function FakeDeafenUserButton({ iconForeground, hideTooltips, nameplate }: UserA
     return (
         <>
             <UserAreaButton
-                className={cl("button", { active: isGhostActive })}
+                className={cl("button")}
                 onClick={() => {
                     isGhostActive = !isGhostActive;
                     if (isGhostActive && !configFakeMute && !configFakeDeafen) configFakeDeafen = true;
@@ -222,7 +258,7 @@ export default definePlugin({
             ]
         },
         {
-            find: 'location:"VoiceUserIcons"',
+            find: '"soundboard-mute"',
             replacement: {
                 match: /function \i\((\i)\)\{(?=let\{className:\i,mute:\i,localMute:)/,
                 replace: "$&$1=$self.useDisplayedVoiceStatus($1);"
@@ -234,14 +270,16 @@ export default definePlugin({
         useVoiceState();
         if (!isGhostActive || !voiceState?.channelId || !props.user || props.user.id !== UserStore.getCurrentUser()?.id
             || (props.channelId != null && props.channelId !== voiceState.channelId)) return props;
-        return { ...props, mute: props.mute || configFakeMute, deaf: props.deaf || configFakeDeafen };
+        return { ...props, mute: props.mute || configFakeMute || MediaEngineStore.isSelfMute(), deaf: props.deaf || configFakeDeafen };
     },
 
     rememberVoiceState(socket: VoiceSocket, state: VoiceStateUpdate) {
+        const wasInCall = voiceState?.channelId != null;
         voiceSocket = socket;
         voiceState = { ...state };
-        if (state.channelId == null && isGhostActive) {
+        if (wasInCall && state.channelId == null && isGhostActive) {
             isGhostActive = false;
+            lastSyncedActive = false;
             dismissNotice();
         }
     },

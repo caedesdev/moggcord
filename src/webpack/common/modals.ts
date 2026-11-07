@@ -5,9 +5,9 @@
  */
 
 import * as t from "@vencord/discord-types";
-import { filters, findByCodeLazy, findExportedComponentLazy, mapMangledModuleLazy } from "@webpack";
+import { filters, findByCodeLazy, findComponentByCodeLazy, findExportedComponentLazy, mapMangledModuleLazy } from "@webpack";
 
-export const Modal: t.Modal = findExportedComponentLazy("Modal");
+export const Modal: t.Modal = findComponentByCodeLazy("actionBarInputLayout:", "scrollerRef:", "actionsFullWidth:");
 export const ConfirmModal: t.ConfirmModal = findExportedComponentLazy("ConfirmModal");
 
 export const openMediaModal: (props: t.MediaModalProps) => void = findByCodeLazy("hasMediaOptions", "shouldHideMediaOptions");

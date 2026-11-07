@@ -6,7 +6,9 @@
 
 import "./styles.css";
 
+import ErrorBoundary from "@components/ErrorBoundary";
 import { Heading } from "@components/Heading";
+import { Paragraph } from "@components/Paragraph";
 import { classNameFactory } from "@utils/css";
 import { getGuildAcronym, openImageModal, openUserProfile } from "@utils/discord";
 import { classes } from "@utils/misc";
@@ -23,7 +25,7 @@ const FriendRow = findComponentByCodeLazy("discriminatorClass:", ".isMobileOnlin
 const cl = classNameFactory("vc-gp-");
 
 export function openGuildInfoModal(guild: Guild) {
-    openModal(props => <GuildInfoModal guild={guild} modalProps={props} />);
+    openModal(props => <SafeGuildInfoModal guild={guild} modalProps={props} />);
 }
 
 const enum Tabs {
@@ -190,6 +192,14 @@ function GuildInfoModal({ guild, modalProps }: GuildProps & { modalProps: Render
     );
 }
 
+const SafeGuildInfoModal = ErrorBoundary.wrap(GuildInfoModal, {
+    fallback: ({ wrappedProps: { modalProps } }) => (
+        <Modal {...modalProps} title="Server Info">
+            <Paragraph>Server info could not be loaded. Close this window and try again.</Paragraph>
+        </Modal>
+    )
+});
+
 function Owner(guildId: string, owner: User) {
     const guildAvatar = GuildMemberStore.getMember(guildId, owner.id)?.avatar;
     const ownerAvatarUrl =
@@ -224,6 +234,7 @@ function ServerInfoTab({ guild }: GuildProps) {
         deps: [guild.ownerId],
         fallbackValue: null
     });
+    const roles = useStateFromStores([GuildRoleStore], () => GuildRoleStore.getSortedRoles(guild.id));
 
     const Fields = {
         "Server Owner": owner ? Owner(guild.id, owner) : "Loading...",
@@ -234,7 +245,7 @@ function ServerInfoTab({ guild }: GuildProps) {
         "Verification Level": ["None", "Low", "Medium", "High", "Highest"][guild.verificationLevel] || "?",
         "Server Boosts": `${guild.premiumSubscriberCount ?? 0} (Level ${guild.premiumTier ?? 0})`,
         "Channels": GuildChannelStore.getChannels(guild.id)?.count - 1 || "?", // - null category
-        "Roles": GuildRoleStore.getSortedRoles(guild.id).length - 1, // - @everyone
+        "Roles": roles ? Math.max(0, roles.length - 1) : "Loading...", // - @everyone
     };
 
     return (

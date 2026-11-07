@@ -30,7 +30,7 @@ Check that the plugin is available in your build, enabled and actually loaded af
 
 If it is still absent on the current build, include a redacted screenshot and the trigger in a report. A missing icon can be a compatibility patch problem rather than a missing image file.
 
-For FakeVoice, real microphone/headphones state is distinct from its advertised fake flags. Fake Deafen does not automatically mute the microphone. See the [current behavior](../guides/plugins.md#fake-deafen-and-fake-mute) before treating that difference as a loading failure.
+Fake Deafen explicitly mutes your microphone when enabled and leaves it muted when disabled. If you were already deafened, use Discord's normal deafen control to listen again. See the [current behavior](../guides/plugins.md#fake-deafen-and-fake-mute) before treating a difference between local audio and advertised status as a loading failure.
 
 ## The interface looks broken after a theme change
 

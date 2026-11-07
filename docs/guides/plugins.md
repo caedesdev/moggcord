@@ -43,9 +43,13 @@ An official update replaces the compiled desktop code. Community source remains 
 
 ## Fake Deafen and Fake Mute
 
-The existing FakeVoice integration places its control beside Discord's microphone and headphones controls. Its default mode is Fake Deafen. The selected fake state and the real microphone/headphones controls are separate; Fake Deafen does not automatically mute the real microphone. Existing real mute state is retained.
+The FakeVoice control sits beside Discord's microphone and headphones controls. Its default mode is Fake Deafen. Enabling Fake Deafen explicitly mutes your real microphone while advertising a deafened status. Disabling the fake mode leaves your microphone muted; unmute it yourself when you want to speak.
 
-The current implementation provides local status indicators and a short notification on mode changes. Server mute, server deafen and channel permissions still apply. If the control is missing, use [Client and plugin troubleshooting](../troubleshooting/client-and-plugins.md#an-expected-control-is-missing).
+If you enable it while already deafened, your headphones stay deafened. Turn off Discord's normal deafen control to listen while still appearing deafened. Your microphone stays muted. Fake Mute by itself changes the advertised mute flag without changing your real audio controls.
+
+Your participant row in the call shows the advertised muted/deafened state. The microphone/headphones controls at the bottom keep showing the real audio state: the microphone is muted and the headphones stay on unless you deafen them yourself. The FakeVoice icon uses only a strike-through when active.
+
+Mode changes play Discord's deafen/undeafen sound and show a theme-aware notification at the top right for three seconds. Server mute, server deafen and channel permissions still apply. If the control is missing, use [Client and plugin troubleshooting](../troubleshooting/client-and-plugins.md#an-expected-control-is-missing).
 
 ## Source of truth
 
