@@ -59,7 +59,7 @@ namespace MoggcordInstaller
             Application.Run(new LauncherForm(!HasFlag(args, "--skip-installer-update"), readyEvent));
         }
 
-        static string VerifyBundledBuild()
+        internal static string VerifyBundledBuild()
         {
             var assembly = Assembly.GetExecutingAssembly();
             var version = assembly.GetName().Version.ToString(3);
@@ -794,6 +794,13 @@ namespace MoggcordInstaller
             var zipUrl = ExtractJsonValue(json, "browser_download_url", DIST_ZIP);
             var releaseTag = ExtractJsonValue(json, "tag_name");
 
+            if (Version.TryParse(releaseTag?.TrimStart('v'), out var releaseVersion)
+                && releaseVersion.CompareTo(Version.Parse(GetInstallerVersion())) < 0)
+            {
+                SetStatus("loading", "This installer includes newer Moggcord files. Loading bundled files...");
+                return false;
+            }
+
             if (string.IsNullOrEmpty(zipUrl) && Regex.IsMatch(releaseTag ?? "", @"^v?\d+\.\d+\.\d+$"))
             {
                 var updateTag = "updates-v" + releaseTag.TrimStart('v');
@@ -861,6 +868,8 @@ namespace MoggcordInstaller
             using (var resourceStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MoggcordInstaller.moggcord-dist.zip"))
             {
                 if (resourceStream == null) return false;
+
+                Program.VerifyBundledBuild();
 
                 SetProgress(2, "Loading bundled Moggcord files...");
                 Directory.CreateDirectory(Path.GetDirectoryName(_distDir));

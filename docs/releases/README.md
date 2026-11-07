@@ -4,6 +4,7 @@
 
 | Version | Main changes | Notes |
 | --- | --- | --- |
+| [1.18.56](1.18.56.md) | Updated Fake Deafen, separate client settings, profile stability and Windows installer fixes | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.56) |
 | [1.18.55](1.18.55.md) | Searchable server pickers and separate target cleanup controls in Server Cloner | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.55) |
 | [1.18.54](1.18.54.md) | Organize Custom Profile into tabs with a fixed header and footer | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.54) |
 | [1.18.53](1.18.53.md) | Match extra profile badge sizes to Discord's native badges | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.53) |

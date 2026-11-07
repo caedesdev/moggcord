@@ -187,16 +187,19 @@ try
     using (var archive = new ZipArchive(zip, ZipArchiveMode.Create, true))
     using (var writer = new StreamWriter(archive.CreateEntry("patcher.js").Open())) writer.Write("fixture patcher");
     var payload = zip.ToArray();
+    var releaseTag = "v" + backend.GetInstallerVersion();
+    var updateTag = "updates-" + releaseTag;
+    var archiveUrl = $"https://github.com/caedesdev/moggcord/releases/download/{updateTag}/moggcord-dist.zip";
     using var fixtureHttp = new HttpClient(new ReleaseHttpHandler(request => {
         var url = request.RequestUri!.AbsoluteUri;
         requests.Add(url);
         if (url.EndsWith("/releases/latest")) return new HttpResponseMessage(HttpStatusCode.OK) {
-            Content = new StringContent("{\"tag_name\":\"v1.18.44\",\"assets\":[{\"name\":\"Moggcord-Installer.exe\"}]}")
+            Content = new StringContent(JsonSerializer.Serialize(new { tag_name = releaseTag, assets = new[] { new { name = "Moggcord-Installer.exe" } } }))
         };
-        if (url.EndsWith("/releases/tags/updates-v1.18.44")) return new HttpResponseMessage(HttpStatusCode.OK) {
-            Content = new StringContent("{\"tag_name\":\"updates-v1.18.44\",\"assets\":[{\"name\":\"moggcord-dist.zip\",\"browser_download_url\":\"https://github.com/caedesdev/moggcord/releases/download/updates-v1.18.44/moggcord-dist.zip\"}]}")
+        if (url.EndsWith("/releases/tags/" + updateTag)) return new HttpResponseMessage(HttpStatusCode.OK) {
+            Content = new StringContent(JsonSerializer.Serialize(new { tag_name = updateTag, assets = new[] { new { name = "moggcord-dist.zip", browser_download_url = archiveUrl } } }))
         };
-        Check(url == "https://github.com/caedesdev/moggcord/releases/download/updates-v1.18.44/moggcord-dist.zip", "Only the version-matched technical archive is downloaded");
+        Check(url == archiveUrl, "Only the version-matched technical archive is downloaded");
         return new HttpResponseMessage(HttpStatusCode.OK) { Content = new ByteArrayContent(payload) };
     }));
     typeof(MoggcordBackend).GetField("_http", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(backend, fixtureHttp);
@@ -213,6 +216,17 @@ try
         Check(await (Task<bool>)download.Invoke(backend, null)!, "Installer resolves an installer-only release through its technical files");
         Check(requests.Count == 3, "Installer uses latest metadata, matching update metadata and the selected ZIP");
         Check(File.ReadAllText(Path.Combine(root, "cache", "patcher.js")) == "fixture patcher", "Downloaded fixture is extracted only into the isolated cache");
+
+        var oldReleaseRequests = 0;
+        using var olderRelease = new HttpClient(new ReleaseHttpHandler(request => {
+            oldReleaseRequests++;
+            Check(request.RequestUri!.AbsoluteUri.EndsWith("/releases/latest"), "An older online release must not download payload files");
+            return new HttpResponseMessage(HttpStatusCode.OK) { Content = new StringContent("{\"tag_name\":\"v1.0.0\",\"assets\":[]}") };
+        }));
+        typeof(MoggcordBackend).GetField("_http", BindingFlags.Instance | BindingFlags.NonPublic)!.SetValue(backend, olderRelease);
+        before = Snapshot();
+        Check(!await (Task<bool>)download.Invoke(backend, null)!, "A newer installer must retain its bundled version instead of downloading an older published build");
+        Check(oldReleaseRequests == 1 && Snapshot() == before, "An older release lookup must leave the current payload files unchanged");
     }
     finally
     {
