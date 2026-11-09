@@ -174,7 +174,7 @@ namespace MoggcordInstaller
             this.StartPosition = FormStartPosition.CenterScreen;
             this.BackColor = Color.FromArgb(9, 10, 16); // matching HTML root
             var iconStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MoggcordInstaller.icon.ico");
-            if (iconStream != null) this.Icon = new Icon(iconStream);
+            if (iconStream != null) this.Icon = new Icon(iconStream, 256, 256);
 
             _webView = new WebView2
             {
@@ -328,29 +328,13 @@ namespace MoggcordInstaller
                 }
 
                 // Convert Icon to Base64 PNG for HTML
-                try {
-                    using (var iconStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MoggcordInstaller.icon.ico"))
-                    {
-                        var icon = new Icon(iconStream);
-                        using (var bmp = icon.ToBitmap())
-                        using (var ms = new MemoryStream())
-                        {
-                            bmp.Save(ms, System.Drawing.Imaging.ImageFormat.Png);
-                            var base64 = Convert.ToBase64String(ms.ToArray());
-                            html = html.Replace("{{ICON_BASE64}}", "data:image/png;base64," + base64);
-                        }
-                    }
-                } catch { }
-
-                try {
-                    using (var pfpStream = Assembly.GetExecutingAssembly().GetManifestResourceStream("MoggcordInstaller.moggcord-pfp.png"))
-                    using (var ms = new MemoryStream())
-                    {
-                        pfpStream.CopyTo(ms);
-                        var base64 = Convert.ToBase64String(ms.ToArray());
-                        html = html.Replace("{{PFP_BASE64}}", "data:image/png;base64," + base64);
-                    }
-                } catch { }
+                using (var image = Assembly.GetExecutingAssembly().GetManifestResourceStream("MoggcordInstaller.moggcord-pfp.png"))
+                using (var bytes = new MemoryStream())
+                {
+                    if (image == null) throw new InvalidDataException("The installer logo is missing.");
+                    image.CopyTo(bytes);
+                    html = html.Replace("{{ICON_BASE64}}", "data:image/png;base64," + Convert.ToBase64String(bytes.ToArray()));
+                }
 
                 _webView.NavigateToString(html);
             }
