@@ -12,6 +12,17 @@ const html = readFileSync("installer-src/index.html", "utf8");
 const script = html.match(/<script>([\s\S]*?)<\/script>/)[1];
 const flush = async () => { await new Promise(resolve => setImmediate(resolve)); };
 
+test("the high-resolution installer artwork fits the WebView2 navigation limit", () => {
+    const image = readFileSync("installer-src/moggcord-pfp.png");
+    const font = readFileSync("installer-src/fonts/InterVariable.woff2");
+    assert.equal(image.subarray(0, 8).toString("hex"), "89504e470d0a1a0a");
+    assert(image.readUInt32BE(16) >= 512);
+    assert(image.readUInt32BE(20) >= 512);
+    const page = html.replaceAll("{{FONT_BASE64}}", font.toString("base64"))
+        .replaceAll("{{ICON_BASE64}}", "data:image/png;base64," + image.toString("base64"));
+    assert(Buffer.byteLength(page, "utf16le") < 2 * 1024 * 1024, "Embedded artwork must fit the WebView2 HTML limit.");
+});
+
 class Element {
     constructor() { this.children = []; this.events = new Map(); this.attrs = new Map(); this.style = {}; this.dataset = {}; this.hidden = false; this.disabled = false; this.checked = false; this.value = ""; this._text = ""; }
     get textContent() { return this._text + this.children.map(child => child.textContent).join(""); }
