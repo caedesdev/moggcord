@@ -20,15 +20,17 @@ The service returns `Access-Control-Allow-Origin` only for the configured origin
 | Method | Path | Request | Result |
 | --- | --- | --- | --- |
 | GET | `/v1/status` | No body | Connector identity, service protocol, channel and capabilities |
-| POST | `/v1/install` | `{ "manifest": "https://…/api/install/<uuid>", "sha256": "<hash>" }` | HTTP 202 with an installation job |
+| POST | `/v1/install` | `{ "manifest": "https://…/api/install/<uuid>", "sha256": "<hash>", "channel": "canary" }` | HTTP 202 with an installation job |
 | GET | `/v1/jobs/<job-id>` | No body | Current job state/message, or 404 for an unknown/expired job |
-| POST | `/v1/installed` | `{ "entries": [...] }` | Read-only installation state for up to 24 entries |
+| POST | `/v1/installed` | `{ "entries": [...], "channel": "canary" }` | Read-only installation state for up to 24 entries |
 
-Status currently advertises `name: "moggcord-community"`, `protocol: 1` and capabilities `plugin-folders`, `installed-status` and `enable-installed`. Check capabilities rather than treating every protocol-1 connector as folder-aware or able to reactivate existing uploads.
+Status advertises `name: "moggcord-community"`, `protocol: 1` and capabilities `plugin-folders`, `installed-status`, `enable-installed` and `channel-selection`. Check capabilities rather than assuming that older protocol-1 connectors support every feature.
 
-In automatic mode, `channel` reports the detected Moggcord channel, rather than `auto`. If no unique Moggcord target is available, status returns HTTP 409 with `code: "target_unavailable"` and an explanation. The connector identity remains in that response. Browser clients should display the explanation instead of launching another connector or reporting an unrelated connection failure.
+In automatic mode, one detected installation returns its `channel` and a one-item `channels` array. Multiple Moggcord installations return HTTP 200 with `channel: null` and `channels`, for example `["stable", "canary"]`. Show those choices before installing; send the chosen `channel` in both installation and installed-state requests. Background checks must not open the chooser. No available Moggcord installation still returns HTTP 409 with `code: "target_unavailable"`.
 
-Only one installation is active at a time. A repeated request for its same manifest/hash returns that active job; another package receives an error. Jobs move through `downloading`, `building` where applicable, `installing`, `restarting`, then `complete` or `failed`. A completed no-op can return `alreadyInstalled: true`.
+Channel values are `stable`, `canary`, `ptb` and `development`. Omit `channel` for older connectors or automatic selection of a unique target. A manually pinned connector rejects a different target. Choices apply to individual requests and do not replace its persistent configuration. Ambiguous protocol-link launches fail before downloading or modifying files; the website can then submit an explicit choice.
+
+Only one installation is active at a time. A repeated request for its same manifest, hash and channel returns that active job; another package or channel receives an error. Jobs move through `downloading`, `building` where applicable, `installing`, `restarting`, then `complete` or `failed`. A completed no-op can return `alreadyInstalled: true`.
 
 Job history is in memory and retains up to 20 jobs. It is not a durable installation database.
 

@@ -76,7 +76,7 @@ test("service upgrades cannot interrupt an active installation and links use the
     const f = await fixture(t);
     let release;
     const pending = new Promise(done => { release = done; });
-    const service = createManagedService(f.config, { fetchManifest: async input => input, install: async () => { await pending; return {}; } });
+    const service = createManagedService(f.config, { findClient: async () => ({ channel: "stable" }), fetchManifest: async input => input, install: async () => { await pending; return {}; } });
     const base = await listen(t, service), manifest = `${origin}/api/install/${randomUUID()}`, link = new URL("moggcord://install");
     link.searchParams.set("manifest", manifest); link.searchParams.set("sha256", "a".repeat(64));
     const response = await control(base, f.config, "link", { link: link.href });
@@ -91,7 +91,7 @@ test("a second protocol-handler process forwards to the authenticated existing w
     const f = await fixture(t), file = join(f.directory, "service.json");
     await writeFile(file, JSON.stringify(f.config));
     let installs = 0;
-    const service = await runManagedService(file, null, { port: 0, fetchManifest: async input => input, install: async () => { installs++; return {}; } });
+    const service = await runManagedService(file, null, { port: 0, findClient: async () => ({ channel: "stable" }), fetchManifest: async input => input, install: async () => { installs++; return {}; } });
     t.after(() => service.server.listening ? new Promise(done => service.server.close(done)) : undefined);
     const link = new URL("moggcord://install");
     link.searchParams.set("manifest", `${origin}/api/install/${randomUUID()}`); link.searchParams.set("sha256", "b".repeat(64));

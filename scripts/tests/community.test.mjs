@@ -473,6 +473,8 @@ test("automatic channel discovery requires a choice when multiple channels conta
     const f = await fixture(t);
     for (const channel of ["stable", "canary", "ptb"]) await windowsInstallation(f.directory, channel);
     await assert.rejects(findClient("auto", f.directory, "win32"), error => {
+        assert.equal(error.code, "target_required");
+        assert.deepEqual(error.channels, ["stable", "canary", "ptb"]);
         assert.match(error.message, /multiple Discord installations/);
         for (const channel of ["stable", "canary", "ptb"]) assert(error.message.includes(channel));
         assert.match(error.message, /--channel/);
@@ -529,4 +531,67 @@ test("real HTTP bridge rejects other websites, checks downloaded manifests and r
     assert.equal(result.state, "complete", result.message); assert.deepEqual(f.events, ["stop canary", "start canary"]);
     const modified = { ...input, sha256: "b".repeat(64) };
     await assert.rejects(fetchManifest(modified, origin), /changed/);
+});
+
+test("multiple Discord targets are selectable through HTTP and each job and status query keeps its channel", async t => {
+    const origin = "https://moggcord.example", installed = [], inspected = [];
+    let release;
+    const pending = new Promise(done => { release = done; });
+    const bridge = createBridge({ origin, channel: "auto" }, {
+        findClient: async () => { throw Object.assign(new Error("private discovery details"), { code: "target_required", channels: ["stable", "canary", "ptb", "../private", "stable"] }); },
+        fetchManifest: async input => input,
+        install: async (entry, config) => { installed.push(config.channel); await pending; return { channel: config.channel }; },
+        installedEntries: async (entries, config) => { inspected.push(config.channel); return entries.map(entry => ({ id: entry.id, installed: config.channel === "stable" })); }
+    });
+    await new Promise(done => bridge.server.listen(0, "127.0.0.1", done));
+    t.after(() => new Promise(done => bridge.server.close(done)));
+    const base = `http://127.0.0.1:${bridge.server.address().port}`;
+    const headers = { Origin: origin, "Content-Type": "application/json", "X-Moggcord-Install": "1" };
+    const send = (route, input) => fetch(base + route, { method: "POST", headers, body: JSON.stringify(input) });
+    const status = await (await fetch(base + "/v1/status", { headers: { Origin: origin } })).json();
+    assert.equal(status.channel, null);
+    assert.deepEqual(status.channels, ["stable", "canary", "ptb"]);
+    assert(status.capabilities.includes("channel-selection"));
+    assert(!JSON.stringify(status).includes("private"));
+    for (const channel of ["stable", "canary"]) {
+        const response = await send("/v1/installed", { channel, entries: [{ id: "example" }] });
+        assert.equal((await response.json()).entries[0].installed, channel === "stable");
+    }
+    assert.deepEqual(inspected, ["stable", "canary"]);
+    const input = { manifest: `${origin}/api/install/${randomUUID()}`, sha256: "a".repeat(64), channel: "canary" };
+    for (const channel of [null, "auto", "unknown", "../stable", {}]) assert.equal((await send("/v1/install", { ...input, channel })).status, 400);
+    const job = await (await send("/v1/install", input)).json();
+    assert.equal((await (await send("/v1/install", input)).json()).id, job.id);
+    assert.equal((await send("/v1/install", { ...input, channel: "stable" })).status, 400);
+    release();
+    let result;
+    for (let attempt = 0; attempt < 50; attempt++) {
+        result = await (await fetch(`${base}/v1/jobs/${job.id}`, { headers: { Origin: origin } })).json();
+        if (result.state === "complete") break;
+        await new Promise(done => setImmediate(done));
+    }
+    assert.equal(result.state, "complete"); assert.equal(result.channel, "canary"); assert.deepEqual(installed, ["canary"]);
+});
+
+test("an ambiguous protocol launch never downloads or installs before a target is chosen", async () => {
+    let downloads = 0, installs = 0;
+    const bridge = createBridge({ origin: "https://moggcord.example", channel: "auto" }, {
+        findClient: async () => { throw Object.assign(new Error("Choose one with --channel."), { code: "target_required", channels: ["stable", "canary"] }); },
+        fetchManifest: async input => { downloads++; return input; }, install: async () => { installs++; }
+    });
+    const job = bridge.submit({ manifest: `https://moggcord.example/api/install/${randomUUID()}`, sha256: "a".repeat(64) });
+    await new Promise(done => setImmediate(done));
+    assert.equal(job.state, "failed"); assert.equal(job.code, "target_required");
+    assert(!job.message.includes("--channel")); assert.equal(downloads, 0); assert.equal(installs, 0);
+});
+
+test("a pinned connector rejects website attempts to override its Discord target", async t => {
+    const origin = "https://moggcord.example";
+    let inspections = 0;
+    const bridge = createBridge({ origin, channel: "canary" }, { installedEntries: async () => { inspections++; return []; } });
+    assert.throws(() => bridge.submit({ manifest: `${origin}/api/install/${randomUUID()}`, sha256: "a".repeat(64), channel: "stable" }), /different Discord installation/);
+    await new Promise(done => bridge.server.listen(0, "127.0.0.1", done));
+    t.after(() => new Promise(done => bridge.server.close(done)));
+    const response = await fetch(`http://127.0.0.1:${bridge.server.address().port}/v1/installed`, { method: "POST", headers: { Origin: origin, "Content-Type": "application/json", "X-Moggcord-Install": "1" }, body: JSON.stringify({ channel: "stable", entries: [] }) });
+    assert.equal(response.status, 400); assert.equal(inspections, 0);
 });

@@ -4,6 +4,8 @@ The detailed guide is split into user instructions, upload preparation and a pro
 
 For normal moggcord.cc downloads, start the updated Moggcord, choose **Download** and allow local-app access when the browser asks. The local service detects the Moggcord installation and installs there. No separate setup page or terminal commands are required.
 
+With Moggcord 1.18.58 or later, if several Discord clients contain Moggcord, select the target in the website dialog. Installation status follows that choice. Failed automatic installations fall back to a ZIP that retains the complete upload structure; cancelling the dialog does not download anything.
+
 ## One-time setup
 
 Only advanced manual connections to another website origin or a development site need [manual setup](community/setup.md). That guide covers requirements, exact website origins, automatic channel detection and per-platform registration.

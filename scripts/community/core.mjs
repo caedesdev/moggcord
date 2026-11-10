@@ -124,7 +124,7 @@ export async function findClient(channel = "auto", localAppData = process.env.LO
         }
     }
     if (clients.length === 1 || (clients.length && channel !== "auto")) return clients[0];
-    if (clients.length > 1) throw new Error(`Moggcord was found in multiple Discord installations (${clients.map(client => client.channel).join(", ")}). Choose one with --channel.`);
+    if (clients.length > 1) throw Object.assign(new Error(`Moggcord was found in multiple Discord installations (${clients.map(client => client.channel).join(", ")}). Choose one with --channel.`), { code: "target_required", channels: [...new Set(clients.map(client => client.channel))] });
     if (channel === "auto") throw new Error("No Moggcord installation was found. Install Moggcord in a Discord channel first.");
     throw new Error(`No Moggcord installation was found in ${channelNames[channel]}. Install Moggcord in this channel first.`);
 }

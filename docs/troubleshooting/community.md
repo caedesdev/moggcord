@@ -36,7 +36,7 @@ After an official update, rebuild community code from the correct retained check
 
 ## The browser saved a file but nothing appeared in Discord
 
-**Download file** is a manual browser download. It does not install or activate code. Use the connector-backed **Download** action for automatic installation after setup. A source ZIP needs to be compiled before it can be used as a plugin.
+**Download ZIP** is a manual browser download. The website also offers it if automatic installation fails. It does not install or activate code. Use the connector-backed **Download** action for automatic installation after setup. A source ZIP needs to be extracted and compiled before it can be used as a plugin.
 
 ## The site reports failure after restarting
 
