@@ -16,6 +16,7 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { Logger } from "@utils/Logger";
 import type * as t from "@vencord/discord-types";
 import { _resolveReady, filters, findByCodeLazy, findByPropsLazy, findLazy, mapMangledModuleLazy, waitFor } from "@webpack";
 import type * as TSPattern from "ts-pattern";
@@ -120,8 +121,9 @@ interface ToastsExports {
     popToast(): void;
 }
 
-const ToastsExports = mapMangledModuleLazy(".currentToastMap.has(", {
-    showToast: filters.byCode(".currentToastMap.has("),
+const toastLogger = new Logger("Toasts");
+const ToastsExports = mapMangledModuleLazy(/currentToastMap:new Map|\.currentToastMap\.has\(/, {
+    showToast: filters.byCode(/\.currentToastMap\.(?:get|has)\(/),
     popToast: filters.byCode(".delete(")
 });
 
@@ -142,15 +144,21 @@ export const Toasts = {
     show(data: ToastData) {
         const { message, type, options } = data;
         const fallback = type === ToastType.FAILURE ? "Something went wrong. Please try again." : type === ToastType.SUCCESS ? "Done." : "Moggcord notification.";
-        ToastsExports.showToast({
-            text: message?.trim() || fallback,
-            variant: type === ToastType.FAILURE ? "critical" : type === ToastType.SUCCESS ? "success" : "default",
-            position: options?.position === ToastPosition.BOTTOM ? "bottom" : "top",
-            duration: options?.duration ?? 6000,
-            ...(options?.component != null ? { __dangerouslyRenderContent: () => options.component } : {})
-        });
+        try {
+            ToastsExports.showToast?.({
+                text: message?.trim() || fallback,
+                variant: type === ToastType.FAILURE ? "critical" : type === ToastType.SUCCESS ? "success" : "default",
+                position: options?.position === ToastPosition.BOTTOM ? "bottom" : "top",
+                duration: options?.duration ?? 6000,
+                ...(options?.component != null ? { __dangerouslyRenderContent: () => options.component } : {})
+            });
+        } catch (error) {
+            toastLogger.debug("Unable to show a Discord notification", error);
+        }
     },
-    pop: ToastsExports.popToast,
+    pop() {
+        ToastsExports.popToast?.();
+    },
     create: createToast,
 };
 

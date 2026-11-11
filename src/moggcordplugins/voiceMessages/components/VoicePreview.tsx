@@ -16,38 +16,53 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
 */
 
+import { Paragraph } from "@components/Paragraph";
 import { useTimer } from "@utils/react";
+import { useEffect, useState } from "@webpack/common";
 
-import { cl, VoiceMessage } from "..";
+import { cl } from "..";
 
-const PREVIEW_IDLE_LABEL = "----";
+const PREVIEW_IDLE_LABEL = "Record or upload audio";
 const PREVIEW_RECORDING_LABEL = "RECORDING";
 
-export interface VoiceMessageProps {
-    src: string;
-    waveform: string;
+function AudioPreview({ blob }: { blob: Blob; }) {
+    const [source, setSource] = useState<{ blob: Blob; url: string; }>();
+    const [failedUrl, setFailedUrl] = useState<string>();
+
+    useEffect(() => {
+        const url = URL.createObjectURL(blob);
+        setSource({ blob, url });
+        return () => URL.revokeObjectURL(url);
+    }, [blob]);
+
+    if (source?.blob !== blob) return null;
+    const { url } = source;
+
+    return (
+        <>
+            <audio
+                key={url}
+                aria-label="Voice message preview"
+                className={cl("preview-audio")}
+                src={url}
+                controls
+                preload="metadata"
+                onError={() => setFailedUrl(url)}
+            />
+            {failedUrl === url && (
+                <Paragraph className={cl("error")} role="alert">This audio could not be played.</Paragraph>
+            )}
+        </>
+    );
 }
 
-export type VoicePreviewOptions = {
-    src?: string;
-    waveform: string;
-    recording?: boolean;
-};
-
-export const VoicePreview = ({
-    src,
-    waveform,
-    recording,
-}: VoicePreviewOptions) => {
+function PreviewStatus({ recording }: { recording: boolean; }) {
     const durationMs = useTimer({
         deps: [recording]
     });
 
     const durationSeconds = recording ? Math.floor(durationMs / 1000) : 0;
     const durationDisplay = Math.floor(durationSeconds / 60) + ":" + (durationSeconds % 60).toString().padStart(2, "0");
-
-    if (src && !recording)
-        return <VoiceMessage key={src} src={src} waveform={waveform} />;
 
     return (
         <div className={cl("preview", recording ? "preview-recording" : [])}>
@@ -56,4 +71,8 @@ export const VoicePreview = ({
             <div className={cl("preview-label")}>{recording ? PREVIEW_RECORDING_LABEL : PREVIEW_IDLE_LABEL}</div>
         </div>
     );
-};
+}
+
+export function VoicePreview({ blob, recording }: { blob?: Blob; recording: boolean; }) {
+    return blob && !recording ? <AudioPreview blob={blob} /> : <PreviewStatus recording={recording} />;
+}

@@ -33,11 +33,10 @@ import definePlugin, { OptionType } from "@utils/types";
 import { chooseFile } from "@utils/web";
 import { RenderModalProps } from "@vencord/discord-types";
 import { CloudUploadPlatform } from "@vencord/discord-types/enums";
-import { Button, CloudUploader, Constants, FluxDispatcher, Forms, lodash, Menu, MessageActions, Modal, openModal, PendingReplyStore, PermissionsBits, PermissionStore, RestAPI, SelectedChannelStore, showToast, SnowflakeUtils, Toasts, useEffect, useState } from "@webpack/common";
-import { ComponentType } from "react";
+import { Button, CloudUploader, Constants, FluxDispatcher, Forms, lodash, Menu, MessageActions, Modal, openModal, PendingReplyStore, PermissionsBits, PermissionStore, RestAPI, SelectedChannelStore, showToast, SnowflakeUtils, Toasts, useState } from "@webpack/common";
 
 import { VoiceRecorderDesktop } from "./components/DesktopRecorder";
-import { VoiceMessageProps, VoicePreview } from "./components/VoicePreview";
+import { VoicePreview } from "./components/VoicePreview";
 import { VoiceRecorderWeb } from "./components/WebRecorder";
 
 const VOICE_MESSAGE_FLAG = 1 << 13;
@@ -60,8 +59,6 @@ export type VoiceRecorder = React.ComponentType<{
     setAudioBlob(blob: Blob): void;
     onRecordingChange?(recording: boolean): void;
 }>;
-
-export let VoiceMessage: ComponentType<VoiceMessageProps> = () => null;
 
 const VoiceRecorder = IS_DISCORD_DESKTOP ? VoiceRecorderDesktop : VoiceRecorderWeb;
 
@@ -101,20 +98,6 @@ export default definePlugin({
     tags: ["Voice"],
     authors: [Devs.Ven, Devs.Vap, Devs.Nickyux],
     settings,
-
-    patches: [
-        {
-            find: "#{intl::PAUSE_VOICE_MESSAGE_A11Y_LABEL}",
-            replacement: {
-                match: /(?<=\i=)(?=\i\.memo\(.{0,50}?=1,onVolumeChange:[^}]+?waveform:[^}]+?playbackCacheKey:)/,
-                replace: "$self.VoiceMessage=",
-            }
-        }
-    ],
-
-    set VoiceMessage(value) {
-        VoiceMessage = value;
-    },
 
     contextMenus: {
         "channel-attach": ctxMenuPatch
@@ -195,38 +178,23 @@ function sendAudio(blob: Blob, meta: AudioMetadata) {
     upload.upload();
 }
 
-function useObjectUrl() {
-    const [url, setUrl] = useState<string>();
-    const setWithFree = (blob: Blob) => {
-        if (url) URL.revokeObjectURL(url);
-        setUrl(URL.createObjectURL(blob));
-    };
-
-    return [url, setWithFree] as const;
-}
-
 function VoiceMessageModal({ modalProps }: { modalProps: RenderModalProps; }) {
     const [isRecording, setRecording] = useState(false);
     const [blob, setBlob] = useState<Blob>();
-    const [blobUrl, setBlobUrl] = useObjectUrl();
-
-    const VoiceRecorder = IS_DISCORD_DESKTOP ? VoiceRecorderDesktop : VoiceRecorderWeb;
-
-    useEffect(() => () => {
-        if (blobUrl)
-            URL.revokeObjectURL(blobUrl);
-    }, [blobUrl]);
 
     const [meta, metaError] = useAwaiter(async () => {
         if (!blob) return EMPTY_META;
 
         const audioContext = new AudioContext();
-        const audioBuffer = await audioContext.decodeAudioData(await blob.arrayBuffer());
-
-        return {
-            waveform: generateWaveform(audioBuffer),
-            duration: audioBuffer.duration,
-        };
+        try {
+            const audioBuffer = await audioContext.decodeAudioData(await blob.arrayBuffer());
+            return {
+                waveform: generateWaveform(audioBuffer),
+                duration: audioBuffer.duration,
+            };
+        } finally {
+            await audioContext.close();
+        }
     }, {
         deps: [blob],
         fallbackValue: EMPTY_META,
@@ -246,25 +214,19 @@ function VoiceMessageModal({ modalProps }: { modalProps: RenderModalProps; }) {
                     modalProps.onClose();
                     showToast("Now sending voice message... Please be patient", Toasts.Type.MESSAGE);
                 },
-                disabled: !blob
+                disabled: !blob || isRecording
             }]}
         >
             <div className={cl("buttons")}>
                 <VoiceRecorder
-                    setAudioBlob={blob => {
-                        setBlob(blob);
-                        setBlobUrl(blob);
-                    }}
+                    setAudioBlob={setBlob}
                     onRecordingChange={setRecording}
                 />
 
                 <Button
                     onClick={async () => {
                         const file = await chooseFile("audio/*");
-                        if (file) {
-                            setBlob(file);
-                            setBlobUrl(file);
-                        }
+                        if (file) setBlob(file);
                     }}
                 >
                     Upload File
@@ -272,15 +234,8 @@ function VoiceMessageModal({ modalProps }: { modalProps: RenderModalProps; }) {
             </div>
 
             <Forms.FormTitle>Preview</Forms.FormTitle>
-            {metaError
-                ? <Paragraph className={cl("error")}>Failed to parse selected audio file: {metaError.message}</Paragraph>
-                : (
-                    <VoicePreview
-                        src={blobUrl}
-                        waveform={meta.waveform}
-                        recording={isRecording}
-                    />
-                )}
+            <VoicePreview blob={blob} recording={isRecording} />
+            {metaError && <Paragraph className={cl("error")}>Could not read the audio duration or waveform.</Paragraph>}
 
             {isUnsupportedFormat && (
                 <Card variant="warning" className={Margins.top16} defaultPadding>

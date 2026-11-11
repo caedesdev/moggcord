@@ -4,6 +4,7 @@
 
 | Version | Main changes | Notes |
 | --- | --- | --- |
+| [1.18.59](1.18.59.md) | Restore voice message playback before sending | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.59) |
 | [1.18.58](1.18.58.md) | Choose the Discord target for community installs and download complete ZIPs when installation fails | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.58) |
 | [1.18.57](1.18.57.md) | Blue MC installer artwork and sharper logo rendering on scaled Windows displays | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.57) |
 | [1.18.56](1.18.56.md) | Updated Fake Deafen, separate client settings, profile stability and Windows installer fixes | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.56) |

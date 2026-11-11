@@ -13,12 +13,22 @@ import { transform } from "esbuild";
 const utils = await readFile("src/webpack/common/utils.ts", "utf8");
 const toastCode = utils.slice(utils.indexOf("const ToastType ="), utils.indexOf("export const UserUtils ="));
 
-async function loadToast() {
+async function loadToast(overrides = {}) {
     const { code } = await transform(toastCode, { loader: "ts", format: "cjs" });
-    const shown = [], popped = [];
+    const shown = [], popped = [], debug = [];
     const module = { exports: {} };
-    vm.runInNewContext(code, { module, exports: module.exports, mapMangledModuleLazy: () => ({ showToast: value => shown.push(value), popToast: () => popped.push(true) }), filters: { byCode() {} } });
-    return { ...module.exports, shown, popped };
+    vm.runInNewContext(code, {
+        module,
+        exports: module.exports,
+        Logger: class { debug(...args) { debug.push(args); } },
+        mapMangledModuleLazy: () => ({
+            showToast: value => shown.push(value),
+            popToast: () => popped.push(true),
+            ...overrides,
+        }),
+        filters: { byCode() {} },
+    });
+    return { ...module.exports, shown, popped, debug };
 }
 
 test("legacy toast calls deliver visible text, native variants, position and duration to current Discord", async () => {
@@ -53,6 +63,17 @@ test("blank messages get readable fallbacks and custom content and pop remain co
     assert.equal(Toasts.create("Kept", Toasts.Type.SUCCESS).message, "Kept");
     Toasts.pop();
     assert.equal(popped.length, 1);
+});
+
+test("unavailable notifications do not interrupt the calling action", async () => {
+    const missing = await loadToast({ showToast: undefined, popToast: undefined });
+    assert.doesNotThrow(() => missing.showToast("Voice message is sending."));
+    assert.doesNotThrow(() => missing.Toasts.pop());
+
+    const error = new Error("Discord changed its notification API");
+    const throwing = await loadToast({ showToast() { throw error; } });
+    assert.doesNotThrow(() => throwing.showToast("Voice message is sending."));
+    assert.equal(throwing.debug[0][1], error);
 });
 
 async function loadImport({ file, type = "all", notify = true, rejectWrite = false, cancelReview = false } = {}) {

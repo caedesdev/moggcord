@@ -28,6 +28,12 @@
     transition: background 0.2s ease-in-out;
 }
 
+.vc-vmsg-preview-audio {
+    display: block;
+    width: 100%;
+    height: 48px;
+}
+
 .vc-vmsg-preview-recording .vc-vmsg-preview-indicator {
     background: var(--status-danger);
 }
