@@ -5,65 +5,71 @@ on:
     branches: [main]
     paths-ignore:
       - '.github/workflows/discord-development.yml'
+      - '.github/scripts/discord-development.mjs'
+  release:
+    types: [published]
+  workflow_dispatch:
+  workflow_run:
+    workflows: ['Build & Release Moggcord']
+    types: [completed]
 
-permissions: {}
-
-concurrency:
-  group: discord-development-main
-  cancel-in-progress: true
+permissions:
+  contents: read
 
 jobs:
   notify:
-    if: ${{ !github.event.deleted && github.run_attempt == '1' && !endsWith(github.actor, '[bot]') }}
+    if: ${{ github.event_name == 'push' && !github.event.deleted && github.run_attempt == '1' && !endsWith(github.actor, '[bot]') }}
+    concurrency:
+      group: discord-development-main
+      cancel-in-progress: true
     runs-on: ubuntu-latest
-    timeout-minutes: 2
+    timeout-minutes: 3
     steps:
       - name: Bundle quick successive pushes
         run: sleep 25
-
+      - uses: actions/checkout@v7.0.1
+        with:
+          persist-credentials: false
       - name: Send one Discord update
         env:
           DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_DEVELOPMENT_WEBHOOK_URL }}
-        run: |
-          node --input-type=module <<'NODE'
-          import { readFileSync } from "node:fs";
+        run: node .github/scripts/discord-development.mjs post
+      - name: Remember the Discord message for its release
+        uses: actions/upload-artifact@v7.0.2
+        with:
+          name: discord-message-${{ github.sha }}
+          path: ${{ runner.temp }}/discord-message.json
+          retention-days: 90
+          if-no-files-found: error
 
-          const webhook = process.env.DISCORD_WEBHOOK_URL;
-          if (!/^https:\/\/discord\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(webhook ?? "")) {
-            throw new Error("Set DISCORD_DEVELOPMENT_WEBHOOK_URL to the Discord webhook URL.");
-          }
-
-          const push = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
-          const repo = process.env.GITHUB_REPOSITORY;
-          const sha = process.env.GITHUB_SHA;
-          const mobile = repo.endsWith("/moggcord-mobile");
-          const project = mobile ? "Moggcord Mobile" : "Moggcord Desktop";
-          const subject = push.head_commit?.message?.split(/\r?\n/, 1)[0]?.trim();
-          const update = {
-            allowed_mentions: { parse: [] },
-            embeds: [{
-              title: project + " updated",
-              url: process.env.GITHUB_SERVER_URL + "/" + repo + "/commits/" + sha,
-              description: subject ? "`" + subject.replaceAll("`", "'").slice(0, 220) + "`" : "New changes on main.",
-              color: 0x808080,
-              footer: { text: "main · " + sha.slice(0, 7) }
-            }]
-          };
-
-          let response;
-          try {
-            response = await fetch(webhook + "?wait=true", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify(update),
-              redirect: "error",
-              signal: AbortSignal.timeout(15000)
-            });
-          } catch {
-            throw new Error("The Discord webhook request failed.");
-          }
-          if (!response.ok) throw new Error("Discord webhook HTTP " + response.status);
-          const message = await response.json();
-          if (!message.id || message.embeds?.length !== 1) throw new Error("Discord did not confirm the update.");
-          console.log("Discord confirmed one development update.");
-          NODE
+  release:
+    if: ${{ github.event_name != 'push' && (github.event_name != 'workflow_run' || github.event.workflow_run.conclusion == 'success') }}
+    concurrency: discord-development-release
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    permissions:
+      actions: read
+      contents: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: main
+          persist-credentials: false
+      - name: Find the published build and its Discord message
+        id: lookup
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: node .github/scripts/discord-development.mjs lookup
+      - name: Restore the matching Discord message ID
+        if: steps.lookup.outputs.artifact_id != ''
+        uses: actions/download-artifact@v8
+        with:
+          artifact-ids: ${{ steps.lookup.outputs.artifact_id }}
+          run-id: ${{ steps.lookup.outputs.run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/discord-release
+      - name: Add the release to the existing Discord embed
+        if: steps.lookup.outputs.artifact_id != ''
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_DEVELOPMENT_WEBHOOK_URL }}
+        run: node .github/scripts/discord-development.mjs edit
