@@ -3,6 +3,8 @@ name: Discord development updates
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - '.github/workflows/discord-development.yml'
 
 permissions: {}
 
@@ -43,7 +45,7 @@ jobs:
               title: project + " updated",
               url: process.env.GITHUB_SERVER_URL + "/" + repo + "/commits/" + sha,
               description: subject ? "`" + subject.replaceAll("`", "'").slice(0, 220) + "`" : "New changes on main.",
-              color: mobile ? 0x00c9ff : 0x5877ff,
+              color: 0x808080,
               footer: { text: "main · " + sha.slice(0, 7) }
             }]
           };
