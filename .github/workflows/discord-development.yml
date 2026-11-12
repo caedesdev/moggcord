@@ -1,0 +1,67 @@
+name: Discord development updates
+
+on:
+  push:
+    branches: [main]
+
+permissions: {}
+
+concurrency:
+  group: discord-development-main
+  cancel-in-progress: true
+
+jobs:
+  notify:
+    if: ${{ !github.event.deleted && github.run_attempt == '1' && !endsWith(github.actor, '[bot]') }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Bundle quick successive pushes
+        run: sleep 25
+
+      - name: Send one Discord update
+        env:
+          DISCORD_WEBHOOK_URL: ${{ secrets.DISCORD_DEVELOPMENT_WEBHOOK_URL }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync } from "node:fs";
+
+          const webhook = process.env.DISCORD_WEBHOOK_URL;
+          if (!/^https:\/\/discord\.com\/api\/webhooks\/\d+\/[\w-]+$/.test(webhook ?? "")) {
+            throw new Error("Set DISCORD_DEVELOPMENT_WEBHOOK_URL to the Discord webhook URL.");
+          }
+
+          const push = JSON.parse(readFileSync(process.env.GITHUB_EVENT_PATH, "utf8"));
+          const repo = process.env.GITHUB_REPOSITORY;
+          const sha = process.env.GITHUB_SHA;
+          const mobile = repo.endsWith("/moggcord-mobile");
+          const project = mobile ? "Moggcord Mobile" : "Moggcord Desktop";
+          const subject = push.head_commit?.message?.split(/\r?\n/, 1)[0]?.trim();
+          const update = {
+            allowed_mentions: { parse: [] },
+            embeds: [{
+              title: project + " updated",
+              url: process.env.GITHUB_SERVER_URL + "/" + repo + "/commits/" + sha,
+              description: subject ? "`" + subject.replaceAll("`", "'").slice(0, 220) + "`" : "New changes on main.",
+              color: mobile ? 0x00c9ff : 0x5877ff,
+              footer: { text: "main · " + sha.slice(0, 7) }
+            }]
+          };
+
+          let response;
+          try {
+            response = await fetch(webhook + "?wait=true", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(update),
+              redirect: "error",
+              signal: AbortSignal.timeout(15000)
+            });
+          } catch {
+            throw new Error("The Discord webhook request failed.");
+          }
+          if (!response.ok) throw new Error("Discord webhook HTTP " + response.status);
+          const message = await response.json();
+          if (!message.id || message.embeds?.length !== 1) throw new Error("Discord did not confirm the update.");
+          console.log("Discord confirmed one development update.");
+          NODE
