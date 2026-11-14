@@ -165,8 +165,10 @@ async function edit() {
     const releaseField = embed.fields?.find(field => field.name === "Release");
     const previous = /^\*\*v(\d+\.\d+\.\d+)\*\*/.exec(releaseField?.value ?? "")?.[1];
     const value = "**v" + release.version + "**\n" + release.downloads.map(({ label, url }) => "[" + label + "](" + url + ")").join(" · ");
-    if (releaseField?.value === value || (previous && isNewer(previous, release.version))) return;
-    const { title, url, description, footer, image = { url: screenshotUrl } } = embed;
+    if (previous && isNewer(previous, release.version)) return;
+    if (releaseField?.value === value && embed.image?.url === screenshotUrl) return;
+    const { title, url, description, footer } = embed;
+    const image = { url: screenshotUrl };
     const fields = (embed.fields ?? []).filter(field => field.name !== "Release").concat({ name: "Release", value });
     const updated = await discord(path, "PATCH", {
         allowed_mentions: noMentions,
