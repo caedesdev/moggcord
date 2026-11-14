@@ -11,7 +11,7 @@ import { MessagePopoverButtonMap } from "@api/MessagePopover";
 import { SettingsPluginUiElements, useSettings } from "@api/Settings";
 import { BaseText } from "@components/BaseText";
 import { Card } from "@components/Card";
-import { PlaceholderIcon } from "@components/Icons";
+import { CogWheel, PlaceholderIcon } from "@components/Icons";
 import { Paragraph } from "@components/Paragraph";
 import { Switch } from "@components/Switch";
 import { classNameFactory } from "@utils/css";
@@ -23,7 +23,21 @@ import { Clickable } from "@webpack/common";
 
 const cl = classNameFactory("vc-plugin-ui-elements-");
 
-export function UIElementsButton() {
+export function UIElementsButton({ compact = false }: { compact?: boolean; }) {
+    if (compact) {
+        return (
+            <button
+                type="button"
+                className={cl("compact-button")}
+                aria-label="Manage plugin UI elements"
+                title="Manage plugin UI elements"
+                onClick={() => openModal(modalProps => <UIElementsModal {...modalProps} />)}
+            >
+                <CogWheel height={20} width={20} />
+            </button>
+        );
+    }
+
     return (
         <Clickable onClick={() => openModal(modalProps => <UIElementsModal {...modalProps} />)}>
             <Card className={cl("button")} defaultPadding>

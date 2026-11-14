@@ -20,7 +20,7 @@
     margin-top: 16px;
     display: grid;
     gap: 16px;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
 }
 
 .vc-plugins-info-button {
@@ -117,8 +117,76 @@
 
 .vc-plugin-stats-card-divider {
     border-left: 1px solid #ccc;
-    height: 100%;
+    height: 64px;
     margin: 0 10px;
+}
+
+.vc-plugin-stats-management {
+    gap: 20px;
+    padding: 20px 22px;
+}
+
+.vc-plugin-stats-management-header,
+.vc-plugin-stats-management-actions,
+.vc-plugin-stats-progress-row {
+    display: flex;
+    align-items: center;
+}
+
+.vc-plugin-stats-management-header,
+.vc-plugin-stats-progress-row {
+    justify-content: space-between;
+    gap: 16px;
+}
+
+.vc-plugin-stats-management-actions {
+    gap: 10px;
+}
+
+.vc-plugin-stats-disable-all {
+    min-height: 36px;
+    padding: 0 14px;
+    border: 1px solid color-mix(in srgb, var(--status-danger) 75%, transparent);
+    border-radius: 6px;
+    color: var(--status-danger);
+    background: transparent;
+    font: inherit;
+    cursor: pointer;
+    transition: background-color 140ms ease, color 140ms ease;
+}
+
+.vc-plugin-stats-disable-all:hover {
+    color: var(--text-default);
+    background: color-mix(in srgb, var(--status-danger) 18%, transparent);
+}
+
+.vc-plugin-stats-progress-row {
+    gap: 14px;
+}
+
+.vc-plugin-stats-progress-track {
+    height: 12px;
+    flex: 1;
+    overflow: hidden;
+    border-radius: 999px;
+    background: var(--background-modifier-accent);
+}
+
+.vc-plugin-stats-progress-fill {
+    height: 100%;
+    border-radius: inherit;
+    background: var(--brand-experiment);
+    transition: width 180ms ease;
+}
+
+@media (max-width: 700px) {
+    .vc-plugins-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
+
+    .vc-plugin-stats-management-header {
+        align-items: flex-start;
+    }
 }
 
 /* Shared styles for warning modal and disable all modal */

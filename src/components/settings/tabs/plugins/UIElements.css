@@ -17,6 +17,24 @@
     height: 24px;
 }
 
+.vc-plugin-ui-elements-compact-button {
+    display: grid;
+    width: 36px;
+    height: 36px;
+    place-items: center;
+    padding: 0;
+    border: 1px solid var(--border-subtle);
+    border-radius: 6px;
+    color: var(--interactive-normal);
+    background: transparent;
+    cursor: pointer;
+}
+
+.vc-plugin-ui-elements-compact-button:hover {
+    color: var(--interactive-hover);
+    background: var(--background-mod-subtle);
+}
+
 .vc-plugin-ui-elements-modal-content {
     padding: 1em;
     display: flex;

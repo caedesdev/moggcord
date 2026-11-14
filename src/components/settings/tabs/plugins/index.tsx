@@ -61,38 +61,16 @@ function showErrorToast(message: string) {
     });
 }
 
-function ReloadRequiredCard({ required, enabledPlugins, openWarningModal, resetCheckAndDo }) {
+function ReloadRequiredCard() {
     return (
-        <Card className={classes(cl("info-card"), required && "vc-warning-card")}>
-            {required ? (
-                <>
-                    <HeadingTertiary>Restart required!</HeadingTertiary>
-                    <Paragraph className={cl("dep-text")}>
-                        Restart now to apply new plugins and their settings
-                    </Paragraph>
-                    <Button variant="primary" className={cl("restart-button")} onClick={() => relaunch()}>
-                        Restart
-                    </Button>
-                </>
-            ) : (
-                <>
-                    <HeadingTertiary>Plugin Management</HeadingTertiary>
-                    <Paragraph>Press the cog wheel or info icon to get more info on a plugin</Paragraph>
-                    <Paragraph>Plugins with a cog wheel have settings you can modify!</Paragraph>
-                </>
-            )}
-            {enabledPlugins.length > 0 && !required && (
-                <Button
-                    variant="secondary"
-                    size="small"
-                    className={"vc-plugins-disable-warning vc-modal-align-reset"}
-                    onClick={() => {
-                        return openWarningModal(null, undefined, false, enabledPlugins.length, resetCheckAndDo);
-                    }}
-                >
-                    Disable All Plugins
-                </Button>
-            )}
+        <Card className={classes(cl("info-card"), "vc-warning-card")}>
+            <HeadingTertiary>Restart required!</HeadingTertiary>
+            <Paragraph className={cl("dep-text")}>
+                Restart now to apply new plugins and their settings
+            </Paragraph>
+            <Button variant="primary" className={cl("restart-button")} onClick={() => relaunch()}>
+                Restart
+            </Button>
         </Card>
     );
 }
@@ -239,7 +217,7 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
 
     // Rafraîchir quand un tuto est détecté
     React.useEffect(() => {
-        const handler = () => setSearchValue(prev => ({ ...prev }));
+        const handler = () => setSearchValue(prev => prev.status === SearchStatus.TUTORIAL ? { ...prev } : prev);
         window.addEventListener("moggcord-tutorial-detected", handler);
         return () => window.removeEventListener("moggcord-tutorial-detected", handler);
     }, []);
@@ -414,17 +392,22 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
         const isApiPlugin = (plugin: string) => plugin.endsWith("API") || Plugins[plugin].required;
 
         const totalPlugins = Object.keys(Plugins).filter(p => !isApiPlugin(p));
-        const enabledPlugins = Object.keys(Plugins).filter(p => isPluginEnabled(p) && !isApiPlugin(p));
+        const enabledPlugins = totalPlugins.filter(p => isPluginEnabled(p));
+        const visiblePlugins = totalPlugins.filter(p => !Plugins[p].hidden);
 
-        const totalStockPlugins = totalPlugins.filter(p => !PluginMeta[p].userPlugin && !Plugins[p].hidden).length;
-        const totalUserPlugins = totalPlugins.filter(p => PluginMeta[p].userPlugin).length;
-        const enabledStockPlugins = enabledPlugins.filter(p => !PluginMeta[p].userPlugin).length;
-        const enabledUserPlugins = enabledPlugins.filter(p => PluginMeta[p].userPlugin).length;
+        const totalStockPlugins = visiblePlugins.filter(p => !PluginMeta[p].userPlugin).length;
+        const totalUserPlugins = visiblePlugins.filter(p => PluginMeta[p].userPlugin).length;
+        const enabledStockPlugins = visiblePlugins.filter(p => isPluginEnabled(p) && !PluginMeta[p].userPlugin).length;
+        const enabledUserPlugins = visiblePlugins.filter(p => isPluginEnabled(p) && PluginMeta[p].userPlugin).length;
         return { totalStockPlugins, totalUserPlugins, enabledStockPlugins, enabledUserPlugins, enabledPlugins };
     }, [settings.plugins]);
     const allPlugins = [...moggcordPlugins, ...othersPlugins];
-    const pluginsToLoad = Math.min(36, allPlugins.length);
+    const pluginsToLoad = Math.min(12, allPlugins.length);
     const [visibleCount, setVisibleCount] = React.useState(pluginsToLoad);
+    React.useEffect(() => {
+        setVisibleCount(pluginsToLoad);
+    }, [searchValue.value, searchValue.status, pluginFilter, pluginsToLoad]);
+
     const loadMore = React.useCallback(() => {
         setVisibleCount(v => Math.min(v + pluginsToLoad, allPlugins.length));
     }, [allPlugins.length]);
@@ -444,20 +427,18 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
 
     return (
         <SettingsTab>
-            {!premiumOnly && <ReloadRequiredCard required={changes.hasChanges} enabledPlugins={enabledPlugins} openWarningModal={openWarningModal} resetCheckAndDo={resetCheckAndDo} />}
+            {!premiumOnly && changes.hasChanges && <ReloadRequiredCard />}
 
             {!premiumOnly && (
                 <div className={cl("stats-container")} style={{ display: "grid", gridTemplateColumns: "1fr" }}>
                     <StockPluginsCard
-                        totalStockPlugins={totalStockPlugins}
-                        enabledStockPlugins={enabledStockPlugins}
+                        totalStockPlugins={totalStockPlugins + totalUserPlugins}
+                        enabledStockPlugins={enabledStockPlugins + enabledUserPlugins}
+                        onDisableAll={enabledPlugins.length > 0
+                            ? () => openWarningModal(null, undefined, false, enabledPlugins.length, resetCheckAndDo)
+                            : undefined}
+                        settingsButton={<UIElementsButton compact />}
                     />
-                </div>
-            )}
-
-            {!premiumOnly && (
-                <div className={cl("ui-elements")}>
-                    <UIElementsButton />
                 </div>
             )}
 

@@ -42,9 +42,10 @@ function useTutorialExists(pluginName: string) {
         }
 
         let cancelled = false;
+        const controller = new AbortController();
         fetch(
             `https://raw.githubusercontent.com/caedesdev/moggcord-tutorials/main/videos/${pluginName}.mp4`,
-            { method: "HEAD" }
+            { method: "HEAD", signal: controller.signal }
         )
             .then(res => {
                 if (!cancelled) {
@@ -62,7 +63,10 @@ function useTutorialExists(pluginName: string) {
                 }
             });
 
-        return () => { cancelled = true; };
+        return () => {
+            cancelled = true;
+            controller.abort();
+        };
     }, [pluginName]);
 
     return exists;
