@@ -227,6 +227,7 @@ export default definePlugin({
             Component: VencordTab,
             Icon: MainSettingsIcon
         });
+        const themeLibraryEntry = this.customEntries.find(entry => entry.key === "equicord_theme_library");
 
         const fullEntries: SettingsLayoutNode[] = [
             mainEntry,
@@ -243,6 +244,7 @@ export default definePlugin({
                 Component: ThemesTab,
                 Icon: PaintbrushIcon
             }),
+            themeLibraryEntry && buildEntry(themeLibraryEntry),
             !IS_UPDATER_DISABLED && UpdaterTab && buildEntry({
                 key: "equicord_updater",
                 title: "Updater",
@@ -262,7 +264,7 @@ export default definePlugin({
                 Component: PatchHelperTab,
                 Icon: PatchHelperIcon
             }),
-            ...this.customEntries.map(buildEntry)
+            ...this.customEntries.filter(entry => entry.key !== "equicord_theme_library").map(buildEntry)
         ].filter(isTruthy);
 
         const equicordSection: SettingsLayoutNode = {
