@@ -14,6 +14,7 @@ const messagePath = join(env.RUNNER_TEMP, "discord-message.json");
 const releasePath = join(env.RUNNER_TEMP, "discord-release.json");
 const noMentions = { parse: [] };
 const website = "https://moggcord.cc";
+const screenshotUrl = "https://raw.githubusercontent.com/" + repo + "/main/docs/screenshots/plugin-management.png";
 
 async function request(url, label, options = {}) {
     try {
@@ -66,7 +67,8 @@ async function post() {
             url,
             description: summary + "\n\n[View changes](" + url + ")",
             color: 0x808080,
-            footer: { text: "main · " + after.slice(0, 7) }
+            footer: { text: "main · " + after.slice(0, 7) },
+            image: { url: screenshotUrl }
         }]
     });
     if (!/^\d{17,20}$/.test(message.id) || message.embeds?.[0]?.url !== url) {
@@ -164,11 +166,11 @@ async function edit() {
     const previous = /^\*\*v(\d+\.\d+\.\d+)\*\*/.exec(releaseField?.value ?? "")?.[1];
     const value = "**v" + release.version + "**\n" + release.downloads.map(({ label, url }) => "[" + label + "](" + url + ")").join(" · ");
     if (releaseField?.value === value || (previous && isNewer(previous, release.version))) return;
-    const { title, url, description, footer } = embed;
+    const { title, url, description, footer, image = { url: screenshotUrl } } = embed;
     const fields = (embed.fields ?? []).filter(field => field.name !== "Release").concat({ name: "Release", value });
     const updated = await discord(path, "PATCH", {
         allowed_mentions: noMentions,
-        embeds: [{ title, url, description, color: 0x808080, footer, fields }]
+        embeds: [{ title, url, description, color: 0x808080, footer, image, fields }]
     });
     if (updated.id !== id || !updated.embeds?.[0]?.fields?.some(field => field.name === "Release" && field.value === value)) {
         throw new Error("Discord did not confirm the release links.");

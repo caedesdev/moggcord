@@ -6,6 +6,7 @@ on:
     paths-ignore:
       - '.github/workflows/discord-development.yml'
       - '.github/scripts/discord-development.mjs'
+      - 'docs/screenshots/**'
   release:
     types: [published]
   workflow_dispatch:
