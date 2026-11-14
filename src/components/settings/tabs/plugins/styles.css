@@ -167,15 +167,17 @@
 .vc-plugin-stats-progress-track {
     height: 12px;
     flex: 1;
+    min-width: 0;
     overflow: hidden;
     border-radius: 999px;
-    background: var(--background-modifier-accent);
+    background: var(--background-modifier-accent, #3f4147);
 }
 
 .vc-plugin-stats-progress-fill {
     height: 100%;
+    min-width: 3px;
     border-radius: inherit;
-    background: var(--brand-experiment);
+    background: var(--brand-500, #5865f2);
     transition: width 180ms ease;
 }
 
