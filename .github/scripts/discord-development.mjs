@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { createPublicKey, verify } from "node:crypto";
 import { appendFileSync, readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
@@ -17,10 +18,13 @@ const website = "https://moggcord.cc";
 const screenshotPath = "docs/screenshots/" + (mobile ? "mobile" : "desktop") + "-development.png";
 const screenshotUrl = sha => "https://raw.githubusercontent.com/" + repo + "/" + sha + "/" + screenshotPath;
 
-function getFreshScreenshotUrl(sha) {
-    const changedFiles = (event.commits ?? []).flatMap(commit => [...(commit.added ?? []), ...(commit.modified ?? [])]);
-    if (!changedFiles.includes(screenshotPath)) {
-        throw new Error("Add a fresh, cursor-free screenshot at " + screenshotPath + " to the development update.");
+function getFreshScreenshotUrl(before, sha) {
+    if (revisionPattern.test(before)) {
+        execFileSync("git", ["fetch", "--no-tags", "--depth=1", "origin", before], { stdio: "inherit" });
+        const changed = execFileSync("git", ["diff", "--name-only", before, sha, "--", screenshotPath], { encoding: "utf8" });
+        if (!changed.trim()) {
+            throw new Error("Add a fresh, cursor-free screenshot at " + screenshotPath + " to the development update.");
+        }
     }
 
     const image = readFileSync(new URL("../../" + screenshotPath, import.meta.url));
@@ -71,7 +75,7 @@ function changesUrl(before, after) {
 async function post() {
     const { before, after } = event;
     if (!revisionPattern.test(after) || after !== env.GITHUB_SHA) throw new Error("Invalid push revision.");
-    const imageUrl = getFreshScreenshotUrl(after);
+    const imageUrl = getFreshScreenshotUrl(before, after);
     const url = changesUrl(before, after);
     const subject = event.head_commit?.message?.split(/\r?\n/, 1)[0]?.trim();
     const backtick = String.fromCharCode(96);
