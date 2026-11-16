@@ -12,6 +12,7 @@ export const bundledPlugins = Object.freeze({
 
 export const internalPlugins = Object.freeze({
     accountTokenBridge: "AccountTokenBridge",
+    themeLibrary: "ThemeLibrary",
     uiRelaunchFix: "UiRelaunchFix"
 });
 

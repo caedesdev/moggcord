@@ -8,7 +8,7 @@ import { ColorPaletteIcon } from "@components/Icons";
 import SettingsPlugin from "@plugins/_core/settings";
 import { EquicordDevs } from "@utils/constants";
 import { removeFromArray } from "@utils/misc";
-import definePlugin from "@utils/types";
+import definePlugin, { StartAt } from "@utils/types";
 import { SettingsRouter } from "@webpack/common";
 
 import { settings } from "./utils/settings";
@@ -19,6 +19,7 @@ export default definePlugin({
     authors: [EquicordDevs.Fafa],
     enabledByDefault: true,
     required: true,
+    startAt: StartAt.Init,
     settings,
     toolboxActions: {
         "Open Theme Library": () => {

@@ -80,9 +80,13 @@ export function initStyles() {
     });
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", () => {
+        document.documentElement.append(vencordRootNode);
+    }, { once: true });
+} else {
     document.documentElement.append(vencordRootNode);
-}, { once: true });
+}
 
 export function requireStyle(name: string) {
     const style = styleMap.get(name);

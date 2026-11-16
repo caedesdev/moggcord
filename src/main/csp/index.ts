@@ -62,6 +62,7 @@ export const CspPolicies: PolicyMap = {
     "*.google.com": ConnectSrc,
 
     "api.github.com": ConnectSrc, // used for updating Vencord itself
+    "https://themes.equicord.org": [...ImageSrc, "style-src"],
     "ws.audioscrobbler.com": ConnectSrc, // Last.fm API
     "translate-pa.googleapis.com": ConnectSrc, // Google Translate API
     "*.vencord.dev": ImageSrc, // VenCloud (api.vencord.dev) and Badges (badges.vencord.dev)

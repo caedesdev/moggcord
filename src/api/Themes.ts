@@ -101,7 +101,7 @@ function updatePopoutWindows() {
     }
 }
 
-document.addEventListener("DOMContentLoaded", () => {
+function init() {
     if (IS_USERSCRIPT) return;
 
     initThemes();
@@ -122,7 +122,13 @@ document.addEventListener("DOMContentLoaded", () => {
     if (!IS_WEB) {
         VencordNative.quickCss.addThemeChangeListener(initThemes);
     }
-}, { once: true });
+}
+
+if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", init, { once: true });
+} else {
+    queueMicrotask(init);
+}
 
 export function initQuickCssThemeStore(themeStore: ThemeStore) {
     if (IS_USERSCRIPT) return;
