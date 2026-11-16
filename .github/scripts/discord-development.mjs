@@ -14,7 +14,22 @@ const messagePath = join(env.RUNNER_TEMP, "discord-message.json");
 const releasePath = join(env.RUNNER_TEMP, "discord-release.json");
 const noMentions = { parse: [] };
 const website = "https://moggcord.cc";
-const screenshotUrl = "https://raw.githubusercontent.com/" + repo + "/main/docs/screenshots/plugin-management.png";
+const screenshotPath = "docs/screenshots/" + (mobile ? "mobile" : "desktop") + "-development.png";
+const screenshotUrl = sha => "https://raw.githubusercontent.com/" + repo + "/" + sha + "/" + screenshotPath;
+
+function getFreshScreenshotUrl(sha) {
+    const changedFiles = (event.commits ?? []).flatMap(commit => [...(commit.added ?? []), ...(commit.modified ?? [])]);
+    if (!changedFiles.includes(screenshotPath)) {
+        throw new Error("Add a fresh, cursor-free screenshot at " + screenshotPath + " to the development update.");
+    }
+
+    const image = readFileSync(new URL("../../" + screenshotPath, import.meta.url));
+    if (image.length < 8 || !image.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) {
+        throw new Error("The development screenshot must be a valid PNG.");
+    }
+
+    return screenshotUrl(sha);
+}
 
 async function request(url, label, options = {}) {
     try {
@@ -56,6 +71,7 @@ function changesUrl(before, after) {
 async function post() {
     const { before, after } = event;
     if (!revisionPattern.test(after) || after !== env.GITHUB_SHA) throw new Error("Invalid push revision.");
+    const imageUrl = getFreshScreenshotUrl(after);
     const url = changesUrl(before, after);
     const subject = event.head_commit?.message?.split(/\r?\n/, 1)[0]?.trim();
     const backtick = String.fromCharCode(96);
@@ -68,7 +84,7 @@ async function post() {
             description: summary + "\n\n[View changes](" + url + ")",
             color: 0x808080,
             footer: { text: "main · " + after.slice(0, 7) },
-            image: { url: screenshotUrl }
+            image: { url: imageUrl }
         }]
     });
     if (!/^\d{17,20}$/.test(message.id) || message.embeds?.[0]?.url !== url) {
@@ -166,9 +182,9 @@ async function edit() {
     const previous = /^\*\*v(\d+\.\d+\.\d+)\*\*/.exec(releaseField?.value ?? "")?.[1];
     const value = "**v" + release.version + "**\n" + release.downloads.map(({ label, url }) => "[" + label + "](" + url + ")").join(" · ");
     if (previous && isNewer(previous, release.version)) return;
-    if (releaseField?.value === value && embed.image?.url === screenshotUrl) return;
+    if (releaseField?.value === value && embed.image?.url === screenshotUrl(release.sha)) return;
     const { title, url, description, footer } = embed;
-    const image = { url: screenshotUrl };
+    const image = embed.image?.url ? embed.image : { url: screenshotUrl(release.sha) };
     const fields = (embed.fields ?? []).filter(field => field.name !== "Release").concat({ name: "Release", value });
     const updated = await discord(path, "PATCH", {
         allowed_mentions: noMentions,
