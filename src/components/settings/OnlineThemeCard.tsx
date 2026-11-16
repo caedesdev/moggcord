@@ -41,6 +41,7 @@ interface Props {
     onMouseLeave?: MouseEventHandler<HTMLDivElement>;
 
     infoButton?: ReactNode;
+    sourceBadge?: ReactNode;
     footer?: ReactNode;
     author?: ReactNode;
 
@@ -55,6 +56,7 @@ export function OnlineThemeCard({
     isNew,
     name,
     infoButton,
+    sourceBadge,
     footer,
     author,
     enabled,
@@ -111,6 +113,7 @@ export function OnlineThemeCard({
                     )}
                 </div>
 
+                {sourceBadge}
                 {infoButton}
 
                 <Switch

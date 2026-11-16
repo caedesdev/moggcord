@@ -25,13 +25,13 @@ import { Divider } from "@components/Divider";
 import { ErrorCard } from "@components/ErrorCard";
 import { Flex } from "@components/Flex";
 import { FormSwitch } from "@components/FormSwitch";
-import { Heading } from "@components/Heading";
-import { CogWheel, DeleteIcon, FolderIcon, PaintbrushIcon, PencilIcon, PluginIcon, PlusIcon, RestartIcon } from "@components/Icons";
+import { Heading, HeadingTertiary } from "@components/Heading";
+import { CogWheel, DeleteIcon, FolderIcon, PaintbrushIcon, PencilIcon, PlusIcon, RestartIcon } from "@components/Icons";
 import { Link } from "@components/Link";
-import { Notice } from "@components/Notice";
 import { Paragraph } from "@components/Paragraph";
 import { AddonCard, openPluginModal, QuickAction, QuickActionCard, SettingsTab, wrapTab } from "@components/settings";
 import { OnlineThemeCard } from "@components/settings/OnlineThemeCard";
+import { ManagementStatsCard } from "@components/settings/tabs/plugins/PluginStatCards";
 import { CspBlockedUrls, useCspErrors } from "@utils/cspViolations";
 import { classNameFactory } from "@utils/css";
 import { copyWithToast, openInviteModal } from "@utils/discord";
@@ -52,32 +52,14 @@ import type { UserstyleHeader } from "usercss-meta";
 
 import Plugins from "~plugins";
 
+import { UserCSSSettingsModal } from "./UserCSSModal";
+
 const PinIcon = findComponentByCodeLazy("1-.06-.63L6.16");
 const HomeIcon = findComponentByCodeLazy("m2.4 8.4 8.38-6.46a2");
 const RefreshIcon = findComponentByCodeLazy("M21 2a1 1 0 0 1 1 1v6");
 const LinkIcon = findComponentByCodeLazy("M16.32 14.72a1 1 0 0 1 0-1.41l2.51-2.51");
 const DiscordIcon = findComponentByCodeLazy("1.6 5.64-2.87");
 const DownloadIcon = findComponentByCodeLazy("1.42l3.3 3.3V3a1");
-
-function LocalThemeIcon({ size }: { size?: string; }) {
-    const sizeVal = size === "sm" ? 16 : 24;
-    return (
-        <svg viewBox="0 0 24 24" width={sizeVal} height={sizeVal} fill="currentColor">
-            <path d="M20 6h-8l-2-2H4c-1.1 0-1.99.9-1.99 2L2 18c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2z" />
-        </svg>
-    );
-}
-
-function OnlineThemeIcon({ size }: { size?: string; }) {
-    const sizeVal = size === "sm" ? 16 : 24;
-    return (
-        <svg viewBox="0 0 24 24" width={sizeVal} height={sizeVal} fill="currentColor">
-            <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-1 17.93c-3.95-.49-7-3.85-7-7.93 0-.62.08-1.21.21-1.79L9 15v1c0 1.1.9 2 2 2v1.93zm6.9-2.54c-.26-.81-1-1.39-1.9-1.39h-1v-3c0-.55-.45-1-1-1H8v-2h2c.55 0 1-.45 1-1V7h2c1.1 0 2-.9 2-2v-.41c2.93 1.19 5 4.06 5 7.41 0 2.08-.8 3.97-2.1 5.39z" />
-        </svg>
-    );
-}
-
-import { UserCSSSettingsModal } from "./UserCSSModal";
 
 type FileInput = ComponentType<{
     ref: Ref<HTMLInputElement>;
@@ -106,17 +88,13 @@ const filterOptions = [
 ];
 
 function Validator({ link, onValidate }: { link: string; onValidate: (valid: boolean) => void; }) {
-    const [res, err, pending] = useAwaiter(() => fetch(link).then(res => {
-        if (res.status > 300) throw `${res.status} ${res.statusText}`;
+    const [, err, pending] = useAwaiter(() => fetch(link).then(res => {
+        if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
         const contentType = res.headers.get("Content-Type");
         if (!contentType?.startsWith("text/css") && !contentType?.startsWith("text/plain")) {
-            onValidate(false);
-            throw "Not a CSS file. Remember to use the raw link!";
+            throw new Error("Use a direct link to a CSS file.");
         }
-
-        onValidate(true);
-        return "Okay!";
-    }));
+    }), { fallbackValue: undefined, deps: [link], onSuccess: () => onValidate(true) });
 
     const text = pending
         ? "Checking..."
@@ -167,33 +145,30 @@ function UserCSSThemeCard({ theme, enabled, onChange, onDelete, onSettingsReset 
             enabled={enabled}
             setEnabled={onChange}
             disabled={missingPlugins && missingPlugins.length > 0}
+            sourceBadge={<span className={cl("source")}>Local</span>}
+            tooltip="Local CSS file"
             infoButton={
                 <>
                     {missingPlugins && missingPlugins.length > 0 && (
-                        <Tooltip text={"The following plugins are required, but aren't enabled: " + missingPlugins.join(", ")}>
-                            {({ onMouseLeave, onMouseEnter }) => (
-                                <div
-                                    style={{ color: "var(--status-danger" }}
-                                    onMouseEnter={onMouseEnter}
-                                    onMouseLeave={onMouseLeave}
-                                >
-                                    <PluginIcon />
-                                </div>
+                        <Tooltip text={"Enable these plugins to use this theme: " + missingPlugins.join(", ")}>
+                            {tooltipProps => (
+                                <span className={classes(cl("source"), cl("warning"))} {...tooltipProps}>Needs plugins</span>
                             )}
                         </Tooltip>
                     )}
                     {theme.vars && (
-                        <div style={{ cursor: "pointer" }} onClick={
-                            () => openModal(modalProps =>
-                                <UserCSSSettingsModal modalProps={modalProps} theme={theme} onSettingsReset={onSettingsReset} />)
-                        }>
-                            <CogWheel />
-                        </div>
+                        <Button
+                            variant="secondary"
+                            size="xs"
+                            onClick={() => openModal(modalProps => (
+                                <UserCSSSettingsModal modalProps={modalProps} theme={theme} onSettingsReset={onSettingsReset} />
+                            ))}
+                        >
+                            Settings
+                        </Button>
                     )}
                     {IS_WEB && (
-                        <div style={{ cursor: "pointer", color: "var(--status-danger" }} onClick={onDelete}>
-                            <DeleteIcon />
-                        </div>
+                        <Button variant="dangerSecondary" size="xs" onClick={onDelete}>Delete</Button>
                     )}
                 </>
             }
@@ -299,42 +274,17 @@ function OtherThemeCard({ theme, enabled, onChange, onDelete, showDeleteButton, 
             enabled={enabled}
             setEnabled={onChange}
             disabled={disabled}
+            sourceBadge={<span className={cl("source")}>{isLocal ? "Local" : "Online"}</span>}
             infoButton={
                 (IS_WEB || showDeleteButton || onPin) && (
-                    <div
-                        className={cl("menu-button")}
-                        onClick={openThemeMenu}
-                    >
-                        <CogWheel />
-                    </div>
+                    <Button variant="secondary" size="xs" aria-haspopup="menu" onClick={openThemeMenu}>
+                        Manage
+                    </Button>
                 )
             }
-            footer={
+            footer={(isPinned || theme.website || theme.invite) && (
                 <Flex flexDirection="row" gap="0.4em" alignItems="center">
-                    <Tooltip text={isLocal ? "Local Theme" : "Online Theme"}>
-                        {({ onMouseLeave, onMouseEnter }) => (
-                            <div
-                                onMouseEnter={onMouseEnter}
-                                onMouseLeave={onMouseLeave}
-                                style={{ color: "var(--text-muted)", display: "flex" }}
-                            >
-                                {isLocal ? <LocalThemeIcon size="sm" /> : <OnlineThemeIcon size="sm" />}
-                            </div>
-                        )}
-                    </Tooltip>
-                    {isPinned && (
-                        <Tooltip text="Pinned">
-                            {({ onMouseLeave, onMouseEnter }) => (
-                                <div
-                                    onMouseEnter={onMouseEnter}
-                                    onMouseLeave={onMouseLeave}
-                                    className={cl("footer-pin-icon")}
-                                >
-                                    <PinIcon size="xs" />
-                                </div>
-                            )}
-                        </Tooltip>
-                    )}
+                    {isPinned && <span className={cl("source")}>Pinned</span>}
                     {!!theme.website && <Link href={theme.website}>Website</Link>}
                     {!!(theme.website && theme.invite) && (
                         <span style={{ color: "var(--text-muted)" }}>•</span>
@@ -354,8 +304,7 @@ function OtherThemeCard({ theme, enabled, onChange, onDelete, showDeleteButton, 
                         </Link>
                     )}
                 </Flex>
-            }
-
+            )}
             onEditName={onEditName}
         />
     );
@@ -384,6 +333,7 @@ function ThemesTab() {
     const [themeDir] = useAwaiter(VencordNative.themes.getThemesDir);
     const [searchQuery, setSearchQuery] = useState("");
     const [filter, setFilter] = useState(ThemeFilter.All);
+    const [showOptions, setShowOptions] = useState(false);
 
     useEffect(() => {
         updateThemes();
@@ -494,6 +444,7 @@ function ThemesTab() {
 
         settings.themeLinks = [...settings.themeLinks, link];
         setCurrentThemeLink("");
+        setThemeLinkValid(false);
         refreshOnlineThemes();
     }
 
@@ -649,118 +600,136 @@ function ThemesTab() {
         return themes;
     }, [allThemes, searchQuery, filter, settings.pinnedThemes]);
 
-    const localCount = allThemes.filter(t => t.type === "local").length;
-    const onlineCount = allThemes.filter(t => t.type === "online").length;
     const enabledCount = allThemes.filter(t => t.enabled).length;
+    const hasEnabledThemes = settings.enabledThemes.length > 0 || settings.enabledThemeLinks.length > 0;
 
     return (
         <SettingsTab>
             <CspErrorCard />
 
-            <Heading className={Margins.top16}>Theme Management</Heading>
-            <Paragraph className={Margins.bottom16}>
-                Customize Discord's appearance with themes. Add local .css files or load themes directly from URLs. Themes with a cog wheel icon have customizable settings you can modify.
-            </Paragraph>
-
-            <Heading>Quick Actions</Heading>
-            <Paragraph className={Margins.bottom16}>
-                Shortcuts for managing your themes. Open your themes folder to add new themes, use QuickCSS for quick style tweaks, or reload themes after making changes.
-            </Paragraph>
-
-            <QuickActionCard>
-                {IS_WEB ? (
-                    <QuickAction
-                        text={
-                            <span style={{ position: "relative" }}>
-                                Upload Theme
-                                <FileInput
-                                    ref={fileInputRef}
-                                    onChange={onFileUpload}
-                                    multiple={true}
-                                    filters={[{ extensions: ["css"] }]}
-                                />
-                            </span>
-                        }
-                        Icon={PlusIcon}
-                    />
-                ) : (
-                    <QuickAction
-                        text="Open Themes Folder"
-                        action={() => VencordNative.themes.openFolder()}
-                        Icon={FolderIcon}
-                    />
-                )}
-                <QuickAction
-                    text="Load missing Themes"
-                    action={refreshLocalThemes}
-                    Icon={RestartIcon}
-                />
-                <QuickAction
-                    text="Edit QuickCSS"
-                    action={() => VencordNative.quickCss.openEditor()}
-                    Icon={PaintbrushIcon}
-                />
-                {Settings.plugins.ClientTheme?.enabled && (
-                    <QuickAction
-                        text="Edit ClientTheme"
-                        action={() => openPluginModal(Plugins.ClientTheme)}
-                        Icon={PencilIcon}
-                    />
-                )}
-            </QuickActionCard>
-
-            <Divider className={Margins.top20} />
-
-            <Heading className={Margins.top20}>Online Themes</Heading>
-            <Paragraph className={Margins.bottom16}>
-                Load themes directly from URLs instead of local files. Online themes auto-update when the source changes, so you always have the latest version without manual downloads.
-            </Paragraph>
-            <FormSwitch
-                title="Enable Online Themes"
-                description="Toggle online theme loading. When disabled, all online themes will be turned off and you won't be able to add new ones."
-                value={settings.enableOnlineThemes ?? true}
-                onChange={value => {
-                    settings.enableOnlineThemes = value;
-                    if (!value) {
-                        settings.enabledThemeLinks = [];
+            <ManagementStatsCard
+                title="Theme Management"
+                totalLabel="Installed"
+                progressLabel="Enabled themes"
+                total={allThemes.length}
+                enabled={enabledCount}
+                settingsButton={
+                    <Button
+                        className={cl("options-toggle")}
+                        variant="secondary"
+                        size="iconOnly"
+                        aria-label="Theme settings"
+                        aria-expanded={showOptions}
+                        onClick={() => setShowOptions(value => !value)}
+                        title="Theme settings"
+                    >
+                        <CogWheel width={20} height={20} />
+                    </Button>
+                }
+                disableAllDisabled={!hasEnabledThemes}
+                onDisableAll={() => Alerts.show({
+                    title: "Disable all themes?",
+                    body: "Your themes will stay in the list so you can turn them on again.",
+                    confirmText: "Disable All",
+                    cancelText: "Cancel",
+                    onConfirm() {
+                        Settings.enabledThemes = [];
+                        Settings.enabledThemeLinks = [];
                     }
-                }}
+                })}
             />
 
-            <Notice.Info className={Margins.bottom16} style={{ width: "100%" }}>
-                Looking for themes? Check out <Link href="https://moggcord.cc/themes">Moggcord Themes</Link> or search on <Link href="https://github.com/search?q=discord+theme">GitHub</Link>. When downloading from BetterDiscord, click "Download" and place the .theme.css file into your themes folder.
-            </Notice.Info>
+            {showOptions && (
+                <div className={cl("options")}>
+                    <HeadingTertiary className={Margins.bottom8}>Quick Actions</HeadingTertiary>
+                    <QuickActionCard>
+                        {IS_WEB ? (
+                            <QuickAction
+                                text={
+                                    <span style={{ position: "relative" }}>
+                                        Upload Theme
+                                        <FileInput
+                                            ref={fileInputRef}
+                                            onChange={onFileUpload}
+                                            multiple={true}
+                                            filters={[{ extensions: ["css"] }]}
+                                        />
+                                    </span>
+                                }
+                                Icon={PlusIcon}
+                            />
+                        ) : (
+                            <QuickAction
+                                text="Open Themes Folder"
+                                action={() => VencordNative.themes.openFolder()}
+                                Icon={FolderIcon}
+                            />
+                        )}
+                        <QuickAction
+                            text="Load missing Themes"
+                            action={refreshLocalThemes}
+                            Icon={RestartIcon}
+                        />
+                        <QuickAction
+                            text="Edit QuickCSS"
+                            action={() => VencordNative.quickCss.openEditor()}
+                            Icon={PaintbrushIcon}
+                        />
+                        {Settings.plugins.ClientTheme?.enabled && (
+                            <QuickAction
+                                text="Edit ClientTheme"
+                                action={() => openPluginModal(Plugins.ClientTheme)}
+                                Icon={PencilIcon}
+                            />
+                        )}
+                    </QuickActionCard>
+                    <Divider className={Margins.top20} />
 
-            <div className={cl("link-row")}>
-                <TextInput
-                    placeholder="https://example.com/theme.css"
-                    value={currentThemeLink}
-                    onChange={setCurrentThemeLink}
-                    disabled={!(settings.enableOnlineThemes ?? true)}
-                />
-                <Button onClick={() => addThemeLink(currentThemeLink)} disabled={!themeLinkValid || !(settings.enableOnlineThemes ?? true)}>
-                    Add
-                </Button>
-            </div>
-            {currentThemeLink && (
-                <div className={Margins.top8}>
-                    <Validator link={currentThemeLink} onValidate={setThemeLinkValid} />
+                    <FormSwitch
+                        title="Enable Online Themes"
+                        description="Allow themes to load directly from CSS links."
+                        value={settings.enableOnlineThemes ?? true}
+                        onChange={value => {
+                            settings.enableOnlineThemes = value;
+                            if (!value) settings.enabledThemeLinks = [];
+                        }}
+                    />
+
+                    <div className={cl("link-row")}>
+                        <TextInput
+                            placeholder="https://example.com/theme.css"
+                            aria-label="Theme CSS URL"
+                            value={currentThemeLink}
+                            onChange={value => {
+                                setThemeLinkValid(false);
+                                setCurrentThemeLink(value);
+                            }}
+                            disabled={!settings.enableOnlineThemes}
+                        />
+                        <Button
+                            onClick={() => addThemeLink(currentThemeLink)}
+                            disabled={!currentThemeLink || !themeLinkValid || !settings.enableOnlineThemes}
+                        >
+                            Add Theme
+                        </Button>
+                    </div>
+                    {currentThemeLink && settings.enableOnlineThemes && (
+                        <div className={Margins.top8}>
+                            <Validator link={currentThemeLink} onValidate={setThemeLinkValid} />
+                        </div>
+                    )}
+                    <Paragraph color="text-subtle" className={Margins.top8}>
+                        Browse <Link href="https://moggcord.cc/themes">Moggcord Themes</Link> or use a direct link to a CSS file.
+                    </Paragraph>
                 </div>
             )}
 
-            <Divider className={Margins.top20} />
-
-            <Heading className={Margins.top20}>Installed Themes</Heading>
-            <Paragraph className={Margins.bottom8}>
-                Manage your themes here. Local themes load from your themes folder, online themes from URLs. Themes with a cog wheel icon have customizable settings.
-            </Paragraph>
-            <Paragraph color="text-subtle" className={Margins.bottom16}>
-                {allThemes.length} theme{allThemes.length !== 1 ? "s" : ""} installed ({localCount} local, {onlineCount} online) · {enabledCount} enabled
-            </Paragraph>
+            <HeadingTertiary className={classes(Margins.top20, Margins.bottom8)}>Filters</HeadingTertiary>
 
             <div className={cl("filter-row")}>
                 <TextInput
                     placeholder="Search for a theme..."
+                    aria-label="Search themes"
                     value={searchQuery}
                     onChange={setSearchQuery}
                 />
@@ -774,7 +743,9 @@ function ThemesTab() {
                 </div>
             </div>
 
-            {userThemes === null ? (
+            <HeadingTertiary className={classes(Margins.top20, Margins.bottom8)}>Installed Themes</HeadingTertiary>
+
+            {userThemes === null || onlineThemes === null ? (
                 <Paragraph color="text-muted" className={Margins.top16}>Loading themes...</Paragraph>
             ) : filteredThemes.length === 0 ? (
                 <Paragraph color="text-muted" className={Margins.top16}>
@@ -784,7 +755,7 @@ function ThemesTab() {
                     }
                 </Paragraph>
             ) : (
-                <div className={classes(cl("grid"), Margins.top16)}>
+                <div className={cl("grid")}>
                     {filteredThemes.map(theme => {
                         if (theme.type === "online") {
                             const onlineTheme = theme.header as UserThemeHeader & { link: string; };

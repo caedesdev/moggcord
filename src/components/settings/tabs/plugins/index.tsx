@@ -44,7 +44,7 @@ import Plugins, { ExcludedPlugins, PluginMeta } from "~plugins";
 
 import { PluginCard } from "./PluginCard";
 import { openWarningModal } from "./PluginModal";
-import { StockPluginsCard } from "./PluginStatCards";
+import { ManagementStatsCard } from "./PluginStatCards";
 import { UIElementsButton } from "./UIElements";
 
 export const cl = classNameFactory("vc-plugins-");
@@ -431,9 +431,12 @@ export default function PluginSettings({ premiumOnly = false }: PluginSettingsPr
 
             {!premiumOnly && (
                 <div className={cl("stats-container")} style={{ display: "grid", gridTemplateColumns: "1fr" }}>
-                    <StockPluginsCard
-                        totalStockPlugins={totalStockPlugins + totalUserPlugins}
-                        enabledStockPlugins={enabledStockPlugins + enabledUserPlugins}
+                    <ManagementStatsCard
+                        title="Plugin Management"
+                        totalLabel="Total"
+                        progressLabel="Enabled plugins"
+                        total={totalStockPlugins + totalUserPlugins}
+                        enabled={enabledStockPlugins + enabledUserPlugins}
                         onDisableAll={enabledPlugins.length > 0
                             ? () => openWarningModal(null, undefined, false, enabledPlugins.length, resetCheckAndDo)
                             : undefined}

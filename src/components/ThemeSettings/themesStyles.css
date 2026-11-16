@@ -1,21 +1,52 @@
 .vc-settings-theme-grid {
     display: grid;
-    gap: 8px;
-    grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+    gap: 10px;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.vc-settings-theme-link-row {
+.vc-settings-theme-link-row,
+.vc-settings-theme-filter-row {
     display: grid;
-    height: 40px;
     gap: 8px;
-    grid-template-columns: 1fr auto;
+    grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .vc-settings-theme-filter-row {
-    display: grid;
-    height: 40px;
-    gap: 8px;
-    grid-template-columns: 1fr 150px;
+    grid-template-columns: minmax(0, 1fr) minmax(132px, 25%);
+}
+
+.vc-settings-theme-options {
+    background: var(--background-base-lower-alt);
+    border: 1px solid var(--border-subtle);
+    border-radius: 8px;
+    margin-top: 12px;
+    padding: 16px;
+}
+
+.vc-settings-theme-options-toggle {
+    background: transparent;
+    border: 1px solid var(--border-subtle);
+}
+
+.vc-settings-theme-source {
+    flex-shrink: 0;
+    padding: 2px 6px;
+    border-radius: 4px;
+    background: var(--background-mod-subtle);
+    color: var(--text-subtle);
+    font-size: 11px;
+    line-height: 16px;
+    white-space: nowrap;
+}
+
+.vc-settings-theme-warning {
+    color: var(--text-feedback-critical);
+}
+
+@media (width <= 760px) {
+    .vc-settings-theme-grid {
+        grid-template-columns: minmax(0, 1fr);
+    }
 }
 
 .vc-settings-theme-error-card {
@@ -54,29 +85,4 @@
     white-space: nowrap;
     flex: 1;
     min-width: 0;
-}
-
-.vc-settings-theme-menu-button {
-    cursor: pointer;
-    color: var(--interactive-icon-default, var(--interactive-normal));
-    display: flex;
-    align-items: center;
-    height: 24px;
-}
-
-.vc-settings-theme-menu-button:hover {
-    color: var(--interactive-icon-hover, var(--interactive-hover));
-}
-
-.vc-settings-theme-footer-pin-icon {
-    display: flex;
-}
-
-.vc-settings-theme-footer-pin-icon svg {
-    width: 16px;
-    height: 16px;
-}
-
-.vc-settings-theme-footer-pin-icon svg path {
-    fill: var(--text-muted);
 }

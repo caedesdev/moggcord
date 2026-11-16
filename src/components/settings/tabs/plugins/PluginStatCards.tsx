@@ -14,24 +14,28 @@ import type { ReactNode } from "react";
 
 const cl = classNameFactory("vc-plugin-stats-");
 
-interface StockPluginsCardProps {
-    totalStockPlugins: number;
-    enabledStockPlugins: number;
+interface ManagementStatsCardProps {
+    title: string;
+    totalLabel: string;
+    progressLabel: string;
+    total: number;
+    enabled: number;
     onDisableAll?: () => void;
+    disableAllDisabled?: boolean;
     settingsButton?: ReactNode;
 }
 
-export function StockPluginsCard({ totalStockPlugins, enabledStockPlugins, onDisableAll, settingsButton }: StockPluginsCardProps) {
-    const percentage = totalStockPlugins ? Math.min(100, Math.round(enabledStockPlugins / totalStockPlugins * 1000) / 10) : 0;
+export function ManagementStatsCard({ title, totalLabel, progressLabel, total, enabled, onDisableAll, disableAllDisabled, settingsButton }: ManagementStatsCardProps) {
+    const percentage = total ? Math.min(100, Math.round(enabled / total * 1000) / 10) : 0;
 
     return (
         <div className={classes("vc-plugin-stats", "vc-stockplugins-stats-card", cl("management"))}>
             <div className={cl("management-header")}>
-                <BaseText size="lg" weight="bold">Plugin Management</BaseText>
+                <BaseText size="lg" weight="bold">{title}</BaseText>
                 <div className={cl("management-actions")}>
                     {settingsButton}
                     {onDisableAll && (
-                        <button type="button" className={cl("disable-all")} onClick={onDisableAll}>
+                        <button type="button" className={cl("disable-all")} disabled={disableAllDisabled} onClick={onDisableAll}>
                             Disable All
                         </button>
                     )}
@@ -39,23 +43,23 @@ export function StockPluginsCard({ totalStockPlugins, enabledStockPlugins, onDis
             </div>
             <div className="vc-plugin-stats-card-container">
                 <div className="vc-plugin-stats-card-section">
-                    <BaseText size="xl" weight="bold">{enabledStockPlugins}</BaseText>
+                    <BaseText size="xl" weight="bold">{enabled}</BaseText>
                     <BaseText size="md" weight="semibold">Enabled</BaseText>
                 </div>
                 <div className="vc-plugin-stats-card-divider"></div>
                 <div className="vc-plugin-stats-card-section">
-                    <BaseText size="xl" weight="bold">{totalStockPlugins}</BaseText>
-                    <BaseText size="md" weight="semibold">Total</BaseText>
+                    <BaseText size="xl" weight="bold">{total}</BaseText>
+                    <BaseText size="md" weight="semibold">{totalLabel}</BaseText>
                 </div>
             </div>
             <div className={cl("progress-row")}>
                 <div
                     className={cl("progress-track")}
                     role="progressbar"
-                    aria-label="Enabled plugins"
+                    aria-label={progressLabel}
                     aria-valuemin={0}
-                    aria-valuemax={totalStockPlugins}
-                    aria-valuenow={enabledStockPlugins}
+                    aria-valuemax={100}
+                    aria-valuenow={percentage}
                 >
                     <div className={cl("progress-fill")} style={{ width: `${percentage}%` }} />
                 </div>
