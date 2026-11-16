@@ -4,6 +4,7 @@
 
 | Version | Main changes | Notes |
 | --- | --- | --- |
+| [1.18.62](1.18.62.md) | Restore theme loading, update Theme Management and fix image right-clicks | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.62) |
 | [1.18.61](1.18.61.md) | Restore the visible blue plugin progress bar | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.61) |
 | [1.18.60](1.18.60.md) | Faster plugin settings with progressive loading and a clearer management overview | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.60) |
 | [1.18.59](1.18.59.md) | Restore voice message playback before sending | [Release](https://github.com/caedesdev/moggcord/releases/tag/v1.18.59) |

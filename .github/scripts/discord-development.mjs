@@ -122,7 +122,11 @@ async function githubRelease() {
     if (!downloads.length) return null;
     const commit = await github("/commits/" + encodeURIComponent(release.tag_name));
     if (!revisionPattern.test(commit?.sha) || (build && build.head_sha !== commit.sha)) return null;
-    return { version, sha: commit.sha, downloads };
+    const reference = /^Discord-Announcement: ([a-f0-9]{40})$/m.exec(commit.commit?.message ?? "")?.[1];
+    const announcementSha = reference && commit.parents?.length === 1 && commit.parents[0].sha === reference
+        ? reference
+        : commit.sha;
+    return { version, sha: commit.sha, announcementSha, downloads };
 }
 
 async function websiteRelease() {
@@ -154,10 +158,11 @@ async function websiteRelease() {
 async function lookup() {
     const release = mobile && !event.release ? await websiteRelease() : await githubRelease();
     if (!release?.downloads.length) return console.log("No published downloads to attach.");
-    const name = "discord-message-" + release.sha;
+    const announcementSha = release.announcementSha ?? release.sha;
+    const name = "discord-message-" + announcementSha;
     const result = await github("/actions/artifacts?name=" + name + "&per_page=30");
     const artifact = result?.artifacts?.find(item => item.name === name && !item.expired &&
-        item.workflow_run?.head_sha === release.sha && item.workflow_run.head_branch === "main" &&
+        item.workflow_run?.head_sha === announcementSha && item.workflow_run.head_branch === "main" &&
         String(item.workflow_run.head_repository_id) === env.GITHUB_REPOSITORY_ID);
     if (!artifact) return console.log("No Discord announcement for v" + release.version + " (" + release.sha.slice(0, 7) + ").");
     writeFileSync(releasePath, JSON.stringify(release));
@@ -174,7 +179,7 @@ function isNewer(version, reference) {
 async function edit() {
     const release = JSON.parse(readFileSync(releasePath, "utf8"));
     const { id, before, sha } = JSON.parse(readFileSync(join(env.RUNNER_TEMP, "discord-release", "discord-message.json"), "utf8"));
-    if (!/^\d{17,20}$/.test(id) || sha !== release.sha) throw new Error("Invalid Discord announcement reference.");
+    if (!/^\d{17,20}$/.test(id) || sha !== (release.announcementSha ?? release.sha)) throw new Error("Invalid Discord announcement reference.");
     const path = "/messages/" + id;
     const message = await discord(path, "GET");
     if (!message) return console.log("The Discord announcement was removed.");
@@ -186,9 +191,9 @@ async function edit() {
     const previous = /^\*\*v(\d+\.\d+\.\d+)\*\*/.exec(releaseField?.value ?? "")?.[1];
     const value = "**v" + release.version + "**\n" + release.downloads.map(({ label, url }) => "[" + label + "](" + url + ")").join(" · ");
     if (previous && isNewer(previous, release.version)) return;
-    if (releaseField?.value === value && embed.image?.url === screenshotUrl(release.sha)) return;
+    if (releaseField?.value === value && embed.image?.url === screenshotUrl(sha)) return;
     const { title, url, description, footer } = embed;
-    const image = embed.image?.url ? embed.image : { url: screenshotUrl(release.sha) };
+    const image = embed.image?.url ? embed.image : { url: screenshotUrl(sha) };
     const fields = (embed.fields ?? []).filter(field => field.name !== "Release").concat({ name: "Release", value });
     const updated = await discord(path, "PATCH", {
         allowed_mentions: noMentions,

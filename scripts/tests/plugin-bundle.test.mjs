@@ -122,7 +122,8 @@ test("the bundle policy includes the full catalog with four default plugins and 
     assert.deepEqual(Object.values(bundledPlugins).sort(), wanted);
     for (const folder of Object.keys(bundledPlugins)) assert.equal(pluginBundleKind("moggcordplugins", folder), "standard");
     for (const folder of Object.keys(internalPlugins)) assert.equal(pluginBundleKind("moggcordplugins", folder), "internal");
-    for (const folder of ["ghostClient", "massDM", "messageLogger", "themeLibrary", "moggcordUpdater", "unrecognized"])
+    assert.equal(pluginBundleKind("moggcordplugins", "themeLibrary"), "internal");
+    for (const folder of ["ghostClient", "massDM", "messageLogger", "moggcordUpdater", "unrecognized"])
         assert.equal(pluginBundleKind("moggcordplugins", folder), "optional");
     assert.equal(pluginBundleKind("plugins", "alwaysAnimate"), "optional");
     assert.equal(pluginBundleKind("plugins", "consoleShortcuts"), "optional");
