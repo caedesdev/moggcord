@@ -19,7 +19,10 @@ permissions:
 
 jobs:
   notify:
-    if: ${{ github.event_name == 'push' && !github.event.deleted && github.run_attempt == '1' && !endsWith(github.actor, '[bot]') && !(startsWith(github.event.head_commit.message, 'Prepare Moggcord ') && contains(github.event.head_commit.message, 'Discord-Announcement: ')) }}
+    if: >-
+      ${{ github.event_name == 'push' && !github.event.deleted && github.run_attempt == '1' &&
+      !endsWith(github.actor, '[bot]') &&
+      !(startsWith(github.event.head_commit.message, 'Prepare Moggcord ') && contains(github.event.head_commit.message, 'Discord-Announcement: ')) }}
     concurrency:
       group: discord-development-main
       cancel-in-progress: true
