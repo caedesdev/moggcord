@@ -81,7 +81,7 @@ export const settings = definePluginSettings({
 
 const imageContextMenuPatch: NavContextMenuPatchCallback = (children, props) => {
     // Discord re-uses the image context menu for links to for the copy and open buttons
-    if (!props) return;
+    if (!Array.isArray(children) || props == null || typeof props !== "object") return;
     if ("href" in props) return;
     // emojis in user statuses
     if (props.target?.classList?.contains("emoji")) return;
